@@ -175,6 +175,13 @@ def test_player_facing_pages_show_the_affiliation_footer(client):
     assert "NES and Mario are trademarks of Nintendo." in page
 
 
+def test_the_footer_shows_the_site_version(fake_builder):
+    with app_client(builder=fake_builder, version="v9.8.7-3-gabc1234") as test_client:
+        page = test_client.get("/").text
+    footer = page[page.index('<footer class="container site-footer">') :]
+    assert '<small class="version">v9.8.7-3-gabc1234</small>' in footer
+
+
 def test_rangefinder_page_embeds_its_assets_and_script_strings(unwritten_client):
     response = unwritten_client.get("/rangefinder")
     assert response.status_code == 200

@@ -68,4 +68,5 @@ index is current, and that every cited record exists.
 | [0002](0002-any-byte-written-by-two-patchstack-steps-is-an-error.md) | Any byte written by two PatchStack steps is an error | patches | accepted |  | Overlap errors start firing on deliberate, identical writes often enough to be a nuisance |
 | [0003](0003-sign-in-not-required-to-generate-or-download-seeds.md) | Sign-in not required to generate or download seeds | site | accepted |  | League rounds regularly go unrecorded because players downloaded guest ROMs, and the league wants sign-in enforced |
 | [0004](0004-four-bits-each-for-strokes-and-putts-in-the-qr-hole-record.md) | Four bits each for strokes and putts in the QR hole record | qr | accepted | yes | A site seed can be built without the mercy tap-in, or the QR payload protocol changes version for another reason |
+| [0005](0005-the-site-reads-its-release-from-the-git-checkout-it-runs-from.md) | The site reads its release from the git checkout it runs from | site | accepted |  | The site is deployed some other way than a git checkout of its release tag, such as a container image or a built package |
 <!-- adr-index:end -->

@@ -170,24 +170,29 @@ and the ROMs with your own copies.
 Tag the commit and push the tag, from a development checkout:
 
 ```bash
-git tag v1.0.0
-git push origin v1.0.0
+git tag server-v1.0.0
+git push origin server-v1.0.0
 ```
 
 On the server:
 
 ```bash
-/opt/golf-site/deploy/deploy.sh v1.0.0
+/opt/golf-site/deploy/deploy.sh server-v1.0.0
 ```
 
 It refuses a checkout with local changes or a tag that does not exist, prints the release
 it replaces, checks the tag out, runs `uv sync --frozen --no-dev`, restarts `golf-site`
 and waits for `/healthz`. A restart takes the site down for a few seconds.
 
+Release tags are `server-v` and a version. The site shows the version at the right of its
+footer, read at startup with `git describe` from the checkout (`server/version.py`, ADR
+0005), so the server needs git at runtime as well as for deploys. A development checkout
+shows how far it is past the last release, such as `v1.0.2-10-gc66d426-dirty`.
+
 Rolling back is deploying the previous tag, which `deploy.sh` printed:
 
 ```bash
-/opt/golf-site/deploy/deploy.sh v0.9.0
+/opt/golf-site/deploy/deploy.sh server-v0.9.0
 ```
 
 `deploy.sh` never touches `/etc`. When a release changes a file under `deploy/`, install

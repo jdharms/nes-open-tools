@@ -3,7 +3,7 @@
 # install its locked dependencies, restart the service and wait for it to answer.
 # Rolling back is deploying the previous tag, which this prints first.
 #
-#   /opt/golf-site/deploy/deploy.sh v1.0.0
+#   /opt/golf-site/deploy/deploy.sh server-v1.0.0
 #
 # Run on the server as the user who owns the checkout; restarting asks for sudo.
 # See docs/deployment.md.

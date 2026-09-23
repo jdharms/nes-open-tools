@@ -53,11 +53,22 @@ header nav ul.account button {
   font-size: inherit;
 }
 
-/* Site-wide affiliation disclaimer. The direct-child selector keeps this separate from
-   the footers used inside cards. */
+/* Site-wide affiliation disclaimer, with the site's release at the right. The direct-child
+   selector keeps this separate from the footers used inside cards. On a narrow screen the
+   release wraps under the disclaimer, still at the right. */
 body > footer.site-footer {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: calc(var(--pico-spacing) * 0.5) var(--pico-spacing);
   border-top: var(--pico-border-width) solid var(--pico-muted-border-color);
   color: var(--pico-muted-color);
+}
+
+body > footer.site-footer .version {
+  margin-left: auto;
+  white-space: nowrap;
 }
 
 /* ROM setup cards. rom.js sets data-state: checking, empty, error, stored or unavailable. */

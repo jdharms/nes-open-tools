@@ -23,6 +23,7 @@ from starlette.exceptions import HTTPException as StarletteHTTPException
 from starlette.middleware.sessions import SessionMiddleware
 
 from golf.randomizer.build import credentials_for
+from golf.randomizer.catalog import REPO_ROOT
 from golf.randomizer.generate import GenerationError
 from golf.randomizer.manifest import required_roms
 from golf.randomizer.roms import VANILLA_ROMS
@@ -73,6 +74,7 @@ from .timings import (
     flush_periodically,
 )
 from .users import load_user, sign_in
+from .version import site_version as read_site_version
 from .views import (
     download_stem,
     generate_options,
@@ -147,14 +149,15 @@ def create_app(
     rate_limiter: RateLimiter | None = None,
     discord: DiscordClient | None = None,
     timings: TimingSink | None = None,
+    version: str | None = None,
 ) -> FastAPI:
     """Build the app.
 
     With no config, reads it from the environment; with no strings or pages, loads those
     catalogs; with no builder, makes one from the config when the app starts; with no rate
     limiter, uses the generate limits in `server/ratelimit.py`; with no Discord client,
-    makes one when the config has credentials. Raises ConfigError for settings the site
-    refuses.
+    makes one when the config has credentials; with no version, asks git for the release
+    the checkout is at. Raises ConfigError for settings the site refuses.
     """
     config = config if config is not None else Config.from_env()
     config.validate()
@@ -164,6 +167,7 @@ def create_app(
         )
     strings = strings if strings is not None else Strings.load()
     pages = pages if pages is not None else PageCatalog.load()
+    site_version = version if version is not None else read_site_version(REPO_ROOT)
 
     @asynccontextmanager
     async def lifespan(app: FastAPI) -> AsyncIterator[None]:
@@ -282,7 +286,7 @@ def create_app(
             "sign_in_enabled": config.sign_in_enabled,
             "return_path": "/" if path.startswith("/auth/") else here,
             "content_pages": pages.listed,
-            "show_site_footer": not path.startswith("/admin"),
+            "site_version": site_version,
         }
 
     templates = Jinja2Templates(

@@ -76,11 +76,10 @@
     <main class="container">
       {% block content %}{% endblock %}
     </main>
-    {% if show_site_footer %}
-      <footer class="container site-footer">
-        <small>{{ t("footer.affiliation") }}</small>
-      </footer>
-    {% endif %}
+    <footer class="container site-footer">
+      <small>{{ t("footer.affiliation") }}</small>
+      {% if site_version %}<small class="version">{{ site_version }}</small>{% endif %}
+    </footer>
     {% block scripts %}{% endblock %}
   </body>
 

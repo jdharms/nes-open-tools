@@ -50,6 +50,10 @@ in this package.
   names what the request came to with the local `outcome(request, reason)`; the reason is
   the same short string the refusal already uses. `SeedBuilder.build` takes the sample so
   the wait for the build semaphore is timed apart from the build.
+- The footer on every page shows the site's release, which `create_app` reads once from
+  the checkout with `git describe` (`server/version.py`, ADR 0005): `v1.0.2` on a deployed
+  tag, `v1.0.2-10-gc66d426-dirty` in development, nothing when git can't say. Tests pass
+  `version=` to fix it.
 - Configuration is `server/config.py`, read from `GOLF_`-prefixed environment variables.
   A new setting is a field there, a variable in the README's "Running the site" list, and
   a line in the devplan's configuration paragraph.

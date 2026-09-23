@@ -126,15 +126,15 @@ def test_admin_pages_write_their_own_text(fake_builder):
     with admin_client(fake_builder, strings=UNWRITTEN) as client:
         sign_in(client, "admin")
         page = client.get("/admin").text
-    main = page[page.index("<main") :]
+    main = page[page.index("<main") : page.index("</main>")]
     assert "⟦" not in main
 
 
-def test_admin_pages_omit_the_site_footer(fake_builder):
+def test_admin_pages_show_the_site_footer(fake_builder):
     with admin_client(fake_builder) as client:
         sign_in(client, "admin")
         page = client.get("/admin").text
-    assert "site-footer" not in page
+    assert '<footer class="container site-footer">' in page
 
 
 def test_detail_pages_show_the_seed_the_round_and_the_player(fake_builder):
