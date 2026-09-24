@@ -216,7 +216,7 @@ text = "Teammate - {name}"
 
 [seed.rounds.strokes]
 note = "rounds scorecard column header in the hole-number row; total strokes for the round, with the course par below in the par row; narrow column"
-text = "Total Strokes"
+text = "Tot"
 
 [seed.rounds.out]
 note = "rounds scorecard column header in the hole-number row, after holes 1-9; strokes on the front nine, with its par below in the par row; narrow column"
