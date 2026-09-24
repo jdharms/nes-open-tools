@@ -1,0 +1,247 @@
+"""
+A shot played through the game itself, as the reference for the model on real holes.
+
+`RomGameShot` loads a hole with the game's own `InitHole`, puts the ball where
+it is told, and runs `ShotSetupSequence`, pressing buttons the way a player
+would: A through the setup panels, then A to start the swing and again to stop
+each meter. From the swing on, everything is the game's frame loop running as
+it does on a console: the physics, the swing animation, the behind-the-golfer
+scene, the view switches and the cup (see `golf.physics.nes`).
+
+It records the ball's registers at every frame boundary from launch to rest,
+and the inputs the swing actually produced, so the model can replay the shot
+from the same inputs and be compared frame by frame.
+"""
+
+from dataclasses import dataclass, field
+
+from golf.core.rom_reader import RomReader
+from golf.physics.nes import (
+    BUTTON_A,
+    BUTTON_DOWN,
+    BUTTON_UP,
+    NesMachine,
+)
+from golf.physics.perspective import PerspectiveScene
+from golf.physics.rom_oracle import (
+    ACCURACY_STOP,
+    AIMING,
+    BALL_X,
+    BALL_Y,
+    BUNKER_DEPTH,
+    CLUB,
+    POWER_STOP,
+    RNG_STATE,
+    SHOT_PHASE,
+    SPIN_SETTING,
+    SWING_HI_LO,
+    SWING_SPEED,
+    WIND_DIRECTION,
+    WIND_SPEED,
+    read_ball,
+)
+from golf.physics.shot import Flag
+from golf.physics.state import Ball, ShotInput, Spin
+
+PHYSICS_BANK = 13
+
+INIT_HOLE = 0xDA90
+SHOT_SETUP_SEQUENCE = 0x877A
+SWING_SEQUENCE_ENTRY = 0xAA09
+BUILD_PERSPECTIVE_SCENE_CALL = 0x8829  # bank 13: the far call to bank 9 $8829
+AFTER_SCENE_BUILT = 0x882F  # bank 13: just after that far call returns
+SHOT_COMPLETE_RETURN = 0xACAC  # bank 13: CLC / RTS leaving the swing loop
+SWING_LOOP_TOP = 0xAA2A  # bank 13: LD_AA2A, once per pass of the swing loop
+
+PPU_CTRL_CACHE = 0x10
+GOLF_GAME_MODE = 0x0100
+CURRENT_COURSE = 0x0102
+HOLE_NUMBER = 0x94
+CURRENT_PLAYER = 0x99
+PLAYER_SWING_SPEED = 0x0123
+PLAYER_SPIN = 0x0127
+PLAYER_BAG_INDEX = 0x0129
+PLAYER_ONE_BAG = 0x6027
+SRAM_DEFAULTS = 0x6F99  # swing speed, putt speed, spin: $FF = unset
+PLAY_LOOP_ACTIVE = 0x05BA
+VIEW_MODE = 0x98
+SWING_ANIMATION_FRAME = 0xCF  # SwingPowerBarPos, advanced by bank 8
+SWING_IMPACT_FRAME = 0x058F
+FINE_AIM_ANCHOR = 0xBD
+FLAG = 0xA7  # $A7/$A8 x, $A9/$AA y
+
+#: `CurrCourse` numbers, in the ROM's order.
+COURSES = {"japan": 0, "us": 1, "uk": 2}
+
+
+class WhiffError(Exception):
+    """The swing never launched the ball."""
+
+
+@dataclass(frozen=True)
+class Swing:
+    """When the player presses A, in frames of the swing loop."""
+
+    start: int = 4
+    """Ready screen frames before A starts the backswing."""
+    power: int = 30
+    """Frames of backswing before A stops the power meter."""
+    accuracy: int = 20
+    """Frames of downswing before A stops the accuracy meter."""
+
+
+DEFAULT_SWING = Swing()
+
+
+@dataclass
+class RomShotRecord:
+    shot: ShotInput
+    """The shot as the game actually launched it: meter stops, RNG and all."""
+    frames: list[Ball] = field(default_factory=list)
+    """
+    The ball after the launch frame, then after every frame to rest. A frame
+    here is one pass of the swing loop, which is one step of the physics: a
+    pass that waits for vblank twice is still one frame.
+    """
+    view_modes: list[int] = field(default_factory=list)
+    """`ViewMode` at the same points."""
+    scene: PerspectiveScene | None = None
+    """WRAM as the behind-the-golfer scene builder left it (none for a putt)."""
+    flag: Flag | None = None
+
+
+class RomGameShot:
+    def __init__(self, rom: RomReader, course: str, hole: int):
+        self.machine = NesMachine(rom)
+        m = self.machine.memory
+        m[PPU_CTRL_CACHE] = 0x80  # NMI on, so frames come from vblank
+        m[GOLF_GAME_MODE] = 0
+        m[CURRENT_COURSE] = COURSES[course]
+        m[HOLE_NUMBER] = hole - 1
+        self.machine.call(INIT_HOLE)
+
+    def play(
+        self,
+        shot: ShotInput,
+        swing: Swing = DEFAULT_SWING,
+        x_fraction: int = 0,
+        y_fraction: int = 0,
+    ) -> RomShotRecord:
+        machine = self.machine
+        m = machine.memory
+        m[BALL_X : BALL_X + 3] = bytes([0, x_fraction, shot.x])
+        m[BALL_Y : BALL_Y + 4] = bytes([0, y_fraction, shot.y & 0xFF, shot.y >> 8])
+        m[RNG_STATE], m[RNG_STATE + 1] = shot.rng_state & 0xFF, shot.rng_state >> 8
+        m[WIND_DIRECTION], m[WIND_SPEED] = shot.wind_direction, shot.wind_speed
+        m[CURRENT_PLAYER] = 0
+        m[SRAM_DEFAULTS : SRAM_DEFAULTS + 3] = b"\xff\xff\xff"
+        m[PLAYER_SWING_SPEED] = shot.swing_speed
+        m[PLAYER_SPIN] = shot.spin
+        m[PLAYER_ONE_BAG] = shot.club
+        m[PLAYER_BAG_INDEX] = 0
+        m[PLAY_LOOP_ACTIVE] = 0xFF
+        m[BUNKER_DEPTH] = shot.bunker_depth
+
+        record = RomShotRecord(shot)
+        record.flag = Flag(m[FLAG] | m[FLAG + 1] << 8, m[FLAG + 2] | m[FLAG + 3] << 8)
+        state = {
+            "swing_frame": None,
+            "done": False,
+            "launch": None,
+            "impact": 0,
+            "impact_reached": False,
+            "scene_aim": None,
+        }
+        fixed_bank = bytes(m[0xC000:0x10000])
+        hold = {1: BUTTON_DOWN, -1: BUTTON_UP}.get(shot.hi_lo, 0)
+        presses = {
+            swing.start,
+            swing.start + swing.power,
+            swing.start + swing.power + swing.accuracy,
+        }
+
+        def aim() -> None:
+            m[AIMING] = shot.aim
+
+        def enter_swing() -> None:
+            aim()
+            state["swing_frame"] = 0
+
+        def shot_complete() -> None:
+            record.frames.append(read_ball(m))
+            record.view_modes.append(m[VIEW_MODE])
+            state["done"] = True
+
+        def scene_built() -> None:
+            record.scene = PerspectiveScene(
+                bytes(m[0x6000:0x8000]), fixed_bank, machine.banks[PHYSICS_BANK]
+            )
+            state["scene_aim"] = m[FINE_AIM_ANCHOR]
+
+        def loop_top() -> None:
+            phase = m[SHOT_PHASE]
+            if record.frames and phase == 1 and not state["impact_reached"]:
+                # The view cannot change until the swing animation reaches impact.
+                if m[SWING_ANIMATION_FRAME] < m[SWING_IMPACT_FRAME]:
+                    state["impact"] += 1
+                else:
+                    state["impact_reached"] = True
+            if phase in (1, 2) and not record.frames or phase == 1:
+                record.frames.append(read_ball(m))
+                record.view_modes.append(m[VIEW_MODE])
+            elif phase == 0:
+                # This pass launches the ball: note what the launch will use.
+                state["launch"] = {
+                    "rng_state": m[RNG_STATE] | m[RNG_STATE + 1] << 8,
+                    "aim": m[AIMING],
+                    "club": m[CLUB],
+                    "swing_speed": m[SWING_SPEED],
+                    "power_stop": m[POWER_STOP],
+                    "accuracy_stop": m[ACCURACY_STOP],
+                    "hi_lo": m[SWING_HI_LO],
+                    "wind_direction": m[WIND_DIRECTION],
+                    "wind_speed": m[WIND_SPEED],
+                    "spin": Spin(m[SPIN_SETTING]),
+                }
+
+        def on_frame(frame: int) -> None:
+            if state["swing_frame"] is None:
+                # Setup panels: tap A every few frames.
+                machine.buttons = BUTTON_A if frame % 6 == 0 else 0
+                return
+            state["swing_frame"] += 1
+            # Hi/lo is read again every pass until the swing animation reaches
+            # impact, after launch included, so hold it for the whole shot.
+            buttons = hold
+            if state["swing_frame"] in presses:
+                buttons |= BUTTON_A
+            machine.buttons = buttons
+
+        machine.on_frame = on_frame
+        machine.add_breakpoint(BUILD_PERSPECTIVE_SCENE_CALL, aim, PHYSICS_BANK)
+        machine.add_breakpoint(SWING_SEQUENCE_ENTRY, enter_swing, PHYSICS_BANK)
+        machine.add_breakpoint(SHOT_COMPLETE_RETURN, shot_complete, PHYSICS_BANK)
+        machine.add_breakpoint(SWING_LOOP_TOP, loop_top, PHYSICS_BANK)
+        machine.add_breakpoint(AFTER_SCENE_BUILT, scene_built, PHYSICS_BANK)
+        machine.call(
+            SHOT_SETUP_SEQUENCE,
+            bank=PHYSICS_BANK,
+            stop=lambda: state["done"],
+        )
+
+        launch = state["launch"]
+        if launch is None:
+            raise WhiffError(
+                "the accuracy meter ran off the end; the ball never launched"
+            )
+        hi_lo = launch.pop("hi_lo")
+        record.shot = ShotInput(
+            **launch,
+            hi_lo=0 if not hi_lo else -1 if hi_lo & 0x80 else 1,
+            bunker_depth=shot.bunker_depth,
+            x=shot.x,
+            y=shot.y,
+            frames_to_impact=state["impact"],
+            scene_aim=state["scene_aim"],
+        )
+        return record

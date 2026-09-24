@@ -23,7 +23,8 @@ A toolset for reverse engineering, editing and patching the NES Open Tournament 
   `--drafted-by Claude`). Code cites a record as "ADR" and its four-digit number.
 - **Area-specific guidance** loads from nested files when you work there:
   `editor/CLAUDE.md` (editor architecture, adding editor tools), `golf/qr/CLAUDE.md`
-  (the QR oracle and its 6502 port) and `server/CLAUDE.md` (the randomizer website).
+  (the QR oracle and its 6502 port), `golf/physics/CLAUDE.md` (the ball physics model and
+  its opt-in tests) and `server/CLAUDE.md` (the randomizer website).
 - **Skills** in `.claude/skills/`:
   - `nes-open-golf-rom-layout` - memory map, pointer tables, bank layouts, data region
     boundaries. Use for ROM reading/writing and course data work.
@@ -41,6 +42,8 @@ A toolset for reverse engineering, editing and patching the NES Open Tournament 
   - `formats/` - hole data model and JSON serialization (see `docs/course_data.md`)
   - `rendering/` - PIL rendering for static images
   - `qr/` - scorecard QR reference implementation and 6502 port
+  - `physics/` - Python model of the ball physics (launch to rest), checked frame by frame
+    against the ROM under py65; see `docs/shot_physics.md`
   - `adr.py` - architecture decision records: parsing, checks, the index, new records
 - `editor/` - the course editor
 - `server/` - the randomizer website (FastAPI); conventions in `server/CLAUDE.md`, design in
@@ -54,6 +57,9 @@ A toolset for reverse engineering, editing and patching the NES Open Tournament 
 - `courses/` - course JSON, not committed: `golf-rehydrate` dumps the vanilla courses here
   from the ROMs (see **Vanilla data** below)
 - `tests/unit/`, `tests/integration/` - integration tests need `nes_open_us.nes` in the repo root
+- `tests/physics/` - the physics model's checks against the ROM; slow, so they only run
+  with `--physics` (see `golf/physics/CLAUDE.md` when working with that code). DO NOT RUN
+  THE PHYSICS TESTS WHEN MAKING CHANGES ELSEWHERE IN THE CODEBASE.
 
 ## Key Concepts
 
@@ -172,6 +178,7 @@ uv run pytest tests/integration/                # integration tests only
 uv run pytest tests/meta/                       # tests of the repo's docs, indexes and layering
 uv run pytest tests/unit/test_vertical_fill.py  # one file
 uv run pytest -n 0                              # serially, when a worker's output is in the way
+uv run pytest --physics tests/physics           # the physics checks; only after editing golf/physics/
 ```
 
 Fixtures live in `tests/fixtures/` and `tests/conftest.py`: real compression tables from

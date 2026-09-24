@@ -29,10 +29,33 @@ VANILLA_DATA_FIXTURES = frozenset(
 )
 
 
-def pytest_collection_modifyitems(items):
+PHYSICS_TESTS = ROOT / "tests" / "physics"
+
+
+def pytest_addoption(parser):
+    parser.addoption(
+        "--physics",
+        action="store_true",
+        help="also run tests/physics/, the ball physics model's checks against the ROM",
+    )
+
+
+def pytest_collection_modifyitems(config, items):
     for item in items:
         if VANILLA_DATA_FIXTURES & set(getattr(item, "fixturenames", ())):
             item.add_marker(pytest.mark.vanilla_data)
+        if item.path.is_relative_to(PHYSICS_TESTS):
+            item.add_marker(pytest.mark.physics)
+
+    # The physics checks run every pixel of every hole and hundreds of shots
+    # through an emulated 6502, so they only run when asked for.
+    if not config.getoption("--physics"):
+        physics = [item for item in items if item.get_closest_marker("physics")]
+        if physics:
+            config.hook.pytest_deselected(items=physics)
+            items[:] = [
+                item for item in items if not item.get_closest_marker("physics")
+            ]
 
 
 def _rehydrated(rom_id: str) -> Path:
