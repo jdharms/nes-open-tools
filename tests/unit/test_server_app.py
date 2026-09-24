@@ -1434,6 +1434,25 @@ def test_the_seed_page_lists_recorded_rounds(fake_builder):
     assert len(set(re.findall(r'href="(/r/\w{10})"', rounds))) == 3
 
 
+def test_the_seed_page_marks_each_hole_against_par(fake_builder):
+    with dev_client(fake_builder) as test_client:
+        seed_id = entered_seed(test_client, "alice")
+        course = fake_builder.built.course
+        test_client.get(scan_path(test_client, seed_id, "alice", strokes=4))
+        page = test_client.get(f"/h/{seed_id}").text
+    rounds = page[page.index('class="rounds') :]
+    pars = [hole.par for hole in course.holes]
+    # the same notation as the round page: a 4 is a bogey square over a par 3, a birdie
+    # circle under a par 5 and a plain number on a par 4
+    assert rounds.count(
+        '<td class="num strokes over-par"><span class="score-mark square score-depth-0"><span class="score-digit">4</span></span></td>'
+    ) == pars.count(3)
+    assert rounds.count(
+        '<td class="num strokes under-par"><span class="score-mark circle score-depth-0"><span class="score-digit">4</span></span></td>'
+    ) == pars.count(5)
+    assert rounds.count('<td class="num strokes">4</td>') == pars.count(4)
+
+
 def test_my_page_lists_my_rounds(fake_builder):
     with dev_client(fake_builder, strings=UNWRITTEN) as test_client:
         seed_id = entered_seed(test_client, "bob", "alice")

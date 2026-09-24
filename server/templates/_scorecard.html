@@ -1,0 +1,30 @@
+{# Scorecard pieces shared by the round page and the seed page's rounds table. #}
+
+{# a stroke count's class against its par: over-par and under-par color it, level par stays plain #}
+{% macro to_par(strokes, par) %}{% if strokes > par %} over-par{% elif strokes < par %} under-par{% endif %}{% endmacro %}
+{# standard scorecard notation: circles under par, squares over, one ring per stroke of
+ difference, up to a triple ring. A triple bogey (or worse) uses a triangle instead of
+ squares. Drawn from the outside in: the outermost ring is always score-depth-0, at a
+ fixed size, so a birdie and an albatross mark take up the same space and only what's
+ nested inside differs. #}
+{% macro score_mark(strokes, par) -%}
+  {%- set diff = strokes - par -%}
+  {%- if diff == 0 -%}
+    {{ strokes }}
+  {%- else -%}
+    {%- set shape = "circle" if diff < 0 else "square" -%}
+    {%- set magnitude = diff | abs -%}
+    {%- if magnitude == 1 -%}
+      <span class="score-mark {{ shape }} score-depth-0"><span class="score-digit">{{ strokes }}</span></span>
+    {%- elif magnitude == 2 -%}
+      <span class="score-ring {{ shape }} score-depth-0"><span class="score-ring {{ shape }} score-depth-1 score-spacer"><span class="score-mark {{ shape }} score-depth-2"><span class="score-digit">{{ strokes }}</span></span></span></span>
+    {%- elif shape == "square" -%}
+      <span class="score-triangle score-depth-0">
+        <svg viewBox="0 0 32 32" aria-hidden="true">
+          <polygon points="16,3 30,29 2,29"></polygon>
+        </svg><span class="score-triangle-value{{ ' wide' if strokes >= 10 else '' }}">{{ strokes }}</span></span>
+    {%- else -%}
+      <span class="score-ring {{ shape }} score-depth-0"><span class="score-ring {{ shape }} score-depth-1"><span class="score-mark {{ shape }} score-depth-2"><span class="score-digit">{{ strokes }}</span></span></span></span>
+    {%- endif -%}
+  {%- endif -%}
+{%- endmacro %}

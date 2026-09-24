@@ -241,6 +241,12 @@ table.scorecard .nine-total {
   font-weight: 600;
 }
 
+/* The hole cells' scorecard decorators are centered (see table .num.strokes below), so
+   the hole numbers, pars and totals are too, to keep each column in line. */
+table.scorecard .num {
+  text-align: center;
+}
+
 table.seed-details th {
   width: 40%;
 }

@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% import "_scorecard.html" as scorecard %}
 {% block title %}{{ t_plain("seed.page_title", words=seed.magic_words|join(" ")) }}{% endblock %}
 {% block content %}
   <hgroup>
@@ -81,7 +82,6 @@
   <section>
     <h2>{{ t("seed.rounds.heading") }}</h2>
     {% if rounds %}
-      {% macro to_par(strokes, par) %}{% if strokes > par %} over-par{% elif strokes < par %} under-par{% endif %}{% endmacro %}
       {% set front = seed.holes[:9] %}
       {% set back = seed.holes[9:] %}
       {% set front_par = front | sum(attribute="par") %}
@@ -121,14 +121,14 @@
               <tr>
                 <td><a href="/r/{{ round.public_id }}">{% if round.slot == 1 %}{{ t("seed.rounds.player_two", name=round.player_name) }}{% else %}{{ round.player_name }}{% endif %}</a></td>
                 {% for hole in front %}
-                  <td class="num{{ to_par(round.strokes[loop.index0], hole.par) }}">{{ round.strokes[loop.index0] }}</td>
+                  <td class="num strokes{{ scorecard.to_par(round.strokes[loop.index0], hole.par) }}">{{ scorecard.score_mark(round.strokes[loop.index0], hole.par) }}</td>
                 {% endfor %}
-                <td class="num nine-total{{ to_par(round.strokes_out, front_par) }}">{{ round.strokes_out }}</td>
+                <td class="num nine-total{{ scorecard.to_par(round.strokes_out, front_par) }}">{{ round.strokes_out }}</td>
                 {% for hole in back %}
-                  <td class="num{{ to_par(round.strokes[9 + loop.index0], hole.par) }}">{{ round.strokes[9 + loop.index0] }}</td>
+                  <td class="num strokes{{ scorecard.to_par(round.strokes[9 + loop.index0], hole.par) }}">{{ scorecard.score_mark(round.strokes[9 + loop.index0], hole.par) }}</td>
                 {% endfor %}
-                <td class="num nine-total{{ to_par(round.strokes_in, back_par) }}">{{ round.strokes_in }}</td>
-                <td class="num nine-total{{ to_par(round.total_strokes, seed.total_par) }}">{{ round.total_strokes }}{% if round.flagged %} {{ t("seed.rounds.flagged") }}{% endif %}</td>
+                <td class="num nine-total{{ scorecard.to_par(round.strokes_in, back_par) }}">{{ round.strokes_in }}</td>
+                <td class="num nine-total{{ scorecard.to_par(round.total_strokes, seed.total_par) }}">{{ round.total_strokes }}{% if round.flagged %} {{ t("seed.rounds.flagged") }}{% endif %}</td>
                 <td class="num">{{ round.total_putts }}</td>
               </tr>
             {% endfor %}
