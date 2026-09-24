@@ -196,7 +196,10 @@ data is already in the ROM, and imports a Mario Open theme from its dump (`music
 5. **Music.** A named slug is used as given. `random` draws from the NES Open themes, or
    from all eight when at least one hole comes from Mario Open.
 6. **Wind.** `derive_hole_seeds(prng_seed)` gives the 18 wind seeds.
-7. **Magic words.** Three distinct words from `golf/randomizer/data/word_bank.txt`.
+7. **Magic words.** Three words from `golf/randomizer/data/word_bank.txt`, each slot drawn
+   independently and uniformly. Almost always distinct; any other repeat is redrawn except
+   `TRIPLE_WORD` ("BALLS") in all three slots, which is exactly as likely as any other
+   specific combination and so is left standing - see `golf/randomizer/words.py`.
 8. **SRAM magic.** Two bytes, each uniform over `$01`-`$FE`, high byte first.
 
 The layout, holes, music, magic words and SRAM magic each draw from their own generator,
