@@ -88,6 +88,14 @@
       {% set back_par = back | sum(attribute="par") %}
       <div class="overflow-auto">
         <table class="rounds scorecard striped">
+          <colgroup>
+            <col>
+            <col span="9">
+            <col class="nine-end">
+            <col span="9">
+            <col class="nine-end">
+            <col span="2">
+          </colgroup>
           <thead>
             <tr>
               <th scope="row">{{ t("seed.rounds.hole") }}</th>
