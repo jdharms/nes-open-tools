@@ -560,9 +560,12 @@ def test_a_refused_form_spends_no_token(fake_builder):
         assert post_generate(test_client).status_code == 303
 
 
-def test_generating_without_the_servers_rom_is_unavailable(catalog, curation, tmp_path):
+def test_generating_without_the_servers_rom_is_unavailable(
+    catalog, curation, tmp_path, caplog
+):
     missing = SeedBuilder(catalog, curation, HoleStore(), tmp_path / "missing.nes")
     with app_client(strings=UNWRITTEN, builder=missing) as test_client:
+        assert "cannot build seeds until this is fixed" in caplog.text
         response = post_generate(test_client)
         assert response.status_code == 503
         assert "generate.error.unavailable" in response.text

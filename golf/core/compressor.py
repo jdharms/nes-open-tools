@@ -101,35 +101,41 @@ def detect_vertical_fills(
     return result
 
 
+#: A dictionary's sequences grouped by length, longest first: (length, {bytes: code}).
+DictIndex = list[tuple[int, dict[bytes, str]]]
+
+
+def dict_index(reverse_lookup: dict[str, list[str]]) -> DictIndex:
+    """Index a `reverse_dict_lookup` table for `match_dict_sequence`.
+
+    Where one sequence has several codes, the first is used.
+    """
+    by_length: dict[int, dict[bytes, str]] = {}
+    for hex_sequence, code_list in reverse_lookup.items():
+        sequence = bytes.fromhex(hex_sequence)
+        by_length.setdefault(len(sequence), {}).setdefault(sequence, code_list[0])
+    return sorted(by_length.items(), reverse=True)
+
+
 def match_dict_sequence(
-    byte_stream: list[int], position: int, reverse_lookup: dict[str, list[str]]
+    byte_stream: list[int], position: int, index: DictIndex
 ) -> tuple[str, int] | None:
     """Try to match dictionary sequence at current position (greedy longest-match).
 
     Args:
         byte_stream: Flattened byte array to compress
         position: Current position in stream
-        reverse_lookup: Dict mapping hex sequences to code strings (pre-sorted longest-first)
+        index: The dictionary, from `dict_index`
 
     Returns:
         (code_string, match_length) if match found, None otherwise
     """
-    # Iterate through reverse_lookup (pre-sorted by sequence length, longest first)
-    for hex_sequence, code_list in reverse_lookup.items():
-        seq_len = len(hex_sequence) // 2  # Each byte = 2 hex chars
-
-        # Check if we have enough bytes left
+    for seq_len, codes in index:
         if position + seq_len > len(byte_stream):
             continue
-
-        # Extract bytes from stream and convert to uppercase hex string
-        stream_slice = byte_stream[position : position + seq_len]
-        stream_hex = "".join(f"{b:02X}" for b in stream_slice)
-
-        # Check for match (case-insensitive)
-        if stream_hex == hex_sequence.upper():
-            # Return first code in list
-            return (code_list[0], seq_len)
+        code = codes.get(bytes(byte_stream[position : position + seq_len]))
+        if code is not None:
+            return (code, seq_len)
 
     return None
 
@@ -189,7 +195,7 @@ class TerrainCompressor:
         self.horiz_table = terrain["horizontal_table"]
         self.vert_table = terrain["vertical_table"]
         self.dict_codes = terrain["dictionary_codes"]
-        self.reverse_lookup = terrain["reverse_dict_lookup"]
+        self.dict_index = dict_index(terrain["reverse_dict_lookup"])
         self.row_width = 22
 
     def compress(self, rows: list[list[int]]) -> bytes:
@@ -216,7 +222,7 @@ class TerrainCompressor:
 
         while pos < len(byte_stream):
             # Try dictionary match first (longest-first greedy)
-            dict_match = match_dict_sequence(byte_stream, pos, self.reverse_lookup)
+            dict_match = match_dict_sequence(byte_stream, pos, self.dict_index)
             if dict_match:
                 code_str, length = dict_match
                 code_byte = int(code_str, 16)  # Convert "0xE0" to 0xE0
@@ -292,7 +298,7 @@ class GreensCompressor:
         self.horiz_table = greens["horizontal_table"]
         self.vert_table = greens["vertical_table"]
         self.dict_codes = greens["dictionary_codes"]
-        self.reverse_lookup = greens["reverse_dict_lookup"]
+        self.dict_index = dict_index(greens["reverse_dict_lookup"])
         self.row_width = 24
 
     def compress(self, rows: list[list[int]]) -> bytes:
@@ -321,7 +327,7 @@ class GreensCompressor:
 
         while pos < len(byte_stream):
             # Try dictionary match first (longest-first greedy)
-            dict_match = match_dict_sequence(byte_stream, pos, self.reverse_lookup)
+            dict_match = match_dict_sequence(byte_stream, pos, self.dict_index)
             if dict_match:
                 code_str, length = dict_match
                 code_byte = int(code_str, 16)

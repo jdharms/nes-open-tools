@@ -19,9 +19,11 @@ in this package.
   `builder` and `timings` once the lifespan has started. Nothing is module-level state, so each test
   builds its own app.
 - `server/builder.py`'s `SeedBuilder` is the only thing a route calls to generate, build or
-  finish. It holds the catalog and curation the seed page also reads, and reads the
-  server's ROM on first build. `finish` takes credentials for a signed-in download and
-  none for a guest. Builds run in the threadpool (`run_in_threadpool`), never on the event
+  finish. It holds the catalog and curation the seed page also reads. The lifespan calls
+  its `warm`, which reads the server's ROM and builds what every seed shares (each par's
+  layouts, the signpost banner), so the first seed after a restart is as quick as the
+  rest; a missing ROM is logged and the site starts anyway, refusing builds. `finish`
+  takes credentials for a signed-in download and none for a guest. Builds run in the threadpool (`run_in_threadpool`), never on the event
   loop.
 - Route helpers with no web types live beside the app: `server/forms.py` (the generate
   form to `Settings`, the download form to `PlayerOptions` and ROM hashes),

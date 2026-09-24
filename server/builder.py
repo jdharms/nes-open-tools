@@ -1,7 +1,8 @@
 """What the site's routes call to build: a manifest from settings, its unfinished IPS, and a finished IPS.
 
 The builder holds the catalog, curation and hole store the site generates from, and reads
-the server's vanilla US ROM on first use. Builds run behind a semaphore, so a burst of
+the server's vanilla US ROM on first use. `warm` builds ahead of time what the first seed
+would otherwise wait for, which the app does at startup. Builds run behind a semaphore, so a burst of
 requests queues instead of building side by side. `create_app` takes a builder so tests
 can stand one in that never reads a ROM.
 """
@@ -11,10 +12,16 @@ import threading
 from pathlib import Path
 
 from golf.core.patches import QrCredentials
-from golf.randomizer.build import PlayerOptions, build_unfinished, finish
+from golf.randomizer.build import (
+    PlayerOptions,
+    build_unfinished,
+    finish,
+    signpost_step,
+)
 from golf.randomizer.catalog import DEFAULT_INDEX, US_ROM, Catalog, HoleStore
 from golf.randomizer.curation import DEFAULT_CURATION, CurationSnapshot
 from golf.randomizer.generate import generate
+from golf.randomizer.layout import COUNTS, layouts
 from golf.randomizer.manifest import Manifest, Settings
 from golf.randomizer.roms import vanilla_rom
 
@@ -69,6 +76,15 @@ class SeedBuilder:
                     )
                 self._vanilla = data
             return self._vanilla
+
+    def warm(self) -> None:
+        """Build every par's layouts and the signpost banner, both cached for later seeds.
+
+        Raises BuilderUnavailableError, after the layouts, when the ROM is missing.
+        """
+        for par in COUNTS:
+            layouts(par)
+        signpost_step(self.vanilla())
 
     def generate(self, settings: Settings) -> Manifest:
         return generate(self.catalog, self.curation, settings)

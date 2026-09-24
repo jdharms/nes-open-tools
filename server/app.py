@@ -191,9 +191,14 @@ def create_app(
             if after != before:
                 log.info("schema migrated %d to %d", before, after)
             app.state.db = db
-            app.state.builder = (
+            seed_builder = (
                 builder if builder is not None else SeedBuilder.from_config(config)
             )
+            try:
+                await run_in_threadpool(seed_builder.warm)
+            except BuilderUnavailableError as problem:
+                log.error("cannot build seeds until this is fixed: %s", problem)
+            app.state.builder = seed_builder
             sink = timings if timings is not None else TimingSink(db)
             app.state.timings = sink
             flusher = (

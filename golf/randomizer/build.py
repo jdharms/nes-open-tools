@@ -24,6 +24,7 @@ import hashlib
 import json
 from collections.abc import Iterable
 from dataclasses import dataclass
+from functools import lru_cache
 
 from golf.core import ips, rom_utils
 from golf.core.patches import (
@@ -178,6 +179,12 @@ def music_step(slug: str) -> ROMPatch:
     )  # pragma: no cover
 
 
+@lru_cache(maxsize=1)
+def signpost_step(vanilla: bytes) -> ROMPatch:
+    """The signpost banner patch, the same for every seed, so built once per base ROM."""
+    return signpost_banner_patch(RomReader.from_bytes(vanilla), SIGNPOST_ART)
+
+
 def unfinished_steps(
     manifest: Manifest, catalog: Catalog, store: HoleStore, vanilla: bytes
 ) -> list[ROMPatch]:
@@ -203,7 +210,7 @@ def unfinished_steps(
     steps += [
         green_shortcut_patch(),
         SCORECARD_QR_PATCH,
-        signpost_banner_patch(RomReader.from_bytes(vanilla), SIGNPOST_ART),
+        signpost_step(vanilla),
         scorecard_course_name_patch(title=scorecard_title(course.magic_words)),
         menu_trim_patch(list(course.magic_words)),
     ]

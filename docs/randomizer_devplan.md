@@ -299,7 +299,7 @@ says so, a ROM playtested. Items 1 to 6 build the library; 7 onward build the si
 8. **Generate and seed page.** Done: `/generate`, `/h/<id>` and `/h/<id>.json`.
    `server/forms.py` turns the form into `Settings`, refusing with a reason the page shows;
    `server/builder.py`'s `SeedBuilder` generates and builds the unfinished IPS behind a
-   semaphore, reading the server's ROM on first use; `server/seeds.py` draws the base62
+   semaphore, warming at startup what every seed shares; `server/seeds.py` draws the base62
    id and writes the seed and its 18 `seed_holes` rows, with the pin and wind anchors from
    `predict_hole`; `server/ratelimit.py` is the token bucket; `server/views.py` shapes the
    form's choices and the seed page from the manifest and catalog. A missing page renders

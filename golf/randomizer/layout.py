@@ -101,13 +101,22 @@ def satisfies(
 
 
 def joined_nines(counts: Mapping[int, int], nine: int = NINE) -> list[Layout]:
-    """Every layout for a count table, built a nine at a time, sorted."""
+    """Every layout for a count table, built a nine at a time, sorted.
+
+    Each nine is a permutation of its half of an even split, kept only with no
+    consecutive par 3s or par 5s, so a joined layout already has the counts and
+    balanced nines: only the join between the nines is left to check.
+    """
     found = []
     for front_counts, back_counts in nine_splits(counts, nine):
         fronts = [part for part in distinct_permutations(front_counts) if _clean(part)]
         backs = [part for part in distinct_permutations(back_counts) if _clean(part)]
-        found.extend(front + back for front, back in product(fronts, backs))
-    return sorted(layout for layout in found if satisfies(layout, counts, nine))
+        found.extend(
+            front + back
+            for front, back in product(fronts, backs)
+            if not (front[-1] == back[0] and back[0] in NO_CONSECUTIVE)
+        )
+    return sorted(found)
 
 
 def _clean(part: Layout) -> bool:
