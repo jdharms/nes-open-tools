@@ -64,6 +64,16 @@ def test_a_seeds_rounds_list_fewest_strokes_first_under_display_names(
     assert rounds[0].received_at == "2026-09-17T11:00:00Z"
 
 
+def test_a_seeds_rounds_carry_each_holes_strokes_and_the_nines(db, seed_id, alice):
+    holes = tuple(HoleRecord(3 + position % 3, 1) for position in range(18))
+    submit_scan(db, alice.scan(holes=holes), now="2026-09-17T10:00:00Z")
+    (listed,) = rounds_for_seed(db, seed_id)
+    assert listed.strokes == tuple(hole.strokes for hole in holes)
+    assert listed.strokes_out == sum(hole.strokes for hole in holes[:9])
+    assert listed.strokes_in == sum(hole.strokes for hole in holes[9:])
+    assert listed.strokes_out + listed.strokes_in == listed.total_strokes
+
+
 def test_a_players_rounds_list_newest_first_with_their_seeds(
     db, manifest, seed_id, alice
 ):

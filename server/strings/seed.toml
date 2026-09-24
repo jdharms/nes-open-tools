@@ -202,25 +202,33 @@ text = "Totals"
 note = "h2 over the table of rounds players have submitted for this seed by scanning the end-of-round QR code"
 text = "Completed Rounds"
 
-[seed.rounds.player]
-note = "rounds table column header; the player's Discord display name"
-text = "Player"
+[seed.rounds.hole]
+note = "rounds scorecard label at the start of the header row of hole numbers, above the par row and the players' names; narrow column"
+text = "Hole"
+
+[seed.rounds.par]
+note = "rounds scorecard label at the start of the header row of each hole's par (then par for each nine and the round), just above the players' rows; narrow column"
+text = "Par"
 
 [seed.rounds.player_two]
 note = "rounds table player cell for a round played as player 2 on the player's ROM; {name} the ROM owner's Discord display name"
 text = "Teammate - {name}"
 
 [seed.rounds.strokes]
-note = "rounds table column header; total strokes for the round"
-text = "Total Strokes"
+note = "rounds scorecard column header in the hole-number row; total strokes for the round, with the course par below in the par row; narrow column"
+text = "Tot"
+
+[seed.rounds.out]
+note = "rounds scorecard column header in the hole-number row, after holes 1-9; strokes on the front nine, with its par below in the par row; narrow column"
+text = "Out"
+
+[seed.rounds.in]
+note = "rounds scorecard column header in the hole-number row, after holes 10-18; strokes on the back nine, with its par below in the par row; narrow column"
+text = "In"
 
 [seed.rounds.putts]
 note = "rounds table column header; total putts for the round"
 text = "Putts"
-
-[seed.rounds.received]
-note = "rounds table column header; when the scan was recorded, shown in the viewer's local time"
-text = "Submitted"
 
 [seed.rounds.flagged]
 note = "marker after a round's total strokes when an admin has flagged it: the round is being questioned but still counts; short, fits in a table cell"
