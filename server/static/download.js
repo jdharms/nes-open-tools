@@ -9,9 +9,9 @@
 // against the seed's required ROMs. The patched file is always the US ROM, nes_open_us.
 //
 // The article's look is driven by its data-state (server/static/site.css):
-//   checking     reading the ROM store
+//   checking     reading the ROM store; no status text, as it lasts only a moment
 //   missing      a required ROM is not stored; the link to ROM setup shows
-//   ready        every required ROM is stored; the form can be submitted
+//   ready        every required ROM is stored; the form can be submitted; no status text
 //   building     waiting for the server, or patching
 //   done         the patched ROM was handed to the browser
 //   error        the server refused, or patching failed; the form can be submitted again
@@ -168,7 +168,8 @@ function setupDownload(article) {
         t("seed.download.status.missing", { roms: missing }),
       );
     } else {
-      setState(article, "ready", t("seed.download.status.ready"));
+      // The normal case once a player has set up their ROMs, so no status line.
+      setState(article, "ready", "");
     }
     return stored;
   }
@@ -222,7 +223,7 @@ document.addEventListener("DOMContentLoaded", () => {
     setState(article, "unavailable", t("seed.download.status.unavailable"));
     return;
   }
-  setState(article, "checking", t("seed.download.status.checking"));
+  setState(article, "checking", "");
   setupDownload(article).catch((error) => {
     setState(article, "error", t("seed.download.status.storage_failed", { error }));
   });

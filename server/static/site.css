@@ -48,14 +48,15 @@ header nav ul.account form {
 
 header nav ul.account button {
   margin: 0;
-  padding: calc(var(--pico-nav-link-spacing-vertical) * 0.5) var(--pico-nav-link-spacing-horizontal);
+  padding: calc(var(--pico-nav-link-spacing-vertical) * 0.5)
+    var(--pico-nav-link-spacing-horizontal);
   font-size: inherit;
 }
 
 /* Site-wide affiliation disclaimer, with the site's release at the right. The direct-child
    selector keeps this separate from the footers used inside cards. On a narrow screen the
    release wraps under the disclaimer, still at the right. */
-body>footer.site-footer {
+body > footer.site-footer {
   display: flex;
   flex-wrap: wrap;
   justify-content: space-between;
@@ -65,14 +66,14 @@ body>footer.site-footer {
   color: var(--pico-muted-color);
 }
 
-body>footer.site-footer .version {
+body > footer.site-footer .version {
   margin-left: auto;
   white-space: nowrap;
 }
 
 /* ROM setup cards. rom.js sets data-state: checking, empty, error, stored or unavailable. */
 
-article.rom>header {
+article.rom > header {
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -92,7 +93,7 @@ article.rom code {
   word-break: break-all;
 }
 
-article.rom>footer button {
+article.rom > footer button {
   margin-bottom: 0;
 }
 
@@ -116,19 +117,23 @@ article.rom>footer button {
 }
 
 article.rom[data-state="stored"] {
-  background-color: color-mix(in srgb,
-      var(--pico-primary-background) 10%,
-      var(--pico-card-background-color));
+  background-color: color-mix(
+    in srgb,
+    var(--pico-primary-background) 10%,
+    var(--pico-card-background-color)
+  );
   box-shadow:
     var(--pico-card-box-shadow),
     0 0 0 2px var(--pico-primary-background);
 }
 
-article.rom[data-state="stored"]>header,
-article.rom[data-state="stored"]>footer {
-  background-color: color-mix(in srgb,
-      var(--pico-primary-background) 20%,
-      var(--pico-card-sectioning-background-color));
+article.rom[data-state="stored"] > header,
+article.rom[data-state="stored"] > footer {
+  background-color: color-mix(
+    in srgb,
+    var(--pico-primary-background) 20%,
+    var(--pico-card-sectioning-background-color)
+  );
 }
 
 article.rom[data-state="stored"] .rom-check {
@@ -148,7 +153,7 @@ article.rom[data-state="error"] .rom-status {
 article.rom[data-state="stored"] input[type="file"],
 article.rom[data-state="stored"] .rom-expected,
 article.rom[data-state="unavailable"] input[type="file"],
-article.rom:not([data-state="stored"])>footer {
+article.rom:not([data-state="stored"]) > footer {
   display: none;
 }
 
@@ -160,8 +165,8 @@ article.rom:not([data-state="stored"])>footer {
 
 /* Each card spans two grid rows, header and body, shared with the cards beside it
    through subgrid, so a header that wraps keeps every card's header the same height. */
-.steps>li,
-.steps>li>article {
+.steps > li,
+.steps > li > article {
   display: grid;
   grid-row: span 2;
   grid-template-rows: subgrid;
@@ -169,11 +174,11 @@ article.rom:not([data-state="stored"])>footer {
   margin: 0;
 }
 
-.steps>li {
+.steps > li {
   list-style: none;
 }
 
-.steps article>header {
+.steps article > header {
   display: flex;
   align-items: center;
   gap: calc(var(--pico-spacing) * 0.75);
@@ -200,7 +205,7 @@ form article.club-rules {
   margin-block: calc(var(--pico-spacing) * 2);
 }
 
-form article.club-rules>details {
+form article.club-rules > details {
   margin-bottom: 0;
 }
 
@@ -259,23 +264,23 @@ table.seed-details th {
 
 /* Seed page sections collapsed into cards, their h2 as the summary. Flex keeps Pico's
    chevron beside the heading rather than floated below it. */
-article.collapsible>details {
+article.collapsible > details {
   margin-bottom: 0;
 }
 
-article.collapsible>details>summary {
+article.collapsible > details > summary {
   display: flex;
   align-items: center;
   justify-content: space-between;
 }
 
-article.collapsible>details>summary>h2 {
+article.collapsible > details > summary > h2 {
   margin-bottom: 0;
 }
 
 /* Seed page download form. download.js sets data-state: checking, missing, ready,
    building, done, error or unavailable. */
-article.download form> :last-child {
+article.download form > :last-child {
   margin-bottom: 0;
 }
 
@@ -283,7 +288,11 @@ article.download form> :last-child {
   margin-bottom: calc(var(--pico-spacing) * 0.5);
 }
 
-article.download[data-state="ready"] .download-status,
+/* Checking and ready have no status text; drop the empty line's margin. */
+.download-status:empty {
+  display: none;
+}
+
 article.download[data-state="done"] .download-status {
   color: var(--pico-primary);
   font-weight: 600;
@@ -486,7 +495,8 @@ form.admin-inline button {
 }
 
 form.admin-inline button {
-  padding: calc(var(--pico-form-element-spacing-vertical) * 0.5) var(--pico-form-element-spacing-horizontal);
+  padding: calc(var(--pico-form-element-spacing-vertical) * 0.5)
+    var(--pico-form-element-spacing-horizontal);
 }
 
 /* The metrics window picker: two small controls on one line, rather than the full-width

@@ -72,19 +72,11 @@ text = "Save ROM"
 
 # Download statuses. download.js sets these; inline HTML works, and values are escaped.
 
-[seed.download.status.checking]
-note = "download status while looking for this seed's ROMs in the browser"
-text = "Verifying ROMs..."
-
 [seed.download.status.missing]
 note = "download status, a ROM this seed needs isn't set up in this browser; {roms} the missing ROM titles, comma-separated"
 text = """
 Before saving a ROM you'll need to verify your vanilla ROM(s) for {roms}.
 """
-
-[seed.download.status.ready]
-note = "download status, every ROM this seed needs is set up; ready to download"
-text = "Download ready, all required ROM files present"
 
 [seed.download.status.building]
 note = "download status while the server builds the patch and the browser patches the ROM"

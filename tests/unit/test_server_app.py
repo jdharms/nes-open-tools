@@ -734,7 +734,7 @@ def test_written_strings_render_without_placeholders(fake_builder):
     assert "TEXT:generate.clubs.heading" in pages["/generate"]
     assert "TEXT:seed.holes.total" in pages[f"/h/{seed_id}"]
     assert "TEXT:seed.download.submit" in pages[f"/h/{seed_id}"]
-    assert '"TEXT:seed.download.status.ready"' in pages[f"/h/{seed_id}"]
+    assert '"TEXT:seed.download.status.done"' in pages[f"/h/{seed_id}"]
     assert "TEXT:not_found.heading" in pages["/nope"]
     assert "TEXT:scan_rejected.malformed" in pages[scan]
 
