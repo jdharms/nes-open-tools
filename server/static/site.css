@@ -316,14 +316,145 @@ table.nine col.strokes {
   width: 34%;
 }
 
-/* Strokes against par: over par red, under par green, level par left as it is. The admin
-   round page colors its holes the same way. */
+/* Strokes against par: over par red, under par green, level par left as it is. Also sets
+   --score-color, a custom property (unlike currentColor, unaffected by the digit's own
+   color below) that the scorecard decorators borrow their ring color from. The admin round
+   page colors its holes the same way, without decorators. */
 table .over-par {
   color: var(--pico-del-color);
+  --score-color: var(--pico-del-color);
 }
 
 table .under-par {
   color: var(--pico-ins-color);
+  --score-color: var(--pico-ins-color);
+}
+
+/* Scorecard decorators on the round page: standard notation for a hole's score against par.
+   .score-mark holds the number; each wrapping .score-ring is one more concentric ring for an
+   additional stroke of difference. Centered rather than right-aligned like the other .num
+   columns, since a right-aligned ring grows from the cell's edge and staggers the digit
+   itself out of line row to row. line-height matches a mark's own height (score-depth-0's
+   2rem) so a plain score's row is as tall as a decorated one - the front and back nine are
+   separate tables, each sized from its own content, so a shorter row on one side would
+   otherwise fall out of step with its counterpart on the other. */
+table .num.strokes {
+  text-align: center;
+  line-height: 2rem;
+}
+
+/* Drawn from the outside in, so every mark takes up the same space regardless of how many
+   strokes it's off by: score-depth-0 is always the outermost ring, at a fixed size, and the
+   inner ring nests inward from it by an inset rather than being centered. Every size in this
+   chain divides out to a whole pixel at the default 16px root (a 2px inset off a 32px,
+   1px-bordered depth-0 leaves an even 26px for depth-1), so the browser never has to round a
+   fractional pixel unevenly between the two sides of a ring. */
+.score-mark,
+.score-ring {
+  position: relative;
+  box-sizing: border-box;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  vertical-align: middle;
+  border: 1px solid var(--score-color, currentColor);
+  border-radius: 50%;
+}
+
+.score-mark.square,
+.score-ring.square {
+  border-radius: 0;
+}
+
+/* The ring carries the over/under-par color; the number inside it stays the ordinary text
+   color, so a birdie and a bogey read the same and only the shape tells them apart. */
+.score-mark {
+  color: var(--pico-color);
+  /* Without this, the table's line-height (1.5) makes the line box taller than a small
+     inner ring, and flex centering balances that box rather than the glyph itself, so the
+     digit reads as sitting low and off-center instead of in the middle of the ring. */
+  line-height: 1;
+}
+
+/* Even at line-height 1, the line box includes the font's room above and below the
+   digits, which is rarely even, so a centered line box leaves the digit itself about a
+   pixel high. text-box trims the box to run from the baseline to cap height, so centering
+   it centers the glyph. It only applies to a block container, hence the digit's own block
+   span inside the flex ring; the triangle's absolutely positioned value is one already.
+   Browsers without text-box support keep the untrimmed box. */
+.score-digit {
+  display: block;
+}
+
+.score-digit,
+.score-triangle-value {
+  text-box: trim-both cap alphabetic;
+}
+
+.score-depth-0 {
+  width: 2rem;
+  aspect-ratio: 1;
+}
+
+.score-depth-1,
+.score-depth-2 {
+  position: absolute;
+  inset: 2px;
+}
+
+.score-depth-2 {
+  font-size: 0.9em;
+}
+
+/* An eagle or double bogey nests through score-depth-1 to reach score-depth-2 rather than
+   stopping at depth-1, so its two visible rings sit as far apart as an albatross's outer
+   and inner ring, not its outer and middle. score-spacer keeps depth-1 in the DOM, sized
+   and positioned as normal, purely to place depth-2 correctly - it just isn't drawn. */
+.score-spacer {
+  border-color: transparent;
+}
+
+/* A triple bogey (or worse) uses a triangle instead of squares - a commonly cited (if not
+   universally agreed) way to draw it - point up, flat edge down, like a warning triangle
+   rather than an inverted one. An SVG stroke, since a hollow triangle outline isn't
+   something a plain CSS border can draw. The number sits at the triangle's centroid, not
+   the bounding box's midpoint, since that's where a triangle actually reads as "the
+   middle". */
+.score-triangle {
+  position: relative;
+  display: inline-flex;
+  vertical-align: middle;
+}
+
+.score-triangle svg {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+}
+
+.score-triangle polygon {
+  fill: none;
+  stroke: var(--score-color, currentColor);
+  stroke-width: 1;
+  stroke-linejoin: round;
+}
+
+.score-triangle-value {
+  position: absolute;
+  left: 50%;
+  top: 63%;
+  transform: translate(-50%, -50%);
+  color: var(--pico-color);
+  line-height: 1;
+}
+
+/* The triangle narrows toward its apex, so even at the same overall footprint as a circle
+   or square, there's less width at the digit's position - a two-digit score needs a
+   smaller font than those shapes to stay inside the sides instead of crossing them. A
+   single digit already fits at full size, so this only applies once strokes reaches 10. */
+.score-triangle-value.wide {
+  font-size: 0.7em;
 }
 
 /* Admin pages: a row of links under the site header, and buttons that sit in a table row. */
