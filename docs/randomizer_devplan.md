@@ -217,7 +217,7 @@ qr_seed_id INTEGER NOT NULL UNIQUE CHECK (qr_seed_id BETWEEN 1 AND 8392993658683
 | Route | Purpose |
 |---|---|
 | `GET /` | What this is, links to ROM setup and generate |
-| `GET /pages/<slug>` | A checked-in Markdown page, or a collection page with one card per entry file; enabled unlisted pages remain available by direct URL, while disabled pages answer 404 |
+| `GET /pages/<slug>` | A checked-in Markdown page, or a collection page with one card per entry file; enabled unlisted pages remain available by direct URL, while disabled pages answer 404. Each enabled page is registered as a route of its own, so its timings are too |
 | `GET /rom` | ROM setup, pure client-side: pick files, hash, store in IndexedDB, show verified status |
 | `GET /generate`, `POST /generate` | Settings form: par target, source ROMs, music or random, and club rules in a collapsed section of their own, open when a returned form has them set. The mercy point and tag filters take their defaults. POST redirects to the seed page |
 | `GET /h/<id>` | Seed page: the magic words, hole list with source, par and yards, totals, music, settings, required ROMs, recorded rounds, and either the download form or a withdrawn notice |
@@ -230,7 +230,7 @@ qr_seed_id INTEGER NOT NULL UNIQUE CHECK (qr_seed_id BETWEEN 1 AND 8392993658683
 | `GET /admin/...` | Counts, seeds, rounds (flagged filter), users, voided rounds, admin activity, and each seed, round and user. Admins only |
 | `POST /admin/rounds/<id>/flag`, `.../unflag`, `.../void`, `.../restore` | Flag with a note, clear the flag, void with a note, restore into an empty slot. `<id>` is the round's `public_id` |
 | `POST /admin/seeds/<id>/withdraw`, `.../restore` | Refuse or restore downloads without changing the seed's manifest, unfinished IPS, entries or rounds; withdrawal takes an admin-only note |
-| `GET /healthz` | For the reverse proxy |
+| `GET /healthz`, `HEAD /healthz` | For the reverse proxy and the uptime monitor, which checks with HEAD |
 
 Everything is a form or a link. The only fetch from JavaScript is the IPS.
 

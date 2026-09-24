@@ -227,7 +227,10 @@ it knows. Rolling back past a migration is restoring the database from before it
 The site records one row per request in the `timings` table of its own database: the
 request ID from `X-Request-Id`, route template, status, total milliseconds, what the
 request came to, and the phases inside it, such as how long a build waited for the build
-semaphore against how long it then took. `/admin/metrics` shows the percentiles; over SSH:
+semaphore against how long it then took. Static files and rangefinder renders are grouped
+under their mount (`/static`, `/rangefinder-data`), each content page is a route of its
+own, and `unmatched` holds only the requests that matched nothing, all of them 404s.
+`/admin/metrics` shows the percentiles; over SSH:
 
 ```bash
 sudo -u golf sqlite3 /var/lib/golf-site/golf_site.db \
@@ -241,6 +244,20 @@ sudo -u golf sqlite3 /var/lib/golf-site/golf_site.db \
      FROM timings
      WHERE created_at >= strftime('%Y-%m-%dT%H:%M:%SZ', 'now', '-7 days')
      ORDER BY total_ms DESC LIMIT 10"
+```
+
+The `timings` table keeps the route rather than the path. To see which paths the
+`unmatched` requests asked for, join their request IDs to Caddy's log, which records the
+`X-Request-Id` response header beside the URI:
+
+```bash
+sudo -u golf sqlite3 /var/lib/golf-site/golf_site.db \
+  "SELECT request_id FROM timings WHERE route = 'unmatched'" > /tmp/unmatched_ids
+sudo jq -r --rawfile ids /tmp/unmatched_ids '
+  ($ids | split("\n") | map(select(. != "")) | map({(.): true}) | add) as $set
+  | select($set[.resp_headers["X-Request-Id"][0] // ""])
+  | [.status, .request.method, .request.uri, (.request.headers["User-Agent"][0] // "-")]
+  | @tsv' /var/log/caddy/nesopengolf.log | sort | uniq -c | sort -rn
 ```
 
 Raw samples are kept 30 days and the daily rollup in `timing_day` for good, so a

@@ -8,6 +8,7 @@ from fastapi.testclient import TestClient
 from server.app import create_app
 from server.config import Config
 from server.db import Database
+from server.pages import PageCatalog
 from server.timings import (
     OK,
     Sample,
@@ -297,6 +298,27 @@ def test_a_request_is_recorded_under_its_route_template(client):
 def test_a_path_matching_no_route_is_recorded_as_one_bucket(client):
     client.get("/nothing/here")
     assert recorded(client) == [("unmatched", "GET", 404)]
+
+
+def test_a_mounted_app_is_recorded_under_its_mount(client):
+    client.get("/static/site.css")
+    client.get("/static/missing.css")
+    assert recorded(client) == [("/static", "GET", 200), ("/static", "GET", 404)]
+
+
+def test_each_content_page_is_recorded_as_its_own_route(tmp_path):
+    for slug in ("about", "faq"):
+        (tmp_path / f"{slug}.md").write_text(f'+++\ntitle = "{slug}"\n+++\n\nBody.\n')
+    app = create_app(Config(database=":memory:"), pages=PageCatalog.load(tmp_path))
+    with TestClient(app) as test_client:
+        test_client.get("/pages/about")
+        test_client.get("/pages/faq")
+        test_client.get("/pages/missing")
+        assert recorded(test_client) == [
+            ("/pages/about", "GET", 200),
+            ("/pages/faq", "GET", 200),
+            ("unmatched", "GET", 404),
+        ]
 
 
 def test_a_response_carries_the_request_id_its_log_lines_use(client):

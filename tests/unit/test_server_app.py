@@ -141,6 +141,13 @@ def test_health_check(client):
     assert response.json() == {"status": "ok"}
 
 
+def test_health_check_answers_head(client):
+    """UptimeRobot's free plan checks with HEAD."""
+    response = client.head("/healthz")
+    assert response.status_code == 200
+    assert response.content == b""
+
+
 def test_startup_migrates_the_database(client):
     assert app_state(client).db.version() == len(MIGRATIONS)
 

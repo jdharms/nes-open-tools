@@ -21,6 +21,7 @@ from fastapi.templating import Jinja2Templates
 from starlette.concurrency import run_in_threadpool
 from starlette.exceptions import HTTPException as StarletteHTTPException
 from starlette.middleware.sessions import SessionMiddleware
+from starlette.routing import Mount
 
 from golf.randomizer.build import credentials_for
 from golf.randomizer.catalog import REPO_ROOT
@@ -54,7 +55,7 @@ from .forms import (
     settings_from_state,
 )
 from .logging import request_id
-from .pages import PageCatalog
+from .pages import ContentPage, PageCatalog
 from .ratelimit import (
     GENERATE_CAPACITY,
     GENERATE_REFILL_SECONDS,
@@ -105,10 +106,10 @@ POOL_TOO_SMALL = "pool"
 #: a seed kept as a permalink but no longer distributed
 SEED_WITHDRAWN = "seed_withdrawn"
 
-#: paths a missing resource answers with JSON rather than the not-found page
 #: the route of a request that matched nothing, which would otherwise be every 404 path
 UNMATCHED = "unmatched"
 
+#: paths a missing resource answers with JSON rather than the not-found page
 MACHINE_SUFFIXES = (".json", ".ips")
 
 #: the query parameter `/s/` adds for the scan that recorded the round, which the round page
@@ -128,9 +129,20 @@ SIGN_IN_UNAVAILABLE = "unavailable"
 
 
 def route_template(request: Request) -> str:
-    """The matched route's path, which is what a timing row is grouped by."""
+    """The matched route's path, which is what a timing row is grouped by.
+
+    A mounted app, such as the static files, sets no route of its own, so its requests
+    are grouped under the mount's path instead.
+    """
     path = getattr(request.scope.get("route"), "path", None)
-    return path if isinstance(path, str) else UNMATCHED
+    if isinstance(path, str):
+        return path
+    endpoint = request.scope.get("endpoint")
+    if endpoint is not None:
+        for route in request.app.routes:
+            if isinstance(route, Mount) and route.app is endpoint:
+                return route.path
+    return UNMATCHED
 
 
 def json_refusal(
@@ -350,15 +362,24 @@ def create_app(
     def home(request: Request):
         return templates.TemplateResponse(request, "home.html", {"page": "home"})
 
-    @app.get("/pages/{slug}", response_class=HTMLResponse)
-    def content_page(request: Request, slug: str):
-        content = pages.get(slug)
-        if content is None:
-            raise not_found()
-        return templates.TemplateResponse(
-            request,
-            "page.html",
-            {"page": "content", "content_page": content},
+    def content_page(content: ContentPage):
+        def show(request: Request):
+            return templates.TemplateResponse(
+                request,
+                "page.html",
+                {"page": "content", "content_page": content},
+            )
+
+        return show
+
+    # A route per page rather than one `/pages/{slug}`, so each page's timings are its
+    # own; a slug that names no enabled page matches nothing and is not found.
+    for content in pages.enabled:
+        app.add_api_route(
+            f"/pages/{content.slug}",
+            content_page(content),
+            response_class=HTMLResponse,
+            name=f"content_page_{content.slug}",
         )
 
     @app.get("/rom", response_class=HTMLResponse)
@@ -694,7 +715,8 @@ def create_app(
             status_code=303,
         )
 
-    @app.get("/healthz")
+    # UptimeRobot's free plan checks with HEAD, which a GET route would refuse with a 405.
+    @app.api_route("/healthz", methods=["GET", "HEAD"])
     def healthz(request: Request) -> dict[str, str]:
         with request.app.state.db.transaction() as conn:
             conn.execute("SELECT 1").fetchone()

@@ -84,9 +84,12 @@ class PageCatalog:
 
     def get(self, slug: str) -> ContentPage | None:
         """Return an enabled page by slug; disabled and unknown pages are absent."""
-        return next(
-            (page for page in self.pages if page.slug == slug and page.enabled), None
-        )
+        return next((page for page in self.enabled if page.slug == slug), None)
+
+    @property
+    def enabled(self) -> tuple[ContentPage, ...]:
+        """Every enabled page, listed or not, in catalog order."""
+        return tuple(page for page in self.pages if page.enabled)
 
     @property
     def listed(self) -> tuple[ContentPage, ...]:
