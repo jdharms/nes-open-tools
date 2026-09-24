@@ -1259,8 +1259,11 @@ def test_scanning_records_the_round_and_redirects_to_its_permalink(fake_builder)
     assert "round.heading_recorded" in page.text
     assert "round.player_one name=alice" in page.text
     assert f'href="/h/{seed_id}"' in page.text
-    assert '<td class="num over-par">5</td>' in page.text
-    assert '<td class="num over-par">90</td>' in page.text
+    assert (
+        '<span class="score-mark square score-depth-0"><span class="score-digit">5</span></span>'
+        in page.text
+    )
+    assert '<td class="num strokes over-par">90</td>' in page.text
 
 
 def test_the_permalink_confirms_the_round_only_for_the_scan_that_recorded_it(
@@ -1276,7 +1279,7 @@ def test_the_permalink_confirms_the_round_only_for_the_scan_that_recorded_it(
         assert page.status_code == 200
         # a permalink is an ordinary page: unlike /s/, it may be cached
         assert "cache-control" not in page.headers
-        assert '<td class="num over-par">90</td>' in page.text
+        assert '<td class="num strokes over-par">90</td>' in page.text
     assert "round.heading_recorded" in confirmed.text
     assert "history.replaceState" in confirmed.text
     assert "round.heading" in plain.text
@@ -1312,7 +1315,7 @@ def test_scanning_again_reaches_the_first_round_and_records_nothing(fake_builder
         assert response.headers["location"] == permalink
     for page in pages:
         assert "round.heading_recorded" not in page.text
-        assert '<td class="num over-par">90</td>' in page.text
+        assert '<td class="num strokes over-par">90</td>' in page.text
     assert len(recorded) == 1
 
 
@@ -1323,10 +1326,57 @@ def test_strokes_are_marked_against_par(fake_builder):
         page = test_client.get(scan_path(test_client, seed_id, "alice", strokes=4)).text
     pars = [hole.par for hole in course.holes]
     assert course.par == 72
-    # a 4 on every hole: over a par 3, under a par 5, and level par over the round
-    assert page.count('<td class="num over-par">4</td>') == pars.count(3)
-    assert page.count('<td class="num under-par">4</td>') == pars.count(5)
-    assert page.count('<td class="num">72</td>') == 2
+    # a 4 on every hole: a bogey square over a par 3, a birdie circle under a par 5, and
+    # level par over the round
+    assert page.count(
+        '<td class="num strokes over-par"><span class="score-mark square score-depth-0"><span class="score-digit">4</span></span></td>'
+    ) == pars.count(3)
+    assert page.count(
+        '<td class="num strokes under-par"><span class="score-mark circle score-depth-0"><span class="score-digit">4</span></span></td>'
+    ) == pars.count(5)
+    # total par and total strokes both land on 72; only the strokes cell carries the
+    # column's class
+    assert page.count('<td class="num">72</td>') == 1
+    assert page.count('<td class="num strokes">72</td>') == 1
+
+
+def test_far_under_par_gets_a_second_or_third_ring(fake_builder):
+    with dev_client(fake_builder) as test_client:
+        seed_id = entered_seed(test_client, "alice")
+        course = fake_builder.built.course
+        page = test_client.get(scan_path(test_client, seed_id, "alice", strokes=2)).text
+    pars = [hole.par for hole in course.holes]
+    # a 2 on every hole: an eagle on a par 4, drawn through an invisible spacer ring so its
+    # two visible rings sit as far apart as an albatross's outer and inner ring rather than
+    # its outer and middle; an albatross (or better) on a par 5, still just the one triple
+    # ring regardless of how many strokes under
+    assert page.count(
+        '<span class="score-ring circle score-depth-0">'
+        '<span class="score-ring circle score-depth-1 score-spacer">'
+        '<span class="score-mark circle score-depth-2"><span class="score-digit">2</span></span></span></span>'
+    ) == pars.count(4)
+    assert page.count(
+        '<span class="score-ring circle score-depth-0">'
+        '<span class="score-ring circle score-depth-1">'
+        '<span class="score-mark circle score-depth-2"><span class="score-digit">2</span></span></span></span>'
+    ) == pars.count(5)
+
+
+def test_far_over_par_gets_a_second_ring_or_a_triangle(fake_builder):
+    with dev_client(fake_builder) as test_client:
+        seed_id = entered_seed(test_client, "alice")
+        course = fake_builder.built.course
+        page = test_client.get(scan_path(test_client, seed_id, "alice", strokes=6)).text
+    pars = [hole.par for hole in course.holes]
+    # a 6 on every hole: a double bogey on a par 4, through the same spacer trick as an
+    # eagle; a triple bogey (or worse) on a par 3, a triangle instead of a third square
+    assert page.count(
+        '<span class="score-ring square score-depth-0">'
+        '<span class="score-ring square score-depth-1 score-spacer">'
+        '<span class="score-mark square score-depth-2"><span class="score-digit">6</span></span></span></span>'
+    ) == pars.count(4)
+    assert page.count('<span class="score-triangle score-depth-0">') == pars.count(3)
+    assert page.count('<span class="score-triangle-value">6</span>') == pars.count(3)
 
 
 def test_a_player_two_scan_is_marked_on_the_page(fake_builder):

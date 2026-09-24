@@ -3,6 +3,32 @@
 {% block content %}
   {# a stroke count's class against its par: over-par and under-par color it, level par stays plain #}
   {% macro to_par(strokes, par) %}{% if strokes > par %} over-par{% elif strokes < par %} under-par{% endif %}{% endmacro %}
+  {# standard scorecard notation: circles under par, squares over, one ring per stroke of
+   difference, up to a triple ring. A triple bogey (or worse) uses a triangle instead of
+   squares. Drawn from the outside in: the outermost ring is always score-depth-0, at a
+   fixed size, so a birdie and an albatross mark take up the same space and only what's
+   nested inside differs. #}
+  {% macro score_mark(strokes, par) -%}
+    {%- set diff = strokes - par -%}
+    {%- if diff == 0 -%}
+      {{ strokes }}
+    {%- else -%}
+      {%- set shape = "circle" if diff < 0 else "square" -%}
+      {%- set magnitude = diff | abs -%}
+      {%- if magnitude == 1 -%}
+        <span class="score-mark {{ shape }} score-depth-0"><span class="score-digit">{{ strokes }}</span></span>
+      {%- elif magnitude == 2 -%}
+        <span class="score-ring {{ shape }} score-depth-0"><span class="score-ring {{ shape }} score-depth-1 score-spacer"><span class="score-mark {{ shape }} score-depth-2"><span class="score-digit">{{ strokes }}</span></span></span></span>
+      {%- elif shape == "square" -%}
+        <span class="score-triangle score-depth-0">
+          <svg viewBox="0 0 32 32" aria-hidden="true">
+            <polygon points="16,3 30,29 2,29"></polygon>
+          </svg><span class="score-triangle-value{{ ' wide' if strokes >= 10 else '' }}">{{ strokes }}</span></span>
+      {%- else -%}
+        <span class="score-ring {{ shape }} score-depth-0"><span class="score-ring {{ shape }} score-depth-1"><span class="score-mark {{ shape }} score-depth-2"><span class="score-digit">{{ strokes }}</span></span></span></span>
+      {%- endif -%}
+    {%- endif -%}
+  {%- endmacro %}
   {# one nine as a table of its own; the back nine's also carries the round's totals #}
   {% macro nine_table(nine, total_label, totals=none) %}
     <table class="nine striped">
@@ -16,7 +42,7 @@
         <tr>
           <th scope="col" class="num">{{ t("round.holes.number") }}</th>
           <th scope="col" class="num">{{ t("round.holes.par") }}</th>
-          <th scope="col" class="num">{{ t("round.holes.strokes") }}</th>
+          <th scope="col" class="num strokes">{{ t("round.holes.strokes") }}</th>
           <th scope="col" class="num">{{ t("round.holes.putts") }}</th>
         </tr>
       </thead>
@@ -25,7 +51,7 @@
           <tr>
             <td class="num">{{ hole.number }}</td>
             <td class="num">{{ hole.par }}</td>
-            <td class="num{{ to_par(hole.strokes, hole.par) }}">{{ hole.strokes }}</td>
+            <td class="num strokes{{ to_par(hole.strokes, hole.par) }}">{{ score_mark(hole.strokes, hole.par) }}</td>
             <td class="num">{{ hole.putts }}</td>
           </tr>
         {% endfor %}
@@ -34,14 +60,14 @@
         <tr>
           <th scope="row" class="num">{{ total_label }}</th>
           <td class="num">{{ nine.par }}</td>
-          <td class="num{{ to_par(nine.strokes, nine.par) }}">{{ nine.strokes }}</td>
+          <td class="num strokes{{ to_par(nine.strokes, nine.par) }}">{{ nine.strokes }}</td>
           <td class="num">{{ nine.putts }}</td>
         </tr>
         {% if totals %}
           <tr>
             <th scope="row" class="num">{{ t("round.holes.total") }}</th>
             <td class="num">{{ totals.total_par }}</td>
-            <td class="num{{ to_par(totals.total_strokes, totals.total_par) }}">{{ totals.total_strokes }}</td>
+            <td class="num strokes{{ to_par(totals.total_strokes, totals.total_par) }}">{{ totals.total_strokes }}</td>
             <td class="num">{{ totals.total_putts }}</td>
           </tr>
         {% endif %}
