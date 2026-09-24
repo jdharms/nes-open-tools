@@ -251,6 +251,16 @@ class SeedRound:
     total_putts: int
     received_at: str
     flagged: bool
+    #: strokes on each hole, in play order
+    strokes: tuple[int, ...]
+
+    @property
+    def strokes_out(self) -> int:
+        return sum(self.strokes[:9])
+
+    @property
+    def strokes_in(self) -> int:
+        return sum(self.strokes[9:])
 
 
 def rounds_for_seed(db: Database, seed_id: str) -> list[SeedRound]:
@@ -258,8 +268,8 @@ def rounds_for_seed(db: Database, seed_id: str) -> list[SeedRound]:
     with db.transaction() as conn:
         rows = conn.execute(
             """
-            SELECT rounds.public_id, coalesce(users.global_name, users.username) AS player_name, rounds.slot,
-                   rounds.total_strokes, rounds.total_putts, rounds.received_at, rounds.flagged
+            SELECT rounds.id, rounds.public_id, coalesce(users.global_name, users.username) AS player_name,
+                   rounds.slot, rounds.total_strokes, rounds.total_putts, rounds.received_at, rounds.flagged
             FROM rounds
             JOIN entries ON entries.id = rounds.entry_id
             JOIN users ON users.id = entries.user_id
@@ -268,6 +278,19 @@ def rounds_for_seed(db: Database, seed_id: str) -> list[SeedRound]:
             """,
             (seed_id,),
         ).fetchall()
+        strokes: dict[int, list[int]] = {row["id"]: [] for row in rows}
+        for hole in conn.execute(
+            """
+            SELECT round_holes.round_id, round_holes.strokes
+            FROM round_holes
+            JOIN rounds ON rounds.id = round_holes.round_id
+            JOIN entries ON entries.id = rounds.entry_id
+            WHERE entries.seed_id = ?
+            ORDER BY round_holes.round_id, round_holes.position
+            """,
+            (seed_id,),
+        ):
+            strokes[hole["round_id"]].append(hole["strokes"])
     return [
         SeedRound(
             public_id=row["public_id"],
@@ -277,6 +300,7 @@ def rounds_for_seed(db: Database, seed_id: str) -> list[SeedRound]:
             total_putts=row["total_putts"],
             received_at=row["received_at"],
             flagged=bool(row["flagged"]),
+            strokes=tuple(strokes[row["id"]]),
         )
         for row in rows
     ]

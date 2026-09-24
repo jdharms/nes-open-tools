@@ -357,7 +357,8 @@ says so, a ROM playtested. Items 1 to 6 build the library; 7 onward build the si
     it renders in place as `scan_rejected.html`. `GET /r/<id>` renders the round, or
     `round_voided.html` with a 410 once an admin has voided it; the id is drawn from
     `server/ids.py` when the round is recorded and carried through a void and restore.
-    The seed page lists the seed's rounds under Discord display names, fewest strokes first,
+    The seed page lists the seed's rounds as a scorecard (each hole's strokes under its par,
+    then the nines, total and putts) under Discord display names, fewest strokes first,
     each linking to its permalink, and `/me` lists the player's rounds. Once an entry has a round, `upsert_entry` leaves it
     alone: a later download still finishes with the choices it posts and the entry's keys.
     `tests/unit/test_server_submissions.py`, `tests/unit/test_server_rounds.py` and the

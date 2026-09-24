@@ -229,6 +229,18 @@ table .num {
   font-variant-numeric: tabular-nums;
 }
 
+/* Rounds scorecard: a column per hole, so cells stay tight; the nine and round totals
+   stand out from the holes. */
+table.scorecard th,
+table.scorecard td {
+  padding-inline: calc(var(--pico-spacing) * 0.4);
+  white-space: nowrap;
+}
+
+table.scorecard .nine-total {
+  font-weight: 600;
+}
+
 table.seed-details th {
   width: 40%;
 }
