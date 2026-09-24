@@ -1,17 +1,19 @@
 #!/usr/bin/env python3
-"""Create a Markdown page for the randomizer website."""
+"""Create a Markdown page, or an entry of a collection page, for the randomizer website."""
 
 import argparse
 import json
 import re
 import sys
 import unicodedata
+from datetime import date
 from pathlib import Path
 
 from server.pages import (
     DEFAULT_ENABLED,
     DEFAULT_LISTED,
     DEFAULT_ORDER,
+    INDEX_NAME,
     PAGES_DIR,
     SLUG,
 )
@@ -44,14 +46,33 @@ def page_source(title: str) -> str:
     )
 
 
+def entry_source(title: str, day: date) -> str:
+    """A new collection entry dated ``day``, with its optional value written explicitly."""
+    return (
+        "+++\n"
+        f"title = {toml_string(title)}\n"
+        f"date = {day.isoformat()}\n"
+        f"enabled = {str(DEFAULT_ENABLED).lower()}\n"
+        "+++\n\n"
+    )
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(
-        description="Create a Markdown page in the randomizer site's pages directory."
+        description="Create a Markdown page in the randomizer site's pages directory, "
+        "or with --entry an entry of a collection page there, dated today."
     )
-    parser.add_argument("name", metavar="TITLE", help="human-written page title")
+    parser.add_argument(
+        "name", metavar="TITLE", help="human-written page or entry title"
+    )
+    parser.add_argument(
+        "--entry",
+        metavar="PAGE",
+        help="create an entry of the collection page PAGE instead of a page",
+    )
     parser.add_argument(
         "--slug",
-        help="URL and filename stem (default: derived from TITLE)",
+        help="URL (or entry anchor) and filename stem (default: derived from TITLE)",
     )
     parser.add_argument(
         "--dir",
@@ -76,12 +97,30 @@ def main(argv: list[str] | None = None) -> int:
         print(f"error: page directory does not exist: {args.dir}", file=sys.stderr)
         return 2
 
-    path = args.dir / f"{slug}.md"
+    if args.entry is None:
+        if (args.dir / slug).is_dir():
+            print(f"error: a collection page is named {slug}", file=sys.stderr)
+            return 2
+        path = args.dir / f"{slug}.md"
+        source = page_source(title)
+    else:
+        collection = args.dir / args.entry
+        if not SLUG.fullmatch(args.entry) or not (collection / INDEX_NAME).is_file():
+            print(
+                f"error: no collection page {args.entry}: {collection / INDEX_NAME} "
+                "does not exist",
+                file=sys.stderr,
+            )
+            return 2
+        path = collection / f"{slug}.md"
+        source = entry_source(title, date.today())
+
     try:
         with path.open("x", encoding="utf-8") as handle:
-            handle.write(page_source(title))
+            handle.write(source)
     except FileExistsError:
-        print(f"error: page already exists: {path}", file=sys.stderr)
+        what = "page" if args.entry is None else "entry"
+        print(f"error: {what} already exists: {path}", file=sys.stderr)
         return 2
 
     print(f"created {path}")

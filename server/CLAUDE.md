@@ -154,16 +154,29 @@ in this package.
   `nav_title`, `order`, `enabled` and `listed` fields. Both flags default true. An enabled,
   unlisted page remains available by its URL for review but is not access-controlled;
   disabled pages answer 404. `server/pages.py` validates and renders the catalog once at
-  app creation, with raw HTML disabled. `new-page <title>` creates a valid stub with the
-  frontmatter defaults written explicitly; `--slug` overrides its derived file name, and
-  it refuses to overwrite a page. `golf-site --reload` watches the Markdown files.
+  app creation, with raw HTML disabled. `golf-site-new-page <title>` creates a valid stub
+  with the frontmatter defaults written explicitly; `--slug` overrides its derived file
+  name, and it refuses to overwrite a page. `golf-site --reload` watches the Markdown
+  files.
+- A directory directly under `server/content/pages/` is instead a collection page, one
+  card per entry (ADR 0006). Its name follows the same slug rule. Its `_index.md` holds
+  the page frontmatter and an optional intro shown above the cards; every other `.md` file
+  is an entry with a required `title`, a required TOML local `date` (`date = 2026-10-01`,
+  not a datetime) and an optional `enabled`. An entry's file name is its card's anchor
+  id, and its title links there. Entries show newest date first, ties broken by file name
+  descending; disabled entries are validated but never rendered. A collection holds no
+  directories, and a page file cannot share a collection's name. The page around the
+  cards is not an `<article>`, so the cards never nest in one. `golf-site-new-page --entry
+  <page> <title>` creates an entry dated today. The date renders through the
+  `calendar_date` filter (`server/views.py`), which `localtime.js` formats in UTC.
 - `base.html` lists enabled, listed Markdown pages in its document-page dropdown. The
   dropdown is absent when there are none. A Markdown page supplies its own `title` and
-  body; its template supplies the top-level heading, so its body starts below h1.
+  body; its template supplies the top-level heading, so its body starts below h1, and an
+  entry's body starts below its card's h2.
 - JavaScript only where the browser must act: hashing and storing ROMs
   (`server/static/rom.js`) and fetching and applying a seed's IPS
-  (`server/static/download.js`), and showing timestamps in the viewer's time zone
-  (`server/static/localtime.js`, below). The first two load `server/static/romstore.js` first, which holds
+  (`server/static/download.js`), and showing timestamps and dates in the viewer's time
+  zone and locale (`server/static/localtime.js`, below). The first two load `server/static/romstore.js` first, which holds
   the ROM store and `makeT`. Plain scripts, no build step, no frameworks. Everything else is
   a form or a link.
   The one exception is `round.html`'s inline `history.replaceState` line, which drops

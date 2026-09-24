@@ -6,8 +6,27 @@
   {% endif %}
 {% endblock %}
 {% block content %}
-  <article class="content-page">
-    <h1>{{ content_page.title }}</h1>
-    {{ content_page.body_html }}
-  </article>
+  {% if content_page.collection %}
+    {# Pico draws every article as a card, so the page around the cards is not one. #}
+    <div class="content-page collection">
+      <h1>{{ content_page.title }}</h1>
+      {{ content_page.body_html }}
+      {% for entry in content_page.entries %}
+        <article id="{{ entry.slug }}" class="entry">
+          <header>
+            <h2>
+              <a href="#{{ entry.slug }}">{{ entry.title }}</a>
+            </h2>
+            {{ entry.date | calendar_date }}
+          </header>
+          {{ entry.body_html }}
+        </article>
+      {% endfor %}
+    </div>
+  {% else %}
+    <article class="content-page">
+      <h1>{{ content_page.title }}</h1>
+      {{ content_page.body_html }}
+    </article>
+  {% endif %}
 {% endblock %}

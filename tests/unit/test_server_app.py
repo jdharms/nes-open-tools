@@ -287,6 +287,44 @@ def test_disabled_and_unknown_markdown_pages_are_not_found(fake_builder, tmp_pat
     assert "Disabled" not in disabled.text
 
 
+def collection_catalog(tmp_path) -> PageCatalog:
+    collection = tmp_path / "updates"
+    collection.mkdir()
+    (collection / "_index.md").write_text('+++\ntitle = "Updates"\n+++\n\nIntro.\n')
+    for name, metadata in [
+        ("older", 'title = "Older"\ndate = 2026-01-02'),
+        ("newer", 'title = "Newer & Better"\ndate = 2026-10-01'),
+        ("draft", 'title = "Draft"\ndate = 2026-11-01\nenabled = false'),
+    ]:
+        (collection / f"{name}.md").write_text(
+            f"+++\n{metadata}\n+++\n\nBody of {name}.\n"
+        )
+    return PageCatalog.load(tmp_path)
+
+
+def test_collection_page_shows_its_entries_as_linked_cards(fake_builder, tmp_path):
+    pages = collection_catalog(tmp_path)
+    with app_client(builder=fake_builder, pages=pages) as test_client:
+        home = test_client.get("/")
+        response = test_client.get("/pages/updates")
+    assert 'href="/pages/updates"' in home.text
+    assert response.status_code == 200
+    assert "<title>Updates — NES Open Randomizer</title>" in response.text
+    assert "<h1>Updates</h1>" in response.text
+    assert '<article class="content-page">' not in response.text
+    assert response.text.index("<p>Intro.</p>") < response.text.index('id="newer"')
+    assert response.text.index('id="newer"') < response.text.index('id="older"')
+    assert re.search(
+        r'<article id="newer" class="entry">\s*<header>\s*<h2>\s*'
+        r'<a href="#newer">Newer &amp; Better</a>\s*</h2>\s*'
+        r'<time datetime="2026-10-01">2026-10-01</time>\s*</header>\s*'
+        r"<p>Body of newer.</p>",
+        response.text,
+    )
+    assert "Draft" not in response.text
+    assert "Body of draft" not in response.text
+
+
 def test_rom_setup_lists_every_vanilla_rom_with_its_hash(client):
     response = client.get("/rom")
     assert response.status_code == 200

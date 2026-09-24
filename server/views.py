@@ -5,7 +5,7 @@ data. The templates put them into strings from `server/strings/`.
 """
 
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import date, datetime
 
 from markupsafe import Markup
 
@@ -101,6 +101,15 @@ def timestamp(stamp: str) -> Markup:
     return Markup('<time datetime="{}">{} UTC</time>').format(
         stamp, when.strftime("%Y-%m-%d %H:%M")
     )
+
+
+def calendar_date(day: date) -> Markup:
+    """A date as a `<time>` element, for the `calendar_date` template filter.
+
+    Its text is the ISO date; `server/static/localtime.js` replaces it with the date in the
+    viewer's locale's format. A date has no time zone, so the script formats it as UTC.
+    """
+    return Markup('<time datetime="{0}">{0}</time>').format(day.isoformat())
 
 
 def download_stem(row: SeedRow) -> str:

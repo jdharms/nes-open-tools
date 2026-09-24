@@ -76,6 +76,7 @@ from .timings import (
 from .users import load_user, sign_in
 from .version import site_version as read_site_version
 from .views import (
+    calendar_date,
     download_stem,
     generate_options,
     round_view,
@@ -296,6 +297,7 @@ def create_app(
     templates.env.globals["t_plain"] = strings.plain
     templates.env.globals["static_url"] = StaticVersions(STATIC_DIR).url
     templates.env.filters["timestamp"] = timestamp
+    templates.env.filters["calendar_date"] = calendar_date
     app.mount("/static", CachedStaticFiles(directory=STATIC_DIR), name="static")
     # Not checked at startup: golf-site refuses to run without the renders, and tests
     # build apps on a fresh clone that has none.

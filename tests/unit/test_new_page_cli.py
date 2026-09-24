@@ -3,6 +3,7 @@
 import subprocess
 import sys
 import tomllib
+from datetime import date
 from pathlib import Path
 
 from server.pages import PageCatalog
@@ -85,3 +86,60 @@ def test_rejects_a_missing_page_directory(tmp_path):
     assert result.returncode == 2
     assert "directory does not exist" in result.stderr
     assert not missing.exists()
+
+
+def make_collection(directory: Path, name: str = "updates") -> Path:
+    collection = directory / name
+    collection.mkdir()
+    (collection / "_index.md").write_text('+++\ntitle = "Updates"\n+++\n')
+    return collection
+
+
+def test_creates_a_valid_entry_dated_today(tmp_path):
+    collection = make_collection(tmp_path)
+    result = run("v3.0.0", "--entry", "updates", "--dir", tmp_path)
+    path = collection / "v3-0-0.md"
+    assert result.returncode == 0, result.stderr
+    assert result.stdout == f"created {path}\n"
+    assert frontmatter(path) == {
+        "title": "v3.0.0",
+        "date": date.today(),
+        "enabled": True,
+    }
+    page = PageCatalog.load(tmp_path).get("updates")
+    assert page is not None
+    assert [entry.slug for entry in page.entries] == ["v3-0-0"]
+
+
+def test_an_explicit_slug_controls_the_entry_filename(tmp_path):
+    collection = make_collection(tmp_path)
+    result = run("Version 3", "--entry", "updates", "--slug", "v3", "--dir", tmp_path)
+    assert result.returncode == 0, result.stderr
+    assert (collection / "v3.md").is_file()
+
+
+def test_refuses_to_overwrite_an_existing_entry(tmp_path):
+    collection = make_collection(tmp_path)
+    path = collection / "v3.md"
+    path.write_text("keep me")
+    result = run("v3", "--entry", "updates", "--dir", tmp_path)
+    assert result.returncode == 2
+    assert "entry already exists" in result.stderr
+    assert path.read_text() == "keep me"
+
+
+def test_refuses_an_entry_of_a_missing_collection(tmp_path):
+    (tmp_path / "plain").mkdir()
+    for page in ("missing", "plain", "../elsewhere"):
+        result = run("v3", "--entry", page, "--dir", tmp_path)
+        assert result.returncode == 2
+        assert "no collection page" in result.stderr
+    assert list((tmp_path / "plain").iterdir()) == []
+
+
+def test_refuses_a_page_named_for_a_collection(tmp_path):
+    make_collection(tmp_path)
+    result = run("Updates", "--dir", tmp_path)
+    assert result.returncode == 2
+    assert "collection page is named updates" in result.stderr
+    assert not (tmp_path / "updates.md").exists()
