@@ -18,7 +18,7 @@ order:
    hook or slice strength, applied in the air until first contact.
 """
 
-from golf.core.patches.seeded_wind import lfsr_step
+from golf.core.rng import lfsr_step
 from golf.physics.arith import MASK8, MASK24, is_negative, mul8
 from golf.physics.state import (
     PERFECT_ACCURACY,

@@ -15,6 +15,8 @@ Usage:
     rom = recipe.stack(base).build(base).rom
 """
 
+from golf.core.rng import HoleWindForecast, predict_hole
+
 from .base import PatchError, ROMPatch
 from .byte_patch import BytePatch
 from .composite import CompositePatch
@@ -72,9 +74,7 @@ from .scorecard_qr import (
     ScorecardQrPatch,
 )
 from .seeded_wind import (
-    HoleWindForecast,
     derive_hole_seeds,
-    predict_hole,
     seeded_wind_patch,
     seeded_wind_patches,
 )

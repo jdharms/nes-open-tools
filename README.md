@@ -142,6 +142,7 @@ Build a standalone editor executable with `uv run pyinstaller run_editor.spec`.
 | `golf-rom-peek <rom> <subcommand>` | Targeted reads, searches, disassembly and reference finding; see the `nes-open-golf-rom-peek` skill |
 | `golf-labels <file.mlb> list/add/edit/remove` | Edit the Mesen `.mlb` label file; see the `nes-open-golf-label-conventions` skill |
 | `golf-shots <rom>` | Carry and total for every club and swing speed from the ball physics model (`golf/physics/`); `--club` for one shot in detail |
+| `golf-difficulty <rom>` | Expected strokes from the tee for one hole, solved over the ball physics model and player model (`golf/difficulty/`); one pin, no wind for now |
 
 ### Art
 

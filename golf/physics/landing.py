@@ -18,7 +18,7 @@ Each contact frame:
    a pixel per frame of zero.
 """
 
-from golf.core.patches.seeded_wind import lfsr_step
+from golf.core.rng import lfsr_step
 from golf.physics.arith import (
     MASK8,
     MASK16,

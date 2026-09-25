@@ -17,6 +17,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
+from golf.core.rng import predict_hole
 from golf.core.rom_reader import RomReader
 from golf.formats.hole_data import HoleData
 from golf.qr.port import layout as qr_layout
@@ -47,7 +48,7 @@ from .scorecard_qr import (
     TRAMPOLINE_CPU_ADDR,
     ScorecardQrPatch,
 )
-from .seeded_wind import derive_hole_seeds, predict_hole, seeded_wind_patch
+from .seeded_wind import derive_hole_seeds, seeded_wind_patch
 from .signpost_banner import remove_course_banner_patches
 from .signpost_random_banner import signpost_banner_patch
 from .sram_defaults import (

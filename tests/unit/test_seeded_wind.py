@@ -8,14 +8,11 @@ from golf.core.patches.seeded_wind import (
     SEED_TABLE_PRG_OFFSET,
     TRAMPOLINE_CPU_ADDR,
     derive_hole_seeds,
-    lfsr_step,
-    predict_hole,
     seed_table_bytes,
     seeded_wind_patch,
     seeded_wind_patches,
-    wind_adjust,
-    wind_jitter,
 )
+from golf.core.rng import lfsr_step, predict_hole, wind_adjust, wind_jitter
 from tests.prg_writer import PrgImageWriter
 
 

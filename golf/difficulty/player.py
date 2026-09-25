@@ -19,12 +19,13 @@ the physics draws on, sampled at a few fixed states.
 
 import math
 from collections.abc import Sequence
-from dataclasses import dataclass, replace
+from dataclasses import dataclass, field, replace
 from functools import cache
 
 from golf.physics import meter
+from golf.physics.flights import Flights
 from golf.physics.rules import play_on
-from golf.physics.shot import Flag, simulate
+from golf.physics.shot import Flag
 from golf.physics.state import (
     PERFECT_ACCURACY,
     PUTTER,
@@ -36,7 +37,7 @@ from golf.physics.state import (
 from golf.physics.tables import PhysicsTables
 
 #: Errors are drawn out to this many standard deviations, and renormalised.
-ERROR_REACH = 3.0
+ERROR_REACH = 2.0
 
 #: The RNG states each shot is played from, standing for all of them. Two of
 #: each parity, as the fairway's first bounce reads the low bit.
@@ -107,6 +108,16 @@ class Hole:
     ground: Ground
     tables: PhysicsTables
     flag: Flag | None
+    flights: Flights | None = field(default=None, compare=False, repr=False)
+    """
+    Flights shared between the shots played here, and with any other hole
+    given the same `Flights` (they depend on neither the hole nor the pin).
+    Each hole gets its own when none is given.
+    """
+
+    def __post_init__(self) -> None:
+        if self.flights is None:
+            object.__setattr__(self, "flights", Flights(self.tables))
 
 
 @dataclass(frozen=True)
@@ -259,7 +270,8 @@ def outcomes(
 
 
 def _result(shot: ShotInput, hole: Hole) -> Result:
-    finished = simulate(shot, hole.ground, hole.tables, flag=hole.flag)
+    assert hole.flights is not None
+    finished = hole.flights.simulate(shot, hole.ground, hole.flag)
     next_shot = play_on(shot, finished.ball)
     if next_shot.holed:
         return HOLED

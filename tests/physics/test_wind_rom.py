@@ -8,7 +8,7 @@ from pathlib import Path
 
 import pytest
 
-from golf.core.patches.seeded_wind import predict_hole, wind_adjust
+from golf.core.rng import predict_hole, wind_adjust
 from golf.core.rom_reader import RomReader
 from golf.formats.hole_data import HoleData
 from golf.physics.nes import NesMachine

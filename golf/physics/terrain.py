@@ -103,6 +103,7 @@ class HoleGround:
         self.hole = hole
         self.tables = tables
         self.bottom_y = tables.bottom_y[scroll_limit]
+        self._classified: dict[int, Terrain] = {}
 
     def probe(self, ball: Ball) -> Terrain:
         """`ProbeBallPosition` ($EDBC): the terrain under the ball itself."""
@@ -111,7 +112,18 @@ class HoleGround:
         )
 
     def classify(self, x: int, x_fraction: int, y: int, y_fraction: int) -> Terrain:
-        """`ClassifyProbePosition` for a pixel (x 8 bits, y 16 bits) and its fractions."""
+        """
+        `ClassifyProbePosition` for a pixel (x 8 bits, y 16 bits) and its
+        fractions. The fractions never change the answer, so each pixel is
+        worked out once.
+        """
+        key = y << 8 | x
+        terrain = self._classified.get(key)
+        if terrain is None:
+            terrain = self._classified[key] = self._classify(x, y)
+        return terrain
+
+    def _classify(self, x: int, y: int) -> Terrain:
         if x >= 0xB0 or y >= self.bottom_y:
             return Terrain(Lie.OUT_OF_BOUNDS)
 

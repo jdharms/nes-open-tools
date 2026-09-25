@@ -4,9 +4,11 @@
 > It is the plan for rating how hard NES Open holes are, from the game's own physics:
 > what is built, what is decided, and the order of work.
 
-**Status**: phases 1 and 2 are done, apart from two phase 1 leftovers. Phase 3 has the
-player model. **The next step is speed** (phase 3): making one intent cheap enough for
-the solver to evaluate thousands per spot.
+**Status**: phases 1 and 2 are done, apart from two phase 1 leftovers. Phase 3 has a
+working solver for one pin and no wind (`golf-difficulty`): the US 1st solves to 2.906
+strokes from the tee at skill 1.0, in 24 minutes on 24 cores under CPython. **The next
+step is running it under PyPy** (about ten times faster, see **Next steps** in phase 3),
+then a whole U.K. round, then the calibration of phase 4.
 
 ## Goal
 
@@ -72,6 +74,13 @@ site.
   every aim: left and right move the aim the same amount a frame wherever the player
   aims (jdharms).
 - **The solver plays from the vanilla 14-club bag**, not a seed's bag (jdharms).
+- **The first solver has one pin and no wind** (jdharms): the hole's first pin, wind
+  speed 0. It is about a hundredth of the work of every wind and pin, and the rest of the
+  machinery (`golf/physics/wind.py`, `Flag.for_pin`) waits for it. Holes play easier
+  without wind, so a skill calibrated this way is recalibrated when wind comes in.
+- **Only spots that play reaches are valued** (jdharms): the tee, and every spot the best
+  play from it visits often enough. Most of a hole is rough nobody plays from.
+- **Errors reach 2 standard deviations** (jdharms), to be revisited in phase 4.
 - **Expected score is averaged over the game's own wind and pins**, as `InitHole` and
   `WindAdjustmentRoutine` deal them (`docs/seeded_wind.md`). A hole's anchors and pin hold
   for every shot on it: 64 anchor pairs × 4 pins, all equally likely
@@ -89,7 +98,9 @@ site.
 4. ADR 0007 (`docs/adr/`): why the model is an exact port rather than idealized physics.
 5. `docs/seeded_wind.md`, **The vanilla wind as probabilities**.
 6. `golf/difficulty/player.py`: the player model, which the solver builds on.
-7. The `nes-open-golf-rom-peek` and `nes-open-golf-label-conventions` skills, before any
+7. `golf/difficulty/landing.py` and `solver.py`: the module docstrings say how the
+   screen and the rounds work.
+8. The `nes-open-golf-rom-peek` and `nes-open-golf-label-conventions` skills, before any
    reverse engineering. Most of this work is reading 6502 in banks 8, 9 and 13.
 
 **Run:**
@@ -97,7 +108,11 @@ site.
 ```bash
 uv run pytest --physics tests/physics     # all the model's checks against the game (~2 min)
 uv run pytest tests/integration/test_player_model_rom.py   # the player model (~5 s)
+uv run pytest tests/integration/test_flights_rom.py        # shared flights against simulate (~5 s)
+uv run pytest tests/integration/test_difficulty_solver_rom.py  # landing table, solver helpers
 uv run golf-shots nes_open_us.nes         # carry/total table from the model
+uv run golf-difficulty nes_open_us.nes --course us --hole 1 --output us01.json
+                                          # solve one hole (builds the landing table first)
 uv run golf-rom-peek nes_open_us.nes --labels "NES Open Tournament Golf (USA).mlb" \
     disasm '$81C4' --bank 9 --count 200   # e.g. the cup routine
 ```
@@ -120,6 +135,7 @@ the addresses in the docs still work but disassembly will be less annotated.
 | `shot.py` | `ShotInFlight` (one `step()` per frame, in the game's order), `simulate()`, and `Flag` (`Flag.for_pin`: a hole's pins) |
 | `rules.py` | `play_on`: where the next shot is played from, and the strokes it cost |
 | `wind.py` | The winds and pins a hole deals, as probabilities |
+| `flights.py` | Not a port: `Flight` and `Flights`, a shot recorded once and finished from any start, exactly as `simulate` would play it |
 | `rom_oracle.py` | Single-routine oracles: `RomShot`, `RomTerrainProbe`, `read_ball()` |
 | `nes.py`, `rom_game.py` | The mini-NES, and a shot played through the whole game |
 
@@ -128,6 +144,12 @@ the addresses in the docs still work but disassembly will be less annotated.
 | File | What |
 |------|------|
 | `player.py` | `Intent`, `Skill`, `Position`, `Hole`; `outcomes()`: an intent's results with probabilities |
+| `landing.py` | The landing table: every intent's perfect, windless rest from each lie at 8 base aims, cached under `.cache/difficulty/` |
+| `solver.py` | `HoleSolver`: states, the screen, rounds of play in worker processes, value iteration, reach |
+
+`tools/research/difficulty.py` is the `golf-difficulty` CLI. `golf/core/rng.py` (the
+game's RNG and wind) and `golf/core/clubs.py` live outside `golf/core/patches/` so the
+physics and the solver import nothing that PyPy 3.11 cannot parse.
 
 ### The mini-NES
 
@@ -201,6 +223,10 @@ Things that will trip you up:
 - **Scratch scripts** that sweep hundreds of random shots and print the first differing
   frame were how every bug here was found. `tests/physics/test_game_rom.py` is the
   template.
+- **Shared flights must follow the frame loop.** `flights.py` knows which registers the
+  probe writes and which checks read the ground (see its docstring). A change to
+  `ShotInFlight` that adds either must be mirrored there; `test_flights_rom.py` compares
+  `Flight.finish` with `simulate` on every NES Open hole and fails when they part.
 - **The at-the-flag seeds are pinned.** `test_shot_at_the_flag` names the outcome each
   seed must produce. A change to its picker, or to the model near the cup, can move
   them. Find them again by running the picker over seeds until each outcome has enough
@@ -275,43 +301,113 @@ Done:
   there is refused. Tests are in `tests/integration/test_player_model_rom.py`.
 - **`Flag.for_pin`**: a hole's four pin positions from its JSON, as `InitHole` computes
   them (checked against it in `test_wind_rom.py`).
+- **Shared flights**, `golf/physics/flights.py`. Until first contact a shot does the same
+  thing from any start, except where the ground reaches in: a tree, the view switch over
+  the green, the edges of the playfield. After contact it does the same over the same
+  terrain. So a `Flight` plays a shot once over plain fairway, and each roll once over
+  the terrain it lands on, keeping the pixels each frame's probe looked at and a snapshot
+  every 8 frames. From a real start, `finish` walks those pixels over the real ground,
+  works out what the probe would have written, and plays for real only from the snapshot
+  before the first frame the ground changes. The result is `simulate`'s, register for
+  register (`tests/integration/test_flights_rom.py`, on every NES Open hole). `Hole` holds
+  a `Flights` cache, so `outcomes()` uses them.
+- **The landing table**, `golf/difficulty/landing.py`. For each lie a full swing is
+  played from (fairway and tee alike, rough at either depth, sand at each of three
+  depths), every intent's perfect execution with no wind, played over plain fairway at 8
+  base aims: 15 clubs and the putter, 3 speeds, every distinct power stop, 3 hi/lo, 3
+  spins (the putter only NORMAL, straight, no hi/lo), and 5 accuracy targets (straight,
+  and 8 and 16 either side of `$30`). 76,388 intents a lie, 3.7 million shots, 13 minutes
+  on 23 workers; cached by a hash of the ROM's physics tables in `.cache/difficulty/`
+  (gitignored), 11 MB. A shot at another aim is the nearest base aim's rest turned:
+  within 2 pixels for a straight shot, 8 for a curved one (without wind a flight turns
+  almost exactly; the hook and slice terms are uneven, hence the base aims).
+- **The solver**, `golf/difficulty/solver.py`, and `golf-difficulty`:
+  - **States**: off the green, cells of a 4-pixel grid split by lie class, the first real
+    spot the ball reaches in a cell standing for it; on the green, every pixel; the tee.
+  - **The screen**: from a spot off the green, every table intent with a club in the
+    vanilla bag, at every other aim within a quarter turn of the pin, is scored by the
+    current value of where it comes to rest, on a value map blurred by 2 pixels for
+    execution's spread (water and out of bounds count a stroke and this spot again). The
+    best intent of each club, speed, hi/lo and spin is kept, and the best 16 of those are
+    played exactly with `outcomes()`. On the green, putts within 20 aim steps of the pin
+    line are played once perfectly, every 4th aim first and then around the best, and the
+    best 8 are played exactly.
+  - **Rounds**: screen every state against the current values; play what is new on the
+    shortlists (all of it for a new state, the top 4 for one screened before); value
+    iteration from the green outward; then follow the best play forward from the tee and
+    add every state it visits at least 0.001 times a hole. A state not yet valued borrows
+    from valued neighbours of its class, or a guess from its distance (`guess`). Screens
+    and plays are separate tasks in a process pool, the plays sorted so like shots share
+    a worker. It stops when no state is added and the tee moves less than 0.002, or
+    after 12 rounds.
+  - **Result on the US 1st** (par 4, 328 yards), pin 0, no wind, skill 1.0: 2.906 strokes
+    from the tee, from 209 states and 4,689 intents played, in 12 rounds and 1,431 s on
+    24 cores under CPython. The tee's value had settled by round 9. Putts from inside
+    about 7 yards are nearly always holed, and approaches from 40-80 yards average about
+    1.9 strokes, so the drive to there decides the hole. (That run predates three small
+    changes: the table's intents held as arrays, the screen scored a few aims at a time,
+    and the edge of the map scored as out of bounds, 1 + E(here), where it had been
+    2 + E(here). A rerun may differ a little.)
 
 Assumptions to revisit in phase 4:
 
-- Errors reach 3 standard deviations. The three are in the ratio 1 : 1 : 1 (frames,
+- Errors reach 2 standard deviations (jdharms), so one intent at skill 1.0 is 5 × 5
+  timings × 5 aims × 4 RNG states: 500 shots. The three are in the ratio 1 : 1 : 1 (frames,
   frames, aim steps).
-- The physics RNG is 4 fixed states, standing for all 65,534.
+- The physics RNG is 4 fixed states, standing for all 65,534. A putt from the green is
+  played from one of them: it reads the RNG only if it runs into sand or water.
 - **No trees in the behind-the-golfer view**: `outcomes()` has no scene to collide with
   until the scene builder is ported or cached (below). Overhead-view trees work.
+- **The solver's approximations**: the 4-pixel cells (a cell's value is its first spot's),
+  the screen (only its shortlist is played; every value is exact physics), the 5
+  accuracy targets, every other aim, and reach 0.001. Each is a setting of `Settings`
+  or a constant in `solver.py` and `landing.py`, to vary in the sensitivity runs.
 
-**Next step: speed.** One intent at skill 1.0 is 7 × 7 power and accuracy errors, × 7
-aim errors, × 4 RNG states: 1,372 simulations at about 7 ms each for a full shot (under
-1 ms for a putt). One intent with club 8 from the US 1st's fairway measured 8 s. The
-solver needs many intents from every spot, every pass of value iteration, for each of 256
-cases. What is known that bears on it:
+**Speed**, measured on the US 1st:
 
-- **The intent space**: 15 clubs × 3 speeds × 3 spins (TOP 1 and TOP 2 play exactly
-  like NORMAL) × 3 hi/lo × 256 aims × about 49 power targets × about 30 accuracy
-  targets. It has to be pruned: aims in a cone around sensible targets, power targets
-  that reach somewhere useful, and so on.
-- **Cache by shot, not by intent.** Every intent from a spot is a distribution over the
-  same kind of `ShotInput`s, and neighbouring intents share most of them. Simulating
-  each distinct `ShotInput` once per spot, and weighting, is likely the first large win.
-- **Reusing flights across starts** holds only in part. Up to first contact, a flight
-  depends on the shot, the wind, the RNG and the launch lie (rough and sand change the
-  power), not on the start's position, with these exceptions, all of which read the
-  ground:
-  - trees: the overhead probe reads the terrain under the ball's sprite, and the
-    behind-the-golfer scene is built from the start and aim;
-  - the view switch, which picks the tree rule, reads the scene depth and the distance
-    readout;
-  - out of bounds at the playfield's edge (`BallX >= $B0`) is an absolute position;
-  - the cup view, near the flag.
+- `simulate` takes about 5 ms for a full shot under CPython (about 380 frames at 14 µs),
+  under 1 ms for a putt. **Under PyPy it takes 0.55 ms** once warm, and gives exactly the
+  same outcomes (compared by hash over a tee shot, an approach and a putt).
+- `Flight.finish` takes 0.11 ms for a shot that lands and rolls out on uniform
+  terrain, 1-1.5 ms for one whose roll runs onto something else, and 2-3 ms for one that
+  comes down over the green. Recording a flight costs about as much as `simulate`.
+- **In the solver, flights do not pay**: the shortlists of different spots rarely share an
+  exact `ShotInput`, so a flight is only shared across the RNG states of one intent, and
+  30 of the US 1st's intents took 70 s with `Flights` against 64 s with plain `simulate`
+  (CPython, one core). Approach shots cost most: their roll on the green is played for
+  real, about 250 frames.
+- A spot's screen takes 0.1-0.2 s (0.4 s under PyPy) and peaks at 35 MB.
 
-  A cache of flights by shot is valid for starts where none of these apply. It must be
-  checked against the full `simulate` on sampled cases before use.
-- If that is still too slow: a NumPy version that plays many shots in lockstep, checked
-  against the model (ADR 0007's revisit condition), then multiprocessing.
+**Next steps**, in order:
+
+1. **Run the solver under PyPy.** PyPy 3.11 plays shots ten times faster, and the solver
+   and everything it imports is kept 3.11-clean (`tests/meta/test_pypy_ready.py`). The
+   project itself needs 3.12, so PyPy gets its own environment with the few packages the
+   solver needs, and the repo on `PYTHONPATH`:
+
+   ```bash
+   uv venv --python pypy@3.11 .cache/pypy
+   VIRTUAL_ENV=.cache/pypy uv pip install numpy py65 pillow
+   PYTHONPATH=. .cache/pypy/bin/python -m tools.research.difficulty nes_open_us.nes \
+       --course us --hole 1 --workers 16 --output us01.json
+   ```
+
+   The first try, with 24 workers, was stopped by the system for low memory in its first
+   round (15 GB machine). Since then a worker's table takes about 95 MB under PyPy (it
+   was about 150) and the screen no longer builds whole-table arrays; a PyPy worker
+   peaks around 260 MB before its flights. Start at 16 workers and watch `free -g`.
+2. **Decide on flights in the solver.** Measure `Hole` with `Flights` against plain
+   `simulate` under PyPy. If flights still do not pay, give `Hole` a way to play without
+   them (they also hold memory: `Flights(max_flights=256)` per worker).
+3. **Cut the late rounds.** On the US 1st the tee settled by round 9 while each later
+   round still played 100-400 new intents. Stop once the tee has moved less than the
+   tolerance for two rounds, or once the states still to add carry negligible visits.
+4. **Solve the U.K. course** at skill 1.0, all 18 holes: the first round total. Look at
+   the most visited states' policies (`--output`) for anything a player would never do.
+5. **Calibrate** (phase 4): bisect the skill for a U.K. round of 72, with one pin and no
+   wind, then predict the US and Japan courses.
+6. **Wind and pins**, when the rest holds up: the per-hole cases of **The value
+   function** below.
 
 Then:
 
@@ -319,15 +415,11 @@ Then:
   E(p) = the average, over the 4 wind jitters a shot can be dealt, of the best intent's
   average of (strokes + E(next)) over its outcomes. E = 0 in the cup. The wind is dealt
   before the player chooses, so the best intent is taken inside the average over wind.
-  States are (pixel, bunker depth); the lie follows from the pixel. One pixel is two
-  yards, so the game's own grid is fine enough. The values depend on each other in
-  cycles: a shot can finish farther from the hole, a whiff or out of bounds brings the
-  ball back to where it started, and water drops it behind. So it is solved by value
-  iteration, repeating the update until nothing changes, starting from the green outward
-  so it settles quickly. E from the tee, averaged over the 256 cases, is the hole's
-  expected score.
+  The solver does this today for one case with no wind; the cases share every shot whose
+  wind is the same, and the pin only changes shots that reach the green.
 - **The scene builder** (bank 9 `$8829`), ported or its scenes cached per start and aim,
-  so the behind-the-golfer view has its trees.
+  so the behind-the-golfer view has its trees. Shared flights assume no scene; with one,
+  `Flight` would have to check the scene's collisions for each start too.
 - **The baseline**, later: the same solver on uniform fairway with a cup.
 
 ### 4. Calibration and validation

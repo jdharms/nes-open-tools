@@ -1,0 +1,164 @@
+"""
+The landing table and the solver's pieces (`golf.difficulty.landing`,
+`golf.difficulty.solver`). The table itself takes minutes to build, so these
+build a few entries of it.
+"""
+
+import math
+from dataclasses import replace
+from pathlib import Path
+
+import numpy as np
+import pytest
+
+from golf.core.rom_reader import RomReader
+from golf.difficulty.landing import (
+    BASE_AIMS,
+    LIE_CLASSES,
+    LandingTable,
+    LieClass,
+    _rest,
+    encode,
+    intents,
+    load,
+    power_targets,
+    save,
+)
+from golf.difficulty.player import PERFECT, Intent, swings
+from golf.difficulty.solver import GREEN, _blur, _spread, guess, pixel_class
+from golf.physics import (
+    Lie,
+    PhysicsTables,
+    ShotInput,
+    Spin,
+    Terrain,
+    UniformGround,
+    simulate,
+)
+
+ROM_PATH = "nes_open_us.nes"
+
+pytestmark = pytest.mark.skipif(
+    not Path(ROM_PATH).exists(), reason=f"{ROM_PATH} not present"
+)
+
+
+@pytest.fixture(scope="module")
+def tables() -> PhysicsTables:
+    return PhysicsTables.from_rom(RomReader(ROM_PATH))
+
+
+def _small_table(tables: PhysicsTables, held: list[Intent]) -> LandingTable:
+    lie = LIE_CLASSES[0]
+    rests = np.array(
+        [[_rest(tables, i, lie, aim) for aim in BASE_AIMS] for i in held],
+        dtype=np.float32,
+    )
+    return LandingTable({lie: encode(held)}, {lie: rests})
+
+
+def _exact(tables: PhysicsTables, intent: Intent, aim: int) -> tuple[float, float]:
+    """Where `intent` at `aim` really stops over fairway, from the middle of the playfield."""
+    (timing,) = swings(tables, intent, False, PERFECT)
+    assert timing is not None
+    shot = ShotInput(
+        club=intent.club,
+        swing_speed=intent.swing_speed,
+        power_stop=timing.power_stop,
+        accuracy_stop=timing.accuracy_stop,
+        hi_lo=intent.hi_lo,
+        spin=intent.spin,
+        aim=aim,
+        rng_state=1,
+        x=88,
+        y=0x400,
+        frames_to_impact=timing.frames_to_impact or 0,
+    )
+    result = simulate(shot, UniformGround(Terrain(Lie.FAIRWAY)), tables)
+    return result.rest.x - 88, result.rest.y - 0x400
+
+
+@pytest.mark.parametrize(
+    ("club", "accuracy", "tolerance"),
+    [(0, 0x30, 3.0), (8, 0x30, 3.0), (12, 0x30, 3.0), (4, 0x40, 9.0), (12, 0x20, 9.0)],
+)
+def test_turned_shots_land_near_where_they_really_do(tables, club, accuracy, tolerance):
+    """Straight within 2 pixels, curved within 8 (with a pixel's rounding to spare)."""
+    intent = Intent(club, 0, 0x04, accuracy, 1)
+    table = _small_table(tables, [intent])
+    aims = np.arange(0, 256, 12)
+    # Short enough either way to stay on the playfield from its middle.
+    offsets = table.offsets(LIE_CLASSES[0], aims.astype(float))[0]
+    checked = 0
+    for aim, (dx, dy) in zip(aims, offsets, strict=True):
+        if abs(math.sin(aim * 2 * math.pi / 256)) > 0.5:
+            continue
+        exact = _exact(tables, intent, int(aim))
+        assert math.hypot(dx - exact[0], dy - exact[1]) < tolerance, aim
+        checked += 1
+    assert checked > 5
+
+
+def test_the_table_has_every_club_speed_and_power(tables):
+    held = list(intents(tables, 5))
+    speeds = {i.swing_speed for i in held}
+    assert speeds == {0, 1, 2}
+    medium = {i.power_target for i in held if i.swing_speed == 1}
+    assert medium == set(power_targets(tables, 1, putting=False))
+    assert {i.spin for i in held} == {Spin.NORMAL, Spin.BACK_1, Spin.BACK_2}
+    assert {i.hi_lo for i in held} == {-1, 0, 1}
+    putter = list(intents(tables, 0x0F))
+    assert {(i.hi_lo, i.spin, i.accuracy_target) for i in putter} == {
+        (0, Spin.NORMAL, 0x30)
+    }
+
+
+def test_the_table_saves_and_loads(tables, tmp_path):
+    held = [Intent(5, 0, 0x04), Intent(12, 0, 0x10, 0x28, 2, 1, Spin.BACK_2)]
+    table = _small_table(tables, held)
+    full = LandingTable(
+        {lie: encode(held) for lie in LIE_CLASSES},
+        {lie: table.rests[LIE_CLASSES[0]] for lie in LIE_CLASSES},
+    )
+    path = tmp_path / "table.npz"
+    save(full, path)
+    loaded = load(path)
+    for lie in LIE_CLASSES:
+        np.testing.assert_array_equal(loaded.intents[lie], full.intents[lie])
+        assert [loaded.intent(lie, i, 7) for i in range(2)] == [
+            replace(intent, aim=7) for intent in held
+        ]
+        np.testing.assert_array_equal(loaded.rests[lie], full.rests[lie])
+
+
+def test_pixel_classes():
+    assert pixel_class(Lie.GREEN, 0) == GREEN
+    assert pixel_class(Lie.TEE, 0) == pixel_class(Lie.FAIRWAY, 0)
+    assert pixel_class(Lie.ROUGH, 1) == LIE_CLASSES.index(LieClass(Lie.ROUGH, 1))
+    assert pixel_class(Lie.BUNKER, 0, 2) == LIE_CLASSES.index(LieClass(Lie.BUNKER, 2))
+
+
+def test_spread_fills_from_neighbours_only():
+    cells = np.full((5, 5), np.nan)
+    cells[2, 2] = 4.0
+    once = _spread(cells, 1)
+    assert once[1, 1] == once[2, 3] == 4.0
+    assert np.isnan(once[0, 0])
+    assert _spread(cells, 2)[0, 0] == 4.0
+
+
+def test_blur_keeps_a_flat_map_flat_and_averages():
+    flat = np.full((10, 12), 3.0)
+    np.testing.assert_allclose(_blur(flat, 2.0), flat)
+    spike = np.zeros((11, 11))
+    spike[5, 5] = 1.0
+    blurred = _blur(spike, 1.0)
+    assert blurred.sum() == pytest.approx(1.0)
+    assert blurred[5, 5] < 1.0
+
+
+def test_guesses_grow_with_distance():
+    assert guess(0, GREEN) == pytest.approx(1.0)
+    assert guess(50, GREEN) < 2.0
+    assert guess(100, 0) < guess(200, 0)
+    assert guess(100, 0) < guess(100, pixel_class(Lie.ROUGH, 1))

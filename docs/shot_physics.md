@@ -372,6 +372,9 @@ lands. So letting go of Up or Down just after the swing changes how the ball bit
 - `wind.py` gives the winds a hole and a shot can be dealt, with their probabilities
   ([seeded_wind.md](seeded_wind.md)).
 - `shot.py` runs the frame loop: the physics, the scene, then the view switch.
+- `flights.py` is not a port: it plays a shot once over uniform ground and finishes it
+  from other starts, giving exactly what `shot.py` gives, much faster. Its docstring says
+  which parts of a frame read the ground.
 
 It reads its tables from whatever ROM it is given, and it takes the terrain from a
 `Ground`: `UniformGround` for a driving range, or `HoleGround` for a real hole.

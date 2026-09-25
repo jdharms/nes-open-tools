@@ -14,14 +14,14 @@ anchors, and the jitter is independent of both and of every other shot's.
 Taking the RNG at hole start as equally likely to be any state on its cycle,
 which the vanilla game's title screen and menus make of it, gives these
 probabilities. A `seeded_wind` ROM fixes each hole's anchors instead
-(`golf.core.patches.seeded_wind.predict_hole`).
+(`golf.core.rng.predict_hole`).
 """
 
 from collections import Counter
 from dataclasses import dataclass
 from functools import cache
 
-from golf.core.patches.seeded_wind import (
+from golf.core.rng import (
     apply_jitter,
     predict_hole,
     wind_jitter,

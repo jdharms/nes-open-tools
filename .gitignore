@@ -35,3 +35,6 @@ wheels/
 !/courses/**/
 !/courses/**/.gitkeep
 /rangefinder/
+
+# Caches built from a ROM (the difficulty solver's landing table)
+/.cache/

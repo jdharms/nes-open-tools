@@ -36,7 +36,9 @@ A toolset for reverse engineering, editing and patching the NES Open Tournament 
 
 - `golf/` - shared library
   - `core/` - ROM reading/writing, both compression codecs, NES graphics, golfer sprites,
-    signpost, audio, `asm6502.py` assembler, `rom_analysis.py`, `ips.py` (IPS patch files)
+    signpost, audio, `asm6502.py` assembler, `rom_analysis.py`, `ips.py` (IPS patch files),
+    `rng.py` (the game's RNG and wind) and `clubs.py`, kept out of `patches/` so the
+    physics and the difficulty solver can run under PyPy
   - `golf/core/patches/` - ROM patches (`ROMPatch`, `BytePatch`, `CompositePatch`), and
     `PatchStack` for building a ROM from an ordered list of them (`docs/patch_stack.md`)
   - `formats/` - hole data model and JSON serialization (see `docs/course_data.md`)
@@ -45,7 +47,8 @@ A toolset for reverse engineering, editing and patching the NES Open Tournament 
   - `physics/` - Python model of the ball physics (launch to rest), checked frame by frame
     against the ROM under py65; see `docs/shot_physics.md`
   - `adr.py` - architecture decision records: parsing, checks, the index, new records
-- `golf/difficulty/` - rating holes: the player model, and the solver to come
+- `golf/difficulty/` - rating holes: the player model, the landing table and the solver
+  (`golf-difficulty`; `docs/planning/hole_difficulty.md`)
   (`docs/planning/hole_difficulty.md`)
 - `editor/` - the course editor
 - `server/` - the randomizer website (FastAPI); conventions in `server/CLAUDE.md`, design in
@@ -153,6 +156,8 @@ The indexes and pointers above only stay useful if changes keep them current:
 - `test_tools_layering.py` - nothing imports from `tools/`, and `tools/archive/` has no entry points
 - `test_import_order.py` - every module in `golf/`, `server/`, `editor/` and `tools/`
   imports cleanly in a fresh interpreter
+- `test_pypy_ready.py` - the difficulty solver's imports use no 3.12-only syntax and
+  nothing from `golf/core/patches/`, so it runs under PyPy 3.11
 - `test_adrs.py` - every record in `docs/adr/` is well formed, supersession links agree,
   the index is current, and every ADR citation names a record that exists
 

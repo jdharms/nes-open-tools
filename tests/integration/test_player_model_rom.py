@@ -57,10 +57,10 @@ def fairway(tables) -> Hole:
 def test_errors():
     assert errors(0) == ((0, 1.0),)
     spread = dict(errors(1.0))
-    assert sorted(spread) == list(range(-3, 4))
+    assert sorted(spread) == list(range(-2, 3))
     assert sum(spread.values()) == pytest.approx(1)
     assert all(spread[k] == pytest.approx(spread[-k]) for k in spread)
-    assert spread[0] > spread[1] > spread[2] > spread[3]
+    assert spread[0] > spread[1] > spread[2]
 
 
 @pytest.mark.parametrize("putting", [False, True])
