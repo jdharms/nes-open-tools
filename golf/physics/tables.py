@@ -5,7 +5,7 @@ Reading them from the ROM rather than copying them here keeps the model honest
 for patched ROMs too: a patch that retunes a club's distance changes the model's
 answer the same way it changes the game's.
 
-Every address is in bank 13 unless it says fixed bank. Names follow the label
+Every address is in bank 13 unless it says otherwise. Names follow the label
 file where it has one.
 """
 
@@ -15,6 +15,10 @@ from typing import Self
 from golf.core.rom_reader import RomReader
 
 PHYSICS_BANK = 13
+#: `UpdateBallAtCup` and its tables.
+CUP_BANK = 9
+#: `RenderGolferAndClub` and the swing animation's tables.
+GOLFER_BANK = 8
 
 #: `TrigLookupTable` (fixed $E7CB) is 128 bytes: sin over a half turn, scaled
 #: to 255. `LE7C3` looks up cos(a) as table[a + $40] without masking, so a
@@ -65,6 +69,29 @@ class PhysicsTables:
     """$B33C: RNG thresholds for a landing bunker depth of at least 1, by impact speed."""
     bunker_plug_second: bytes
     """$B33F: the same for a depth of 2."""
+    swing_meter_rate: tuple[int, ...]
+    """
+    `SwingMeterRateLoTable`/`HiTable` $AB46/$AB49: how far the meters move a
+    frame, by `SwingSpeed`, in 1/256ths of a step. Halved for a putt.
+    """
+    swing_impact_frame: bytes
+    """
+    $AC0A: `SwingImpactFrame` by the animation frame when the power meter
+    stopped. Only 10 long: the backswing cannot pass frame 9.
+    """
+    swing_animation: bytes
+    """
+    Bank 8 `GolferAnimTimerThresholdTable` $80E7: the animation frame ($CF) is
+    how many of these `$D1` exceeds. Ends in $FF.
+    """
+    cup_top: bytes
+    """
+    Bank 9 $83D5: the cup's outline in the cup view, as the first screen row
+    inside it for each of the 40 columns from its left edge to its centre
+    (the right half mirrors the left).
+    """
+    cup_bottom: bytes
+    """Bank 9 $83FD: the row just below the cup, by the same column."""
 
     @classmethod
     def from_rom(cls, rom: RomReader) -> Self:
@@ -91,6 +118,14 @@ class PhysicsTables:
             landing_kick=bank(0xB9A1, 6),
             bunker_plug_first=bank(0xB33C, 3),
             bunker_plug_second=bank(0xB33F, 3),
+            swing_meter_rate=tuple(
+                hi << 8 | lo
+                for lo, hi in zip(bank(0xAB46, 3), bank(0xAB49, 3), strict=True)
+            ),
+            swing_impact_frame=bank(0xAC0A, 10),
+            swing_animation=rom.read_switched(0x80E7, GOLFER_BANK, 13),
+            cup_top=rom.read_switched(0x83D5, CUP_BANK, 40),
+            cup_bottom=rom.read_switched(0x83FD, CUP_BANK, 40),
         )
 
     def sin(self, angle: int) -> int:

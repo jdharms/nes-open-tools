@@ -11,6 +11,7 @@ from golf.physics.arith import (
     MASK24,
     MASK32,
     byte,
+    halve,
     high_byte_of_negation,
     is_negative,
     mul8,
@@ -26,10 +27,16 @@ GRAVITY = 0xE000
 WIND_HEIGHT_CAP = 7
 
 
-def move(ball: Ball) -> None:
-    """`ApplyVelocityToPosition` ($B78F): position += velocity."""
-    ball.x = (ball.x + ball.vx) & MASK24
-    ball.y = (ball.y + _sign_extend_y(ball.vy)) & MASK32
+def move(ball: Ball, halvings: int = 0) -> None:
+    """
+    `ApplyVelocityToPosition` ($B78F): position += velocity. In the cup view
+    the velocity is halved first (twice on a putt), each time rounding down.
+    """
+    vx, vy = ball.vx, ball.vy
+    for _ in range(halvings):
+        vx, vy = halve(vx), halve(vy)
+    ball.x = (ball.x + vx) & MASK24
+    ball.y = (ball.y + _sign_extend_y(vy)) & MASK32
 
 
 def fall(ball: Ball) -> bool:

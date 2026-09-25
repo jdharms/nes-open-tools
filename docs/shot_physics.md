@@ -34,6 +34,36 @@ advances it one frame, until something sets `ShotPhaseState` to 2. The code runs
 - **Angles**: 256 to a turn. `Aiming` 0 is up the screen and `$40` is to the right.
   `WindDirection` uses the same scale for the direction the wind blows toward.
 
+## The swing: meters and animation
+
+The swing states (bank 13 `$AAED-$AC91`) turn the frames A is pressed on into the
+launch's inputs. They run once per pass of the swing loop, one pass a frame. A press
+is dropped if it comes 1 or 2 frames after the previous one; 3 or more frames after, it
+counts.
+
+- **The rate**: `SwingMeterRate` (`$AB46/$AB49`) by swing speed is 1, 1.3125 or 1.625
+  meter steps a frame. It is halved for a putt.
+- **Backswing**: a press on the ready screen starts it. A putt's starts on the first
+  pass, without one (`$AAED`). The power meter (`$D6`, fraction `$0587`) falls from
+  `$30` by the rate each pass. Below 0 it is set to 0, losing the overshoot, and turns
+  round. Climbing back to `$30` stops it there by itself, for no power. A press stops
+  it after that pass's move. For a putt that also launches the ball.
+- **Downswing**: the accuracy meter (`$D7`, fraction `$0588`) starts from the power stop,
+  fraction and all, and climbs by twice the rate. Reaching `$4C` whiffs (`$AC44`): a
+  stroke, and no ball. After an auto-stop, the next press stops it, even if that press
+  was meant for power.
+- **Animation**: `$D0/$D1` climbs by the rate each backswing pass. At the power press it
+  is reflected about `$31` (`$62 − $D1`), and `SwingImpactFrame` (`$058F`) is read from
+  `$AC0A` by the animation frame then (5 for the putter). After that it climbs by twice
+  the rate while the frame is short of impact. The frame (`$CF`) is how many of bank 8's
+  thresholds (`$80E7`) `$D1` exceeds. `RenderGolferAndClub` works it out each pass before
+  the swing states run, and only in the behind-the-golfer view, so a putt never reaches
+  impact. Hi/lo is read on every pass the animation advances.
+
+The ball launches on the pass after the last press. How many passes of flight come
+before the animation reaches impact is `frames_to_impact`: until then the view cannot
+change (see **Views**). `golf/physics/meter.py` models all of this.
+
 ## Launch
 
 The power is a chain of scalings. Each one is an 8x8 multiply that keeps the high byte, so
@@ -157,6 +187,26 @@ to the left (`$C0`), as far as a diagonal tailwind (`$20`) takes it.
 - **Water**: the ball sinks, unless it arrives shallow (below `$30`) and the RNG draws
   `$E6` or more (about 1 in 10). Then it skips once, at half its vertical speed.
 
+## After the shot: water and out of bounds
+
+The play loop (bank 13 `$85E9-$8672`) deals with the lie the ball finished on:
+
+- **Water** (lie 4): the ball goes back to `$05A5-$05AB` (`$B114`), with one penalty
+  stroke. Every frame of the physics, after the probe (`$B029`), and once at launch,
+  `LD_B0FF` copies the ball's position there, fractions and all, unless the lie under it
+  is water or out of bounds. So the drop is where the ball was on the last frame it was
+  over anything else, in the air or on the ground. The model keeps it as `Ball.drop_x`
+  and `drop_y`, compared with the game every frame.
+- **Out of bounds** (lie 5): stroke and distance. `LD_86C8` puts the ball back where it
+  lay before the shot. `LD_86ED` stores that for each player after every shot (`$0113-$011D`:
+  position without its lowest fraction bytes, which become `$80`, and `BunkerDepth`). It
+  clears the height and adds one penalty stroke.
+
+Everywhere else the next shot is played from where the ball stopped. A holed ball ends
+the hole (`$832E`). `play_on` in `golf/physics/rules.py` gives where the next shot is
+played from and what the shot cost. `test_game_rom.py` follows every shot into the play
+loop and checks both against what the game did.
+
 ## Where randomness enters
 
 Every draw uses the RNG ([seeded_wind.md](seeded_wind.md)). Only three things advance it:
@@ -201,8 +251,9 @@ out of bounds.
 ## Views, and what they change
 
 `ViewMode` (`$98`) is set by the routines that draw each view: `$80` behind the golfer
-(`LD_A499`), `$00` overhead (`LD_9AEF`), `$40` the green (`LD_A381`), `$FF` at hole start
-and on resume. A shot starts behind the golfer, or on the green view for a putt.
+(`LD_A499`), `$00` overhead (`LD_9AEF`), `$40` the green (`LD_A381`), `$C0` the close-up
+of the cup (bank 9 `$8000`, see **The cup**), `$FF` at hole start and on resume. A shot
+starts behind the golfer, or on the green view for a putt.
 Confirmed in Mesen: `$80` from the swing until the view changes, then `$00`.
 
 After the physics each frame, the main loop (`$AA37-$AA9B`) decides whether to switch:
@@ -212,13 +263,66 @@ After the physics each frame, the main loop (`$AA37-$AA9B`) decides whether to s
   then once the ball starts to fall, leaves the scene (`$C5` = 0), or is `$3D` pixels
   (about 122 yards) out on the distance readout.
 - **Overhead and green**: on touchdown, or once the ball is falling.
+- **The cup**: every frame.
 
 When it does switch, it goes to the green view if the ball is inside the green's box, not
-in sand or water, and either on the green or already in the green view. Otherwise any view
-other than overhead goes to overhead.
+in sand or water, and either on the green or already in the green view. If it is already
+in the green view or the cup view, the cup routine runs instead (see **The cup**).
+Otherwise any view other than overhead goes to overhead.
 
 Switching to overhead redraws the course, and that redraw (`LD_A170`) zeroes the distance
 readout. So does plugging a ball in sand, which redraws too.
+
+### The cup
+
+`LD_A884` (bank 13) far-calls `UpdateBallAtCup` (bank 9 `$81C4`) on each frame the view
+switch reaches it in the green view, and on every frame of the cup view. The routine
+takes the ball's offset from the flag (`FlagX/Y`, `$A7-$AA`) times 8 and rotates it by the
+aim plus `$80` (`RotateVector16`), so the shot runs up the screen. It then places the ball
+on the close-up's screen: `$63` is `$80` plus 20 × the offset across the aim line (in
+pixels/256), and `$64` is `$C6` less about 6 × (the offset along it + 4). The ball is in
+reach when it is less than 6 pixels to either side (5 to open the close-up), and
+`$64` is at least `$54` (and below `$C4` to open it). It must also be less than `$200` high
+in `$B6:$B5`, or under `$80` after the first bounce. Out of reach, `$64` is set to `$F0`.
+
+In reach, a green view opens the cup view: `ViewMode` `$C0`, and `$0582` = `$FF`. Out of
+reach, a cup view closes. Unless a lip-out is playing, the ball's velocity is halved
+(twice on a putt, `LD_A8B6`), its height is halved, and the green view is redrawn.
+
+The hole is an outline of screen pixels: for each of 40 columns from the left edge to the
+centre, mirrored for the right half, rows `$83D5[x]` to `$83FD[x]`. `$0594` counts frames
+the ball is over it at height 0. `$0580/$0581` keep the last screen position there, and
+`$0582` the first row. Each frame over the cup:
+
+- **Holing out**: on the 2nd frame or later, if the ball's speed is under `$1C`. The speed
+  is |vx| + |vy|, from the velocities' middle bytes. `ShotPhaseState` becomes 2 and
+  `MaybeHoleCompleteFlag` (`$05B9`) counts the ball in.
+
+When a landed ball leaves the outline after being over it, and it left through the far
+side (`$64` of `$B5` or more), one of these happens. It does not if the ball has already
+bounced off the flagstick and is moving at `$18` or more.
+
+- **Rim-in**, below speed `$28`: it drops in anyway. Off to one side of the centre (`$63`
+  outside `$6A-$94`), `$05C2` records how fast, for the drop animation.
+- **Lip-out**, at `$28` or more with `$63` in `$60-$9F`: `$0593` becomes `$FF`, and its
+  velocity is halved (twice on a putt). While `$0593` is `$FF`, the physics runs only every
+  4th frame (`$0585`, which counts frames, `$AF3A`). The cup routine animates a hop in
+  `$65-$68`. It starts at speed −min(speed, `$50`) × `$12`, gains `$4E` a frame, and ends
+  when it comes back down.
+
+**The flagstick**: on a shot other than a putt, a ball that reaches `$63` `$6F-$91` and
+`$64` `$AF-$B9` sets `$0595` to `$FF`. The next frame's physics (`$AF49`) reverses the
+velocity and halves it, and sets `$0595` to 1. That happens once per shot.
+
+**In the cup view** the physics changes. The move uses half the velocity (a quarter on a
+putt). The rest of the frame (gravity, drag, the probe, the landing) runs only on every
+2nd frame of `$0585`. On a putt, once the ball is on the ground, it runs every 4th.
+
+`$63-$68` are zero-page bytes that other code uses as scratch outside the cup view.
+Nothing reads them there, and `$0580-$0582` and `$0593-$0595` are what carry the state.
+
+The shot ends when the ball is holed, before `BallDropAnimationEntry` (bank 9 `$8050`)
+plays the drop.
 
 ### Trees
 
@@ -260,6 +364,13 @@ lands. So letting go of Up or Down just after the swing changes how the ball bit
 - `terrain.py` is `ClassifyProbePosition`, over a hole from course JSON (`HoleGround`).
 - `perspective.py` and `distance.py` cover the behind-the-golfer projection, its tree
   collision and the distance readout.
+- `cup.py` is the cup and the flagstick, which `ShotInFlight` runs when it is given the
+  flag. Without one there is no cup.
+- `rules.py` is what happens after the shot: water, out of bounds and holing out.
+- `meter.py` turns the frames A is pressed on into the meter stops and
+  `frames_to_impact`.
+- `wind.py` gives the winds a hole and a shot can be dealt, with their probabilities
+  ([seeded_wind.md](seeded_wind.md)).
 - `shot.py` runs the frame loop: the physics, the scene, then the view switch.
 
 It reads its tables from whatever ROM it is given, and it takes the terrain from a
@@ -283,23 +394,13 @@ Three references check it (`tests/physics/`, run with `--physics`):
 
 ## Not modelled yet
 
-- **The cup and flagstick** (`LD_A884` → bank 9 `$81C4`), which run each frame in the
-  green view: holing out, the slow-motion lip-out (`$0593`, physics every 4th frame) and
-  bouncing off the pin (`$0595`, reversing the ball at `$AF49`). The model refuses with
-  `UnportedBehaviourError` when the ball comes within reach of the cup, and ignores the
-  cup otherwise, which is exact because the routine does nothing further away.
 - **The scene builder** (bank 9 `$8829`, from `ShotSetupSequence`): it probes 64 × 20
   points ahead along the aim and draws the scene into the maps. The model takes a
   `PerspectiveScene` the ROM built; without one, the behind-the-golfer phase has no trees.
-- **The swing animation's timing** (bank 8), which decides `frames_to_impact` (0-20
-  frames, depending on how the swing was timed) and so when the view can first change.
-  The model takes it as an input; the ROM oracle measures it.
-- **Meter timing**: how many frames a stop takes at each swing speed. The meter rates are
-  in `$AB46/$AB49`; the model takes the stops as given.
 - **Holes over 46 rows.** `TerrainBottomY` in the vanilla ROM stops at scroll limit 9.
   Taller holes need the `wram_expansion` tables.
-- **Views `$C0`/`$FF`**, where the loop halves the ball's movement and skips frames. They
-  do not occur in a normal shot.
+- **View `$FF`**, which the physics treats like the cup view (both test bits 6 and 7). It
+  does not occur during a normal shot.
 - **The drive-distance statistic** accumulated in `$05C0/$05C1`.
 
 ## Confirming it in the game

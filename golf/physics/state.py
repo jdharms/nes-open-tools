@@ -79,7 +79,7 @@ class ShotInput:
     """
     Frames after launch before the golfer's swing animation (bank 8) reaches
     impact; the view does not change until then. It depends on how the swing
-    was timed, 0-20 frames, and is not modelled: the ROM oracle measures it.
+    was timed: `golf.physics.meter.swing` gives it, with the meter stops.
     """
     scene_aim: int | None = None
     """`MaybeFineAimAnchor` ($BD): the aim the behind-the-golfer scene was built along. Defaults to `aim`."""
@@ -219,6 +219,41 @@ class Ball:
     """$05A3: consecutive frames in sand, starting at 3 for a shot from sand."""
     bunker_exit_armed: int = 0
     """$05A4: set for a shot from sand until the lip rule has run."""
+    drop_x: int = 0
+    """
+    $05A5-$05A7: `x` on the last frame the ball was over anything but water or
+    out of bounds (`LD_B0FF`). A ball that finishes in water is played from here.
+    """
+    drop_y: int = 0
+    """$05A8-$05AB: `y` then."""
+    frame_counter: int = 0
+    """$0585: counts calls of `CalcLaunchVector`; the cup view's slow frames key off it."""
+    # Zero-page bytes that other code reuses as scratch outside the cup view,
+    # so they are not compared; what they decide lands in the registers below.
+    cup_x: int = field(default=0, compare=False)
+    """$63: the ball's screen x in the cup view, $80 at the cup's centre."""
+    cup_y: int = field(default=0, compare=False)
+    """$64: the ball's screen y in the cup view, or $F0 when out of the cup's reach."""
+    cup_bob: int = field(default=0, compare=False)
+    """$65/$66: how far a lipped-out ball has hopped, in the cup view's animation."""
+    cup_bob_speed: int = field(default=0, compare=False)
+    """$67/$68: its speed; gravity pulls it back to the lip."""
+    cup_last_x: int = 0
+    """$0580: `cup_x` on the last frame the ball was over the cup."""
+    cup_last_y: int = 0
+    """$0581: `cup_y` then."""
+    cup_entry_y: int = 0
+    """$0582: `cup_y` on the first frame over the cup since the cup view opened ($FF before)."""
+    cup_frames: int = 0
+    """$0594: consecutive frames the ball has been over the cup."""
+    cup_slow_motion: int = 0
+    """`MaybeCupSlowMotionFlag` $0593: $FF while a lip-out plays, when the physics runs every 4th frame."""
+    cup_drop: int = 0
+    """$05C2: how fast a ball that caught the rim went in, for the drop animation."""
+    flagstick: int = 0
+    """`MaybeFlagstickHitFlag` $0595: $FF when the ball has touched the pin, 1 once it has bounced off."""
+    holed: int = 0
+    """`MaybeHoleCompleteFlag` $05B9: counts the ball into the cup."""
     stopped: bool = False
     frames: int = field(default=0, compare=False)
 

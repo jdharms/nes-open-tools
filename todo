@@ -2,7 +2,7 @@ In-game/vanilla rom investigations:
 * Does SuperShot! do anything?
 * Do bunker lips do anything?
 
-V2 todos:
+V3 todos:
 * I think I want a variant of rom name in randomizer site pages w/o the region parens
 * Configuration backups to pw manager
 * robots.txt
@@ -12,6 +12,8 @@ V2 todos:
 * Expand SRAM defaults on randomizer site (currently missing Enable BGM and more)
 * Sentry
 * healthchecks.io integration for litestream
+* Rangefinder: Esc also clears
+* hide scores for unplayed seeds by default!!!!
 
 Eventually:
 * deploy from github actions

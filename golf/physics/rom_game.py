@@ -50,7 +50,11 @@ SHOT_SETUP_SEQUENCE = 0x877A
 SWING_SEQUENCE_ENTRY = 0xAA09
 BUILD_PERSPECTIVE_SCENE_CALL = 0x8829  # bank 13: the far call to bank 9 $8829
 AFTER_SCENE_BUILT = 0x882F  # bank 13: just after that far call returns
-SHOT_COMPLETE_RETURN = 0xACAC  # bank 13: CLC / RTS leaving the swing loop
+# bank 13: leaving the swing loop, before a holed ball's drop animation
+SHOT_COMPLETE = 0xACA1
+PLAY_SHOT = 0x82AD  # bank 13: the play loop's call of ShotSetupSequence, and after
+AFTER_PENALTIES = 0x8672  # bank 13: the lie dealt with, before LD_86ED stores it
+HOLED_OUT = 0x832E  # bank 13: the play loop's branch for a holed ball
 SWING_LOOP_TOP = 0xAA2A  # bank 13: LD_AA2A, once per pass of the swing loop
 
 PPU_CTRL_CACHE = 0x10
@@ -59,6 +63,11 @@ CURRENT_COURSE = 0x0102
 HOLE_NUMBER = 0x94
 CURRENT_PLAYER = 0x99
 PLAYER_SWING_SPEED = 0x0123
+PLAYER_PUTT_SPEED = 0x0125  # the setup panels use this one on the green
+#: `LD_86ED` keeps each player's ball here after every shot: $AD/$AE, $B0-$B2 and
+#: `BunkerDepth`, a byte each, two players apart. Out of bounds restores it.
+PLAYER_LIE = 0x0113
+HOLE_STROKES = 0x011F  # CurrentHoleStrokes, player one
 PLAYER_SPIN = 0x0127
 PLAYER_BAG_INDEX = 0x0129
 PLAYER_ONE_BAG = 0x6027
@@ -69,6 +78,7 @@ SWING_ANIMATION_FRAME = 0xCF  # SwingPowerBarPos, advanced by bank 8
 SWING_IMPACT_FRAME = 0x058F
 FINE_AIM_ANCHOR = 0xBD
 FLAG = 0xA7  # $A7/$A8 x, $A9/$AA y
+PUTTING = 0xD4  # MaybeIsPuttingFlag: the ball was on the green at setup
 
 #: `CurrCourse` numbers, in the ROM's order.
 COURSES = {"japan": 0, "us": 1, "uk": 2}
@@ -80,7 +90,11 @@ class WhiffError(Exception):
 
 @dataclass(frozen=True)
 class Swing:
-    """When the player presses A, in frames of the swing loop."""
+    """
+    When the player presses A, in frames of the swing loop. A putt has no
+    accuracy meter, and its backswing starts by itself ($AAED), so its only
+    press stops the power meter, `start + power` frames in.
+    """
 
     start: int = 4
     """Ready screen frames before A starts the backswing."""
@@ -108,17 +122,31 @@ class RomShotRecord:
     scene: PerspectiveScene | None = None
     """WRAM as the behind-the-golfer scene builder left it (none for a putt)."""
     flag: Flag | None = None
+    after: Ball | None = None
+    """
+    With `follow_through`, the ball once the play loop has dealt with where it
+    finished: dropped after water, back where it was after out of bounds.
+    """
+    strokes: int | None = None
+    """With `follow_through`, the strokes the shot added to the hole, penalties included."""
 
 
 class RomGameShot:
-    def __init__(self, rom: RomReader, course: str, hole: int):
+    def __init__(self, rom: RomReader, course: str, hole: int, rng_state: int = 0):
+        """
+        Load the hole with `InitHole`, which draws the pin and the wind anchors
+        from `rng_state`.
+        """
         self.machine = NesMachine(rom)
         m = self.machine.memory
         m[PPU_CTRL_CACHE] = 0x80  # NMI on, so frames come from vblank
         m[GOLF_GAME_MODE] = 0
         m[CURRENT_COURSE] = COURSES[course]
         m[HOLE_NUMBER] = hole - 1
+        m[RNG_STATE], m[RNG_STATE + 1] = rng_state & 0xFF, rng_state >> 8
         self.machine.call(INIT_HOLE)
+        self.flag = Flag(m[FLAG] | m[FLAG + 1] << 8, m[FLAG + 2] | m[FLAG + 3] << 8)
+        """Where `InitHole` put the pin."""
 
     def play(
         self,
@@ -126,7 +154,14 @@ class RomGameShot:
         swing: Swing = DEFAULT_SWING,
         x_fraction: int = 0,
         y_fraction: int = 0,
+        follow_through: bool = False,
     ) -> RomShotRecord:
+        """
+        Play `shot` with `swing`. With `follow_through` the game carries on
+        past the shot into the play loop, which scores it and deals with water
+        and out of bounds (`after`, `strokes`), from $82AD rather than
+        `ShotSetupSequence`.
+        """
         machine = self.machine
         m = machine.memory
         m[BALL_X : BALL_X + 3] = bytes([0, x_fraction, shot.x])
@@ -135,15 +170,21 @@ class RomGameShot:
         m[WIND_DIRECTION], m[WIND_SPEED] = shot.wind_direction, shot.wind_speed
         m[CURRENT_PLAYER] = 0
         m[SRAM_DEFAULTS : SRAM_DEFAULTS + 3] = b"\xff\xff\xff"
-        m[PLAYER_SWING_SPEED] = shot.swing_speed
+        m[PLAYER_SWING_SPEED] = m[PLAYER_PUTT_SPEED] = shot.swing_speed
         m[PLAYER_SPIN] = shot.spin
         m[PLAYER_ONE_BAG] = shot.club
         m[PLAYER_BAG_INDEX] = 0
         m[PLAY_LOOP_ACTIVE] = 0xFF
         m[BUNKER_DEPTH] = shot.bunker_depth
+        # What `LD_86ED` stored after the shot before this one.
+        m[PLAYER_LIE : PLAYER_LIE + 12 : 2] = bytes(
+            [x_fraction, shot.x, y_fraction, shot.y & 0xFF, shot.y >> 8]
+            + [shot.bunker_depth]
+        )
+        strokes_before = m[HOLE_STROKES]
 
         record = RomShotRecord(shot)
-        record.flag = Flag(m[FLAG] | m[FLAG + 1] << 8, m[FLAG + 2] | m[FLAG + 3] << 8)
+        record.flag = self.flag
         state = {
             "swing_frame": None,
             "done": False,
@@ -151,6 +192,7 @@ class RomGameShot:
             "impact": 0,
             "impact_reached": False,
             "scene_aim": None,
+            "shot_over": False,
         }
         fixed_bank = bytes(m[0xC000:0x10000])
         hold = {1: BUTTON_DOWN, -1: BUTTON_UP}.get(shot.hi_lo, 0)
@@ -166,10 +208,19 @@ class RomGameShot:
         def enter_swing() -> None:
             aim()
             state["swing_frame"] = 0
+            if m[PUTTING]:
+                presses.clear()
+                presses.add(swing.start + swing.power)
 
         def shot_complete() -> None:
             record.frames.append(read_ball(m))
             record.view_modes.append(m[VIEW_MODE])
+            state["shot_over"] = True
+            state["done"] = not follow_through
+
+        def lie_dealt_with() -> None:
+            record.after = read_ball(m)
+            record.strokes = m[HOLE_STROKES] - strokes_before
             state["done"] = True
 
         def scene_built() -> None:
@@ -205,8 +256,8 @@ class RomGameShot:
                 }
 
         def on_frame(frame: int) -> None:
-            if state["swing_frame"] is None:
-                # Setup panels: tap A every few frames.
+            if state["swing_frame"] is None or state["shot_over"]:
+                # Setup panels and the lie announcement: tap A every few frames.
                 machine.buttons = BUTTON_A if frame % 6 == 0 else 0
                 return
             state["swing_frame"] += 1
@@ -220,11 +271,13 @@ class RomGameShot:
         machine.on_frame = on_frame
         machine.add_breakpoint(BUILD_PERSPECTIVE_SCENE_CALL, aim, PHYSICS_BANK)
         machine.add_breakpoint(SWING_SEQUENCE_ENTRY, enter_swing, PHYSICS_BANK)
-        machine.add_breakpoint(SHOT_COMPLETE_RETURN, shot_complete, PHYSICS_BANK)
+        machine.add_breakpoint(SHOT_COMPLETE, shot_complete, PHYSICS_BANK)
         machine.add_breakpoint(SWING_LOOP_TOP, loop_top, PHYSICS_BANK)
         machine.add_breakpoint(AFTER_SCENE_BUILT, scene_built, PHYSICS_BANK)
+        machine.add_breakpoint(AFTER_PENALTIES, lie_dealt_with, PHYSICS_BANK)
+        machine.add_breakpoint(HOLED_OUT, lie_dealt_with, PHYSICS_BANK)
         machine.call(
-            SHOT_SETUP_SEQUENCE,
+            PLAY_SHOT if follow_through else SHOT_SETUP_SEQUENCE,
             bank=PHYSICS_BANK,
             stop=lambda: state["done"],
         )

@@ -362,18 +362,30 @@ def wind_jitter(a: int) -> int:
     return r - 1 if (a & 1) else r - 2
 
 
-def wind_adjust(
-    state: int, direction_anchor: int, speed_anchor: int
-) -> tuple[int, int, int]:
-    """One WindAdjustmentRoutine call. Returns (new_state, direction, speed)."""
-    state, a = lfsr_step(state)
+def apply_jitter(
+    direction_anchor: int, speed_anchor: int, jitter: int
+) -> tuple[int, int]:
+    """
+    WindAdjustmentRoutine after its draw: the anchors plus a speed jitter, as
+    (direction, speed). A negative speed turns the wind round at speed 1, and
+    10 or more comes down by 5 until it is not.
+    """
     direction = direction_anchor
-    speed = (speed_anchor + wind_jitter(a)) & 0xFF
+    speed = (speed_anchor + jitter) & 0xFF
     if speed & 0x80:
         direction ^= 0x80
         speed = 1
     while speed >= 10:
         speed -= 5
+    return direction, speed
+
+
+def wind_adjust(
+    state: int, direction_anchor: int, speed_anchor: int
+) -> tuple[int, int, int]:
+    """One WindAdjustmentRoutine call. Returns (new_state, direction, speed)."""
+    state, a = lfsr_step(state)
+    direction, speed = apply_jitter(direction_anchor, speed_anchor, wind_jitter(a))
     return state, direction, speed
 
 

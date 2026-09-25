@@ -37,6 +37,33 @@ Speed = anchor + jitter. If negative, direction is flipped (EOR $80) and speed b
 
 The routine is called from bank 13 `$824F` (normal shot setup) and `$8D28` (a save/restore routine at `$8CBE` that re-derives a player's wind from a stored RNG snapshot after restoring it into `RngState`).
 
+### The vanilla wind as probabilities
+
+`golf/physics/wind.py` enumerates every RNG state on the LFSR's cycle to give the wind
+the vanilla game deals, taking the state at hole start as equally likely to be any of
+them. The cycle is 65,534 states long. `$5555` and `$AAAA` form a second cycle of their
+own, which play never enters.
+
+- **Only 64 of the 176 anchor pairs occur**, each with probability 1/64. The direction
+  and speed anchors come from neighbouring draws, which share 5 of their bits, so each
+  direction comes with four speed anchors. Directions pair up (`$00`/`$10`, `$20`/`$30`,
+  and so on), and each opposite direction has the same speeds:
+
+  | Directions | Speed anchors |
+  |---|---|
+  | `$00 $10 $80 $90` | 2, 4, 7, 9 |
+  | `$20 $30 $A0 $B0` | 3, 5, 6, 8 |
+  | `$40 $50 $C0 $D0` | 1, 4, 7, 10 |
+  | `$60 $70 $E0 $F0` | 0, 3, 5, 6 |
+
+- **The pin is independent of the anchors**, uniform over the hole's four.
+- **Each shot's jitter** is −1, 0, +1 or +2 with probability 1/8, 1/2, 1/4, 1/8. It is
+  independent of the anchors, of the swing number and of the other shots' jitters, to
+  within 0.001.
+
+`tests/physics/test_wind_rom.py` checks `InitHole` and `WindAdjustmentRoutine` against
+the Python model under py65.
+
 ## Per-player wind slots
 
 Bank 13 already isolates each player's wind stream from the other player's turn:

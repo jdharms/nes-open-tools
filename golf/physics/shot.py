@@ -6,12 +6,14 @@ $AA2A) per frame, from the swing until `ShotPhaseState` reaches 2.
 import math
 from dataclasses import dataclass, field
 
-from golf.physics.arith import byte, is_negative
+from golf.formats.hole_data import HoleData
+from golf.physics.arith import MASK8, MASK24, byte, halve, is_negative
+from golf.physics.cup import OUT_OF_REACH, Cup
 from golf.physics.distance import distance_between_points
 from golf.physics.flight import airborne, drag, fall, move
 from golf.physics.landing import contact, stop
 from golf.physics.launch import hi_lo_offset, launch
-from golf.physics.perspective import PerspectiveScene, collide, project, rotate
+from golf.physics.perspective import PerspectiveScene, collide, project
 from golf.physics.state import PUTTER, Ball, Ground, Lie, ShotInput, Terrain
 from golf.physics.tables import PhysicsTables
 
@@ -23,10 +25,6 @@ YARDS_PER_PIXEL = 2
 
 #: No vanilla shot runs past about 700 frames; this catches a model that never stops.
 MAX_FRAMES = 5000
-
-
-class UnportedBehaviourError(NotImplementedError):
-    """The shot reached game code the model does not cover yet."""
 
 
 @dataclass(frozen=True)
@@ -52,6 +50,10 @@ class ShotResult:
     @property
     def start(self) -> Point:
         return Point(self.shot.x, self.shot.y)
+
+    @property
+    def holed(self) -> bool:
+        return bool(self.ball.holed)
 
     @property
     def rest(self) -> Point:
@@ -92,6 +94,10 @@ SCENE_DISTANCE = 0x3D
 VIEW_OVERHEAD = 0x00
 VIEW_GREEN = 0x40
 VIEW_BEHIND = 0x80
+#: The close-up of the cup (bank 9 $8000). The ball moves at half speed there
+#: (a quarter on a putt), and the rest of the physics runs every 2nd frame
+#: (every 4th on a putt, for a ball on the ground).
+VIEW_CUP = 0xC0
 
 
 @dataclass(frozen=True)
@@ -103,12 +109,29 @@ class Flag:
     y: int
     """16 bits: pixel (the green is always in the top 256 rows) and fraction."""
 
+    @classmethod
+    def for_pin(cls, hole: HoleData, pin: int) -> "Flag":
+        """
+        $DB1C-$DB5B: flag position `pin` (0-3) of `hole`. Each offset is in
+        eighths of a pixel from the green's corner, stored as the pixel and a
+        fraction of `(offset & 7) << 5`, plus $28, which can carry.
+        """
+        position = hole.metadata["flag_positions"][pin]
+
+        def place(green: int, offset: int) -> int:
+            return ((green + (offset >> 3)) << 8) + ((offset & 7) << 5) + 0x28
+
+        return cls(
+            place(hole.green_x, position["x_offset"]) & 0xFFFF,
+            place(hole.green_y, position["y_offset"]) & 0xFFFF,
+        )
+
 
 class ShotInFlight:
     """
     A shot being played, one `step` per pass of the swing loop: the physics
     (`CalcLaunchVector`), then the behind-the-golfer scene (`LD_BB6D`), then the
-    main loop's view switch ($AA37-$AA9B).
+    main loop's view switch ($AA37-$AA9B), which runs the cup near the pin.
     """
 
     def __init__(
@@ -127,11 +150,18 @@ class ShotInFlight:
         self.ground = ground
         self.tables = tables
         self.scene = scene
-        self.flag = flag
+        self.cup = (
+            None
+            if flag is None
+            else Cup(flag.x, flag.y, shot.aim, launch_terrain.lie == Lie.GREEN, tables)
+        )
         self.origin_x = shot.x << 8
         self.origin_y = shot.y << 8
         self.scene_aim = shot.aim if shot.scene_aim is None else shot.scene_aim
         self.ball = launch(shot, launch_terrain, tables)
+        # `ShotInitialization` zeroes it, and the launch counts one.
+        self.ball.frame_counter = 1
+        self._save_drop()
         if view is None:
             view = VIEW_GREEN if launch_terrain.lie == Lie.GREEN else VIEW_BEHIND
         self.ball.view = view
@@ -160,7 +190,19 @@ class ShotInFlight:
 
     def _physics(self) -> None:
         ball = self.ball
-        move(ball)
+        ball.frame_counter = (ball.frame_counter + 1) & MASK8
+        # $AF3A: a lip-out plays in slow motion.
+        if ball.cup_slow_motion & 0x80 and ball.frame_counter & 3:
+            return
+        cup_view = ball.view == VIEW_CUP
+        putting = self.cup is not None and self.cup.putting
+        move(ball, halvings=(1 + putting) * cup_view)
+        self._flagstick()
+        if cup_view:
+            # $AF75: only the move runs on the in-between frames.
+            every = 4 if putting and not byte(ball.height, 2) else 2
+            if ball.frame_counter & (every - 1):
+                return
         self._update_readout()
         landed = fall(ball)
         drag(ball)
@@ -171,6 +213,7 @@ class ShotInFlight:
             return
 
         self._probe()
+        self._save_drop()
         self._tree_hit()
         if self._bunker_lip():
             return
@@ -190,6 +233,15 @@ class ShotInFlight:
         else:
             ball.landing_processed = 0
             airborne(ball, self.tables, self.shot.wind_direction, self.shot.wind_speed)
+
+    def _flagstick(self) -> None:
+        """$AF49: a ball that touched the pin comes back off it at half speed."""
+        ball = self.ball
+        if not ball.flagstick & 0x80:
+            return
+        ball.flagstick = 1
+        ball.vx = halve(-ball.vx & MASK24)
+        ball.vy = halve(-ball.vy & MASK24)
 
     def _update_readout(self) -> None:
         """`LD_A246`: the distance readout, when the overhead or scene view shows it."""
@@ -222,6 +274,12 @@ class ShotInFlight:
         ball.observe(under)
         if above.tree_trunk and under.tree_edge:
             ball.tree_hit = (ball.tree_hit - 1) & 0xFF
+
+    def _save_drop(self) -> None:
+        """`LD_B0FF`: remember a dry spot, where a ball in water is dropped."""
+        ball = self.ball
+        if ball.lie not in (Lie.WATER, Lie.OUT_OF_BOUNDS):
+            ball.drop_x, ball.drop_y = ball.x, ball.y
 
     def _tree_hit(self) -> None:
         """$B02C-$B072: a hit stops the ball dead or sends it back at a quarter speed."""
@@ -288,6 +346,9 @@ class ShotInFlight:
         """$AA37-$AA9B."""
         ball = self.ball
         if not ball.landing_processed:
+            if ball.view == VIEW_CUP:
+                self._at_cup()
+                return
             if ball.view == VIEW_BEHIND:
                 if ball.frames <= self.shot.frames_to_impact:
                     return
@@ -301,7 +362,7 @@ class ShotInFlight:
         on_green = ball.in_green_box and ball.lie not in (Lie.BUNKER, Lie.WATER)
         if on_green and (ball.lie == Lie.GREEN or ball.view & VIEW_GREEN):
             if ball.view & VIEW_GREEN:
-                self._cup()
+                self._at_cup()
             else:
                 ball.view = VIEW_GREEN
         elif ball.view & (VIEW_BEHIND | VIEW_GREEN):
@@ -311,22 +372,30 @@ class ShotInFlight:
             if not ball.pixel_y & 0x8000 and ball.pixel_x < PLAYFIELD_WIDTH:
                 ball.shot_distance = 0
 
-    def _cup(self) -> None:
+    def _at_cup(self) -> None:
         """
-        `LD_A884` -> bank 9 $81C4: holing out, lip-outs and the flagstick. Not
-        ported: it only acts near the cup, so the model refuses there.
+        $AA87 and `LD_A884`: the cup routine, then in or out of the cup view.
+        Leaving it, the ball loses half its speed (unless it is hopping out
+        of a lip-out, which already cost it that) and half its height, and the
+        green view is redrawn.
         """
-        if self.flag is None:
-            return
         ball = self.ball
-        dx = ((ball.x >> 8) - self.flag.x) << 3 & 0xFFFF
-        dy = (self.flag.y - (ball.y >> 8 & 0xFFFF)) << 3 & 0xFFFF
-        u, v = rotate(dx, dy, (self.shot.aim + 0x80) & 0xFF, self.tables)
-        across = byte(u, 1)
-        if across & 0x80:
-            across = -across & 0xFF
-        if across < 6 and (byte(v, 1) + 4) & 0xFF < 0x14:
-            raise UnportedBehaviourError("the cup and flagstick (bank 9 $81C4)")
+        if self.cup is None:
+            return
+        self.cup.update(ball, ball.view == VIEW_CUP)
+        if ball.cup_y != OUT_OF_REACH:
+            if ball.view != VIEW_CUP:
+                # Bank 9 $8000 opens the cup view.
+                ball.view = VIEW_CUP
+                ball.cup_entry_y = 0xFF
+        elif ball.view == VIEW_CUP:
+            if not ball.cup_slow_motion & 0x80:
+                self.cup.halve_speed(ball)
+            ball.cup_slow_motion = 0
+            if not is_negative(ball.height, 32):
+                ball.height >>= 1
+            # Bank 9 $803A, then `DrawGreenDetailView`.
+            ball.view = VIEW_GREEN
 
 
 def _bounce_back(v: int) -> int:
@@ -345,14 +414,16 @@ def simulate(
     tables: PhysicsTables,
     launch_terrain: Terrain | None = None,
     record_path: bool = False,
+    flag: Flag | None = None,
 ) -> ShotResult:
     """
-    Play one shot to rest.
+    Play one shot to rest, or into the cup.
 
     `launch_terrain` overrides what the ground reports at the starting spot,
-    so a uniform fairway can still be driven from a tee.
+    so a uniform fairway can still be driven from a tee. Without a `flag`
+    there is no cup: the ball rolls through the green view untouched.
     """
-    flight = ShotInFlight(shot, ground, tables, launch_terrain)
+    flight = ShotInFlight(shot, ground, tables, launch_terrain, flag=flag)
     ball = flight.ball
     apex = 0.0
     path: list[Point] = []

@@ -21,6 +21,11 @@ def mul8(a: int, b: int) -> tuple[int, int]:
     return product >> 8, product & MASK8
 
 
+def halve(v: int) -> int:
+    """`LDA hi / ASL A / ROR hi / ROR mid / ROR lo`: a 24-bit velocity halved, rounding down."""
+    return (v >> 1 | v & 0x800000) & MASK24
+
+
 def byte(value: int, index: int) -> int:
     """Byte `index` of a register, 0 being the lowest ($DA of $DA-$DC)."""
     return (value >> (8 * index)) & MASK8

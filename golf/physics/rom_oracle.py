@@ -89,6 +89,19 @@ SCENE_DEPTH = 0xC5
 PREVIOUS_LIE = 0x05B3
 BUNKER_FRAMES = 0x05A3
 IN_GREEN_BOX_FLAG = 0x0584
+FRAME_COUNTER = 0x0585
+WATER_DROP = 0x05A5  # $05A5-$05AB: BallX and BallY, with fractions
+CUP_X = 0x63
+CUP_Y = 0x64
+CUP_BOB = 0x65  # $65/$66
+CUP_BOB_SPEED = 0x67  # $67/$68
+CUP_LAST = 0x0580  # $0580 x, $0581 y
+CUP_ENTRY_Y = 0x0582
+CUP_SLOW_MOTION = 0x0593
+CUP_FRAMES = 0x0594
+FLAGSTICK = 0x0595
+CUP_DROP = 0x05C2
+HOLED = 0x05B9
 
 
 class RomShot:
@@ -277,6 +290,21 @@ def read_ball(m: bytearray) -> Ball:
         previous_lie=Lie(m[PREVIOUS_LIE]),
         bunker_frames=m[BUNKER_FRAMES],
         bunker_exit_armed=m[LEFT_BUNKER_ARMED],
+        drop_x=read(WATER_DROP, 3),
+        drop_y=read(WATER_DROP + 3, 4),
+        frame_counter=m[FRAME_COUNTER],
+        cup_x=m[CUP_X],
+        cup_y=m[CUP_Y],
+        cup_bob=read(CUP_BOB, 2),
+        cup_bob_speed=read(CUP_BOB_SPEED, 2),
+        cup_last_x=m[CUP_LAST],
+        cup_last_y=m[CUP_LAST + 1],
+        cup_entry_y=m[CUP_ENTRY_Y],
+        cup_frames=m[CUP_FRAMES],
+        cup_slow_motion=m[CUP_SLOW_MOTION],
+        cup_drop=m[CUP_DROP],
+        flagstick=m[FLAGSTICK],
+        holed=m[HOLED],
         stopped=m[SHOT_PHASE] >= 2,
     )
 

@@ -6,7 +6,6 @@ Each case plays one shot twice, in `golf.physics` and in bank 13's
 physics register to agree after every frame.
 """
 
-import contextlib
 import random
 from dataclasses import dataclass, fields
 from pathlib import Path
@@ -24,7 +23,6 @@ from golf.physics import (
     Spin,
     Terrain,
     UniformGround,
-    UnportedBehaviourError,
 )
 from golf.physics.launch import hi_lo_offset
 from golf.physics.rom_oracle import RomShot
@@ -152,8 +150,4 @@ def test_full_power_straight_shot(rom, tables, club, launch_lie):
 @pytest.mark.parametrize("seed", range(400))
 def test_random_shot(rom, tables, seed):
     shot, ground, launch = random_case(seed)
-    # A ball leaving the sand low reaches the bunker lip rule, which the model
-    # refuses to guess at (docs/shot_physics.md). Every frame up to that point
-    # has already been compared.
-    with contextlib.suppress(UnportedBehaviourError):
-        play_both(rom, tables, shot, ground, launch)
+    play_both(rom, tables, shot, ground, launch)
