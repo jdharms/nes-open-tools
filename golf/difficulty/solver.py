@@ -9,17 +9,22 @@ the lie class a full swing is played from (`landing.LieClass`); the first real
 spot the ball comes to in a cell stands for it. On the green every pixel is its
 own state, and the tee is one too.
 
-**Intents.** From each state the landing table screens every intent it holds
-for a club in the vanilla bag,
-at every other aim within a quarter turn of the pin, against the current value
-of where each would come to rest. The best few, one per club, speed, hi/lo and
-spin, are played exactly (`player.outcomes`). On the green, every putt within
-`PUTT_AIMS` steps of the line to the pin is played once, perfectly, and the
-best few are played exactly.
+**Intents.** From each state off the green the landing table screens every
+intent it holds for a club in the vanilla bag, at every other aim within a
+quarter turn of the pin, against the current value of where each would come to
+rest; the best few are scored again under the player's errors, and the best of
+those are played exactly (`player.outcomes`). Where more than `race` are new,
+all are first played roughly (one RNG state, few errors a draw), and only the
+best of them exactly.
 
-**Rounds.** Only spots play reaches are valued. Each round screens every state
-found so far against the current values, plays what is new on the shortlists
-(all of it for a new state, the top `refresh` for one screened before), runs
+**The green** is solved whole, every pixel of it, from a table of every putt
+played once (`golf.difficulty.green`), and valued again at the start of each
+round against what the rest of the hole is then worth.
+
+**Rounds.** Only spots play reaches are valued. Each round values the green,
+screens every state off it found so far against the current values, plays what is new on the shortlists
+(all of it for a new state, the top `refresh` for one screened before and still
+visited at least `refresh_reach` times), runs
 value iteration, then follows the best play forward from the tee and adds every
 state it visits at least `reach` times on average. Screening and playing are
 separate tasks, so even the first round, the tee alone, is spread over every
@@ -40,7 +45,9 @@ import numpy as np
 
 from golf.core.clubs import VANILLA_CLUBS
 from golf.core.rom_reader import RomReader
+from golf.difficulty import green
 from golf.difficulty.landing import (
+    BASE_AIMS,
     COLUMNS,
     LIE_CLASSES,
     LandingTable,
@@ -48,31 +55,30 @@ from golf.difficulty.landing import (
     cache_path,
     lie_class,
     load,
-    power_targets,
+    scatter,
 )
 from golf.difficulty.player import (
-    PERFECT,
+    ERROR_POINTS,
     RNG_STATES,
     Hole,
     Intent,
     Position,
     Result,
     Skill,
+    errors,
     outcomes,
 )
 from golf.formats.hole_data import HoleData
-from golf.physics.flights import Flights
+from golf.physics.landing import FIRST_SPIN_CLUB
 from golf.physics.shot import Flag
-from golf.physics.state import PUTTER, Lie
+from golf.physics.state import Lie, Spin
 from golf.physics.tables import PhysicsTables
 from golf.physics.terrain import HoleGround, TerrainTables
 
 NO_WIND = (0, 0)
 
-#: Putts are tried at aims up to this many steps either side of the pin,
-#: every `PUTT_COARSE`th at first.
-PUTT_AIMS = 20
-PUTT_COARSE = 4
+#: Errors a draw when intents are raced (`Settings.race`).
+RACE_POINTS = 5
 #: Full swings are tried at every other aim up to this far either side of the pin.
 SWING_AIMS = 64
 #: How many aims the screen scores at once.
@@ -94,20 +100,46 @@ class Settings:
     """Off the green, the size in pixels of the cells states are made of."""
     shortlist: int = 16
     """Intents played exactly from a spot off the green when it is first screened."""
-    putts: int = 8
-    """Putts played exactly from a spot on the green when it is first screened."""
     refresh: int = 4
     """
     At most this many new intents from the top of a spot's shortlist are
     played in each later round, as the values it was screened against change.
+    """
+    race: int = 6
+    """
+    When more intents than this are new on a spot's shortlist, all are first
+    played roughly (`RACE_POINTS` errors a draw, one RNG state) and only this
+    many, the best that way, are played exactly: 0 plays them all exactly.
+    """
+    refresh_reach: float = 0.01
+    """
+    A spot is screened again in later rounds only while the best play visits
+    it at least this often: what a spot's play can add to the tee's value is
+    its visits times its own improvement.
     """
     tolerance: float = 0.002
     """Stop once no spots are added and the tee's value moves less than this."""
     reach: float = 1e-3
     """A spot is valued once the best play visits it this often on average."""
     blur: float = 2.0
-    """The value map is blurred by this many pixels for the screen, for execution's spread."""
+    """The value map is blurred by this many pixels for the screen's first pass."""
+    candidates: int = 32
+    """
+    Off the green, the best intents of this many groups from the first pass
+    are scored again under the player's errors, at every aim, before the
+    shortlist is taken: 0 keeps the first pass's order.
+    """
     rounds: int = 12
+    rng_states: int = len(RNG_STATES)
+    """How many of `player.RNG_STATES` each full swing is played from."""
+    scatter_on_hole: bool = True
+    """
+    The screen's second pass plays each candidate's timing errors on the hole
+    from the spot itself, not over plain fairway: an approach rolls out on the
+    green, where slope, friction and backspin's bite all differ.
+    """
+    error_points: int = ERROR_POINTS
+    """About how many errors stand for each draw off the green (`player.errors`)."""
 
 
 @dataclass
@@ -116,6 +148,10 @@ class Transition:
 
     intent: Intent
     outcomes: list[tuple[Key | None, int, float]]
+    rank: int = 0
+    """Where the screen placed it on its spot's shortlist, 0 first."""
+    screened: float = math.nan
+    """The screen's estimate of its expected strokes."""
 
 
 @dataclass
@@ -131,6 +167,8 @@ class Solution:
     rounds: int
     shots: int
     """Intents played exactly, in all."""
+    transitions: dict[Key, list[Transition]] = field(default_factory=dict)
+    """Every intent played from each state, with where the screen ranked it."""
 
     @property
     def tee(self) -> float:
@@ -170,7 +208,7 @@ def _make_context(
     hole_data.load(Path(hole_path))
     ground = HoleGround(hole_data, TerrainTables.from_rom(rom))
     flag = Flag.for_pin(hole_data, pin)
-    hole = Hole(ground, tables, flag, Flights(tables, max_flights=256))
+    hole = Hole(ground, tables, flag)
     table = load(Path(table_path)) if table_path else None
     return _Context(hole, ground, table, skill, tables, flag, ground.bottom_y)
 
@@ -188,17 +226,14 @@ class _Task:
     """The current expected strokes from this spot."""
 
 
-def _screen(task: _Task) -> tuple[Key, list[Intent], float]:
-    """The intents worth playing from `task`'s spot, best first."""
+def _screen(task: _Task) -> tuple[Key, list[tuple[Intent, float]], float]:
+    """The intents worth playing from `task`'s spot, best first, with their scores."""
     context = _context
     assert context is not None
     started = time.perf_counter()
     terrain = context.ground.classify(task.position.x, 0, task.position.y, 0)
-    if terrain.lie == Lie.GREEN:
-        chosen = _screen_putts(context, task)
-    else:
-        lie = lie_class(terrain, task.position.bunker_depth)
-        chosen = _screen_swings(context, task, lie)
+    lie = lie_class(terrain, task.position.bunker_depth)
+    chosen = _screen_swings(context, task, lie)
     return task.key, chosen, time.perf_counter() - started
 
 
@@ -210,12 +245,48 @@ def _play(
     assert context is not None
     started = time.perf_counter()
     key, position, intent = task
-    # A putt reads the RNG only if it runs into sand or water, so one state
-    # stands for all of them on the green.
-    putt = context.ground.classify(position.x, 0, position.y, 0).lie == Lie.GREEN
-    states = (RNG_STATES[0],) if putt else RNG_STATES
-    results = outcomes(intent, position, context.hole, NO_WIND, context.skill, states)
+    results = outcomes(
+        intent,
+        position,
+        context.hole,
+        NO_WIND,
+        context.skill,
+        RNG_STATES[:_RNG_COUNT],
+        _ERROR_POINTS,
+    )
     return key, intent, results, time.perf_counter() - started
+
+
+def _play_roughly(
+    task: tuple[Key, Position, Intent],
+) -> tuple[Key, Intent, dict[Result, float], float]:
+    """Play one intent from one spot roughly, to race it against others."""
+    context = _context
+    assert context is not None
+    started = time.perf_counter()
+    key, position, intent = task
+    results = outcomes(
+        intent,
+        position,
+        context.hole,
+        NO_WIND,
+        context.skill,
+        RNG_STATES[:1],
+        RACE_POINTS,
+    )
+    return key, intent, results, time.perf_counter() - started
+
+
+def _green_pixel(
+    task: tuple[int, int, int],
+) -> tuple[int, int, np.ndarray, np.ndarray, float]:
+    """One pixel's putts, for the green's table."""
+    context = _context
+    assert context is not None
+    started = time.perf_counter()
+    x, y, centre = task
+    rests, strokes = green.build_pixel(context.hole, Position(x, y), centre)
+    return x, y, rests, strokes, time.perf_counter() - started
 
 
 _loaded: tuple[str, np.ndarray] | None = None
@@ -236,14 +307,16 @@ def _aim_to(position: Position, flag: Flag) -> float:
     return math.atan2(dx, -dy) * 128 / math.pi
 
 
-def _screen_swings(context: _Context, task: _Task, lie: LieClass) -> list[Intent]:
+def _screen_swings(
+    context: _Context, task: _Task, lie: LieClass
+) -> list[tuple[Intent, float]]:
     table = context.table
     assert table is not None
     toward = round(_aim_to(task.position, context.flag) / 2) * 2
     aims = np.arange(toward - SWING_AIMS, toward + SWING_AIMS + 1, 2) % 256
-    values = _landing_values(_values(task), task.here)
+    values = _landing_values(_values(task), task.here, _BLUR)
     height, width = values.shape
-    usable = _in_bag(table, lie)
+    usable = _usable(table, lie)
     best = np.full(len(usable), np.inf)
     best_aim = np.zeros(len(usable), dtype=int)
     # A few aims at a time, keeping each intent's best: all at once is
@@ -273,12 +346,93 @@ def _screen_swings(context: _Context, task: _Task, lie: LieClass) -> list[Intent
     first = np.ones(len(order), dtype=bool)
     first[1:] = groups[order][1:] != groups[order][:-1]
     leaders = order[first]
-    leaders = leaders[np.argsort(best[leaders])][:_SHORTLIST]
-    return [
-        table.intent(lie, int(index), int(aims[best_aim[index]]))
-        for index in leaders
-        if np.isfinite(best[index])
+    leaders = leaders[np.isfinite(best[leaders])]
+    leaders = leaders[np.argsort(best[leaders])]
+    if not _CANDIDATES:
+        return [
+            (
+                table.intent(lie, int(index), int(aims[best_aim[index]])),
+                float(best[index]),
+            )
+            for index in leaders[:_SHORTLIST]
+        ]
+    rest_values = _landing_values(_values(task), task.here, _SCATTER_BLUR)
+    scored = [
+        _scattered(
+            context,
+            task,
+            lie,
+            int(index),
+            int(aims[best_aim[index]]),
+            aims,
+            rest_values,
+        )
+        for index in leaders[:_CANDIDATES]
     ]
+    return sorted(scored, key=lambda item: item[1])[:_SHORTLIST]
+
+
+_scatters: dict[tuple, np.ndarray] = {}
+
+
+def _scattered(
+    context: _Context,
+    task: _Task,
+    lie: LieClass,
+    index: int,
+    aim: int,
+    aims: np.ndarray,
+    values: np.ndarray,
+) -> tuple[Intent, float]:
+    """
+    Row `index` of the table scored under the player's errors at each of
+    `aims`, at the best of them: timing errors from its scatter, aim errors by
+    turning it. The scatter is played on the hole itself from this spot at
+    `aim` (`_SCATTER_ON_HOLE`), or over plain fairway at the base aim nearest
+    `aim`; either is kept.
+    """
+    table = context.table
+    assert table is not None
+    position = task.position
+    if _SCATTER_ON_HOLE:
+        key = (lie, index, aim, position.x, position.y)
+        played = table.intent(lie, index, aim)
+        ground, start = context.ground, (position.x, position.y)
+    else:
+        base = BASE_AIMS[round(aim / 32) % len(BASE_AIMS)]
+        key = (lie, index, base)
+        played = table.intent(lie, index, base)
+        ground, start = None, None
+    if key not in _scatters:
+        _scatters[key] = scatter(
+            context.tables,
+            played,
+            lie,
+            context.skill,
+            _ERROR_POINTS,
+            ground,
+            start,
+        )
+    rows = _scatters[key]
+    turns = errors(context.skill.aim, _ERROR_POINTS)
+    turned = np.array([turn for turn, _ in turns], dtype=np.float64)
+    weights = np.array([p for _, p in turns])[:, None] * rows[:, 2][None, :]
+    angle = (aims[:, None] + turned[None, :]) * 2 * np.pi / 256  # (aims, turns)
+    sin, cos = np.sin(angle)[..., None], np.cos(angle)[..., None]
+    across, along = rows[:, 0], rows[:, 1]
+    x = np.rint(task.position.x + along * sin + across * cos)
+    y = np.rint(task.position.y - along * cos + across * sin)
+    height, width = values.shape
+    missing = np.isnan(x)
+    x = np.where(missing, -1, x).astype(np.int32)
+    y = np.where(missing, -1, y).astype(np.int32)
+    inside = (x >= 0) & (x < width) & (y >= 0) & (y < height)
+    # A whiff, or off the hole: a stroke and this spot again.
+    score = np.full(x.shape, 1 + task.here)
+    score[inside] = values[y[inside], x[inside]]
+    expected = (score * weights[None]).sum(axis=(1, 2))
+    best = int(expected.argmin())
+    return table.intent(lie, index, int(aims[best])), float(expected[best])
 
 
 _group_cache: dict[tuple, np.ndarray] = {}
@@ -294,16 +448,26 @@ def _groups(table: LandingTable, lie: LieClass) -> np.ndarray:
     return _group_cache[key]
 
 
-def _in_bag(table: LandingTable, lie: LieClass) -> np.ndarray:
-    """Which of the table's intents use a club in the vanilla bag."""
-    key = (id(table), lie, "bag")
+def _usable(table: LandingTable, lie: LieClass) -> np.ndarray:
+    """
+    Which of the table's intents to screen: those with a club in the vanilla
+    bag, less BACK 2 wherever it plays exactly as BACK 1 does. The two differ
+    only when the first bounce is on the green, for clubs from
+    `FIRST_SPIN_CLUB` and shots not played from the rough (`ProcessLanding`).
+    """
+    key = (id(table), lie, "usable")
     if key not in _group_cache:
-        clubs = table.intents[lie][:, COLUMNS.index("club")]
-        _group_cache[key] = np.isin(clubs, [int(club) for club in VANILLA_CLUBS])
+        intents = table.intents[lie]
+        clubs = intents[:, COLUMNS.index("club")]
+        usable = np.isin(clubs, [int(club) for club in VANILLA_CLUBS])
+        twin = intents[:, COLUMNS.index("spin")] == Spin.BACK_2
+        if lie.lie != Lie.ROUGH:
+            twin &= clubs < FIRST_SPIN_CLUB
+        _group_cache[key] = usable & ~twin
     return _group_cache[key]
 
 
-def _landing_values(values: np.ndarray, here: float) -> np.ndarray:
+def _landing_values(values: np.ndarray, here: float, blur: float) -> np.ndarray:
     """
     The value of the ball coming to rest on each pixel, blurred: a pixel's own
     class, with water and out of bounds a penalty stroke and this spot again.
@@ -311,7 +475,7 @@ def _landing_values(values: np.ndarray, here: float) -> np.ndarray:
     classes = values[-1].astype(int)
     rest = np.take_along_axis(values[:-1], classes[None].clip(0, GREEN), axis=0)[0]
     rest = np.where(classes >= WATER, 1 + here, rest)
-    return _blur(rest, _BLUR)
+    return _blur(rest, blur)
 
 
 def _blur(values: np.ndarray, sigma: float) -> np.ndarray:
@@ -329,44 +493,6 @@ def _blur(values: np.ndarray, sigma: float) -> np.ndarray:
     for i, k in enumerate(kernel):
         blurred += k * rows[i : i + height]
     return blurred
-
-
-def _screen_putts(context: _Context, task: _Task) -> list[Intent]:
-    """
-    Every putt near the line, played once perfectly: first at every
-    `PUTT_COARSE`th aim, then at every aim and power around the best of those.
-    """
-    values = _values(task)
-    toward = round(_aim_to(task.position, context.flag))
-    scores: dict[Intent, float] = {}
-
-    def score(intent: Intent) -> None:
-        if intent in scores:
-            return
-        (result,) = outcomes(
-            intent, task.position, context.hole, NO_WIND, PERFECT, (RNG_STATES[0],)
-        )
-        if result.holed:
-            scores[intent] = 1.0
-            return
-        x, y = result.position.x, result.position.y
-        klass = _class_at(context, result.position)
-        scores[intent] = result.strokes + float(values[klass, y, x])
-
-    powers = [power_targets(context.tables, speed, putting=True) for speed in range(3)]
-    for speed in range(3):
-        for power in powers[speed]:
-            for aim in range(toward - PUTT_AIMS, toward + PUTT_AIMS + 1, PUTT_COARSE):
-                score(Intent(PUTTER, aim % 256, power, swing_speed=speed))
-    coarse = sorted(scores, key=scores.__getitem__)[:_PUTTS]
-    for best in coarse:
-        speed_powers = powers[best.swing_speed]
-        at = speed_powers.index(best.power_target)
-        for power in speed_powers[max(0, at - 2) : at + 3]:
-            for turn in range(-PUTT_COARSE + 1, PUTT_COARSE):
-                aim = (best.aim + turn) % 256
-                score(Intent(PUTTER, aim, power, swing_speed=best.swing_speed))
-    return sorted(scores, key=scores.__getitem__)[:_PUTTS]
 
 
 def _class_at(context: _Context, position: Position) -> int:
@@ -391,13 +517,21 @@ def pixel_class(lie: Lie, rough_depth: int, bunker_depth: int = 0) -> int:
 
 # Set per worker from the settings; module globals keep `_Task` small.
 _SHORTLIST = Settings.shortlist
-_PUTTS = Settings.putts
 _BLUR = Settings.blur
+_CANDIDATES = Settings.candidates
+_RNG_COUNT = Settings.rng_states
+_SCATTER_ON_HOLE = Settings.scatter_on_hole
+_ERROR_POINTS = Settings.error_points
+#: The value map's blur for the second pass, whose errors are its own.
+_SCATTER_BLUR = 1.0
 
 
 def _configure(settings: Settings) -> None:
-    global _SHORTLIST, _PUTTS, _BLUR
-    _SHORTLIST, _PUTTS, _BLUR = settings.shortlist, settings.putts, settings.blur
+    global _SHORTLIST, _BLUR, _CANDIDATES, _RNG_COUNT, _ERROR_POINTS, _SCATTER_ON_HOLE
+    _SHORTLIST, _BLUR = settings.shortlist, settings.blur
+    _CANDIDATES = settings.candidates
+    _RNG_COUNT, _ERROR_POINTS = settings.rng_states, settings.error_points
+    _SCATTER_ON_HOLE = settings.scatter_on_hole
 
 
 def _start(rom_path, hole_path, pin, table_path, skill, settings) -> None:
@@ -543,6 +677,11 @@ class HoleSolver:
             if change < tolerance:
                 break
 
+    def q(self, transitions: list[Transition]) -> list[float]:
+        """The expected strokes of playing each transition's intent, on the current values."""
+        borrowed = self._borrowed()
+        return [self._q(transition, borrowed) for transition in transitions]
+
     def _q(self, transition: Transition, borrowed: dict[int, np.ndarray]) -> float:
         total = 0.0
         for key, strokes, probability in transition.outcomes:
@@ -604,30 +743,49 @@ class HoleSolver:
             ),
         ) as pool:
             self.scratch.mkdir(parents=True, exist_ok=True)
+            greens = green.GreenSolver(self._green_table(pool), self.tables, self.skill)
             round_number = 0
             previous_tee = math.inf
+            inside: dict[Key, float] = {}
             for round_number in range(1, settings.rounds + 1):
+                self._value_green(greens)
                 values = str(self.scratch / f"values-{os.getpid()}-{round_number}.npy")
                 np.save(values, self.value_map().astype(np.float32))
                 borrowed = self._borrowed()
                 keys = sorted(
-                    set(self.transitions) | pending,
+                    {
+                        k
+                        for k in set(self.transitions) | pending
+                        if k[0] != GREEN
+                        and (
+                            k not in self.transitions
+                            or inside.get(k, 0.0) >= settings.refresh_reach
+                        )
+                    },
                     key=lambda k: (self.positions[k].y, self.positions[k].x),
                 )
                 screens = [
                     _Task(key, self.positions[key], values, self.value(key, borrowed))
                     for key in keys
                 ]
-                busy = 0.0
+                screening = playing = 0.0
                 plays: list[tuple[Key, Position, Intent]] = []
+                screened: dict[tuple[Key, Intent], tuple[int, float]] = {}
                 for key, chosen, seconds in pool.map(_screen, screens, chunksize=4):
-                    busy += seconds
+                    screening += seconds
                     played = {t.intent for t in self.transitions.get(key, [])}
-                    fresh = [intent for intent in chosen if intent not in played]
+                    fresh = [
+                        (rank, intent, score)
+                        for rank, (intent, score) in enumerate(chosen)
+                        if intent not in played
+                    ]
                     if played:
                         fresh = fresh[: settings.refresh]
-                    plays.extend((key, self.positions[key], intent) for intent in fresh)
-                # Like shots next to each other, so a worker's flights are shared.
+                    for rank, intent, score in fresh:
+                        screened[key, intent] = (rank, score)
+                        plays.append((key, self.positions[key], intent))
+                plays, racing = self._race(pool, plays, borrowed)
+                # Like shots next to each other, for each worker's caches.
                 plays.sort(
                     key=lambda p: (p[2].club, p[2].swing_speed, p[2].aim, p[1].y)
                 )
@@ -635,9 +793,10 @@ class HoleSolver:
                 for key, intent, results, seconds in pool.map(
                     _play, plays, chunksize=4
                 ):
-                    busy += seconds
+                    playing += seconds
+                    rank, score = screened[key, intent]
                     self.transitions.setdefault(key, []).append(
-                        Transition(intent, self._outcomes(results))
+                        Transition(intent, self._outcomes(results), rank, score)
                     )
                     added += 1
                 shots += added
@@ -649,10 +808,13 @@ class HoleSolver:
                         pending.add(key)
                 tee = self.expected[TEE]
                 self.log(
-                    f"round {round_number}: {len(self.transitions)} states, "
+                    f"round {round_number}: {len(keys)} of "
+                    f"{sum(k[0] != GREEN for k in self.transitions)} states screened, "
                     f"{added} intents played, {len(pending)} to add, "
                     f"tee {self.expected[TEE]:.3f}, "
-                    f"{time.perf_counter() - started:.0f} s ({busy:.0f} s of work)"
+                    f"{time.perf_counter() - started:.0f} s "
+                    f"({screening:.0f} s screening, {racing:.0f} s racing, "
+                    f"{playing:.0f} s playing)"
                 )
                 settled = abs(tee - previous_tee) < settings.tolerance
                 if not pending and (not added or settled):
@@ -668,7 +830,97 @@ class HoleSolver:
             sum(outside.values()),
             round_number,
             shots,
+            {key: list(ts) for key, ts in self.transitions.items()},
         )
+
+    def _race(
+        self,
+        pool: ProcessPoolExecutor,
+        plays: list[tuple[Key, Position, Intent]],
+        borrowed: dict[int, np.ndarray],
+    ) -> tuple[list[tuple[Key, Position, Intent]], float]:
+        """
+        The plays worth making exactly: where a spot has more than
+        `Settings.race` new intents, the best of them played roughly.
+        """
+        keep = self.settings.race
+        by_key: dict[Key, list[tuple[Key, Position, Intent]]] = {}
+        for play in plays:
+            by_key.setdefault(play[0], []).append(play)
+        raced = [p for ps in by_key.values() if keep and len(ps) > keep for p in ps]
+        if not raced:
+            return plays, 0.0
+        seconds = 0.0
+        rough: dict[Key, list[tuple[float, Intent]]] = {}
+        for key, intent, results, spent in pool.map(_play_roughly, raced, chunksize=4):
+            seconds += spent
+            expected = sum(
+                p
+                * (
+                    r.strokes
+                    + (0.0 if r.holed else self.value(self.key(r.position), borrowed))
+                )
+                for r, p in results.items()
+            )
+            rough.setdefault(key, []).append((expected, intent))
+        kept = []
+        for key, ps in by_key.items():
+            if key not in rough:
+                kept.extend(ps)
+                continue
+            best = {
+                intent for _, intent in sorted(rough[key], key=lambda r: r[0])[:keep]
+            }
+            kept.extend(p for p in ps if p[2] in best)
+        return kept, seconds
+
+    def _green_table(self, pool: ProcessPoolExecutor) -> green.GreenTable:
+        """The green's table of putts, built on `pool` the first time."""
+        path = green.cache_path(
+            Path(self.rom_path).read_bytes(),
+            self.hole_path.read_bytes(),
+            self.pin,
+            self.scratch,
+        )
+        if path.exists():
+            return green.load(path)
+        started = time.perf_counter()
+        flag = (self.flag.x >> 8, self.flag.y >> 8)
+        pixels = [(int(x), int(y)) for y, x in np.argwhere(self._classes == GREEN)]
+        tasks = [(x, y, green.aim_at(Position(x, y), flag)) for x, y in pixels]
+        built = {
+            (x, y): (rests, strokes)
+            for x, y, rests, strokes, _ in pool.map(_green_pixel, tasks)
+        }
+        table = green.GreenTable(
+            np.array(pixels, dtype=np.int16).reshape(-1, 2),
+            np.array([centre for _, _, centre in tasks], dtype=np.int16),
+            np.stack([built[p][0] for p in pixels]),
+            np.stack([built[p][1] for p in pixels]),
+        )
+        green.save(table, path)
+        self.log(
+            f"green: {len(pixels)} pixels' putts played in "
+            f"{time.perf_counter() - started:.0f} s"
+        )
+        return table
+
+    def _value_green(self, greens: green.GreenSolver) -> None:
+        """Solve the green against the current values off it, and take its states."""
+        borrowed = self._borrowed()
+        outside = np.array(
+            [self.value(self.key(leave), borrowed) for leave in greens.leaves]
+        )
+        values = greens.solve(outside)
+        for pixel, putts in enumerate(greens.best()):
+            x, y = (int(v) for v in greens.table.pixels[pixel])
+            key: Key = (GREEN, x, y)
+            self.positions[key] = Position(x, y)
+            self.expected[key] = float(values[pixel])
+            self.transitions[key] = [
+                Transition(intent, self._outcomes(results), rank, value)
+                for rank, (intent, results, value) in enumerate(putts)
+            ]
 
     def _outcomes(
         self, results: dict[Result, float]

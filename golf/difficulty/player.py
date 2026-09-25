@@ -25,7 +25,7 @@ from functools import cache
 from golf.physics import meter
 from golf.physics.flights import Flights
 from golf.physics.rules import play_on
-from golf.physics.shot import Flag
+from golf.physics.shot import Flag, simulate
 from golf.physics.state import (
     PERFECT_ACCURACY,
     PUTTER,
@@ -38,6 +38,9 @@ from golf.physics.tables import PhysicsTables
 
 #: Errors are drawn out to this many standard deviations, and renormalised.
 ERROR_REACH = 2.0
+#: About this many distinct errors stand for each draw: a wider error is
+#: played at every few whole units, so a shot costs much the same at any skill.
+ERROR_POINTS = 7
 
 #: The RNG states each shot is played from, standing for all of them. Two of
 #: each parity, as the fairway's first bounce reads the low bit.
@@ -110,14 +113,13 @@ class Hole:
     flag: Flag | None
     flights: Flights | None = field(default=None, compare=False, repr=False)
     """
-    Flights shared between the shots played here, and with any other hole
+    Flights to share between the shots played here, and with any other hole
     given the same `Flights` (they depend on neither the hole nor the pin).
-    Each hole gets its own when none is given.
+    None plays every shot with `simulate`, which gives the same results and is
+    faster whenever few shots share a flight: with the player's errors, each
+    timing and aim is a flight of its own, shared only across the RNG states,
+    and recording one costs more than playing it.
     """
-
-    def __post_init__(self) -> None:
-        if self.flights is None:
-            object.__setattr__(self, "flights", Flights(self.tables))
 
 
 @dataclass(frozen=True)
@@ -135,8 +137,14 @@ HOLED = Result(Position(0, 0), 1, True)
 
 
 @cache
-def errors(deviation: float) -> tuple[tuple[int, float], ...]:
-    """A normal error, rounded to whole units, as (error, probability)."""
+def errors(
+    deviation: float, points: int = ERROR_POINTS
+) -> tuple[tuple[int, float], ...]:
+    """
+    A normal error, rounded to whole units, as (error, probability). Past
+    `points` whole units, every `stride`th stands for those nearest it (a
+    unit halfway between two is shared).
+    """
     if deviation <= 0:
         return ((0, 1.0),)
     reach = math.ceil(ERROR_REACH * deviation)
@@ -144,9 +152,19 @@ def errors(deviation: float) -> tuple[tuple[int, float], ...]:
     def below(x: float) -> float:
         return 0.5 * (1 + math.erf(x / (deviation * math.sqrt(2))))
 
-    weights = [(k, below(k + 0.5) - below(k - 0.5)) for k in range(-reach, reach + 1)]
-    total = sum(w for _, w in weights)
-    return tuple((k, w / total) for k, w in weights)
+    weights = {k: below(k + 0.5) - below(k - 0.5) for k in range(-reach, reach + 1)}
+    total = sum(weights.values())
+    stride = -(-(2 * reach + 1) // points)
+    grid: dict[int, float] = {}
+    for k, weight in weights.items():
+        low, high = (k // stride) * stride, -(-k // stride) * stride
+        if high - k < k - low:
+            low = high
+        elif high - k == k - low and low != high:
+            grid[high] = grid.get(high, 0.0) + weight / total / 2
+            weight /= 2
+        grid[low] = grid.get(low, 0.0) + weight / total
+    return tuple(sorted(grid.items()))
 
 
 def power_press(
@@ -187,11 +205,16 @@ def accuracy_press(
 
 
 def swings(
-    tables: PhysicsTables, intent: Intent, putting: bool, skill: Skill
+    tables: PhysicsTables,
+    intent: Intent,
+    putting: bool,
+    skill: Skill,
+    points: int = ERROR_POINTS,
 ) -> dict[meter.SwingTiming | None, float]:
     """
     Every swing the player's timing can produce, with its probability. None
     is a whiff: the accuracy meter ran off the end before the second press.
+    `points` is how many errors stand for each press (`errors`).
     """
     speed = intent.swing_speed
     aimed_power = power_press(tables, speed, putting, intent.power_target)
@@ -199,7 +222,7 @@ def swings(
     # A putt's backswing starts by itself; any other starts on a press, which
     # the power press must come far enough after to be seen.
     earliest = 1 if putting else meter.MIN_PRESS_GAP
-    for power_error, p_power in errors(skill.power):
+    for power_error, p_power in errors(skill.power, points):
         pressed = max(earliest, aimed_power + power_error)
         if putting:
             timing = meter.swing(tables, speed, True, pressed)
@@ -207,7 +230,7 @@ def swings(
             continue
         back = meter.backswing(tables, speed, False, pressed)
         aimed = accuracy_press(tables, speed, back, intent.accuracy_target)
-        for accuracy_error, p_accuracy in errors(skill.accuracy):
+        for accuracy_error, p_accuracy in errors(skill.accuracy, points):
             # The game ignores a press too soon after the last: pressed any
             # sooner, the player's press is the first one it would see.
             gap = max(meter.MIN_PRESS_GAP, aimed + accuracy_error)
@@ -223,10 +246,13 @@ def outcomes(
     wind: tuple[int, int],
     skill: Skill,
     rng_states: Sequence[int] = RNG_STATES,
+    points: int = ERROR_POINTS,
 ) -> dict[Result, float]:
     """
     Everything `intent` can come to from `position` in `wind`, the
     (`WindDirection`, `WindSpeed`) the shot was dealt, with its probability.
+    `points` is how many errors stand for each draw (`errors`): fewer is a
+    rougher, cheaper answer.
     """
     start = hole.ground.classify(position.x, 0, position.y, 0)
     putting = start.lie == Lie.GREEN
@@ -250,12 +276,12 @@ def outcomes(
     def add(result: Result, probability: float) -> None:
         results[result] = results.get(result, 0.0) + probability
 
-    for timing, p_timing in swings(hole.tables, intent, putting, skill).items():
+    for timing, p_timing in swings(hole.tables, intent, putting, skill, points).items():
         if timing is None:
             # A whiff costs a stroke and leaves the ball where it was.
             add(Result(position, 1, False), p_timing)
             continue
-        for aim_error, p_aim in errors(skill.aim):
+        for aim_error, p_aim in errors(skill.aim, points):
             aimed = replace(
                 shot,
                 aim=(intent.aim + aim_error) & 0xFF,
@@ -265,13 +291,16 @@ def outcomes(
             )
             p = p_timing * p_aim / len(rng_states)
             for rng_state in rng_states:
-                add(_result(replace(aimed, rng_state=rng_state), hole), p)
+                add(shot_result(replace(aimed, rng_state=rng_state), hole), p)
     return results
 
 
-def _result(shot: ShotInput, hole: Hole) -> Result:
-    assert hole.flights is not None
-    finished = hole.flights.simulate(shot, hole.ground, hole.flag)
+def shot_result(shot: ShotInput, hole: Hole) -> Result:
+    """Where one shot, exactly as given, leaves the next one: what `outcomes` adds up."""
+    if hole.flights is None:
+        finished = simulate(shot, hole.ground, hole.tables, flag=hole.flag)
+    else:
+        finished = hole.flights.simulate(shot, hole.ground, hole.flag)
     next_shot = play_on(shot, finished.ball)
     if next_shot.holed:
         return HOLED

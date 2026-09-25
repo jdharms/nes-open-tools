@@ -24,9 +24,12 @@ from golf.difficulty.landing import (
     power_targets,
     save,
 )
-from golf.difficulty.player import PERFECT, Intent, swings
+from golf.difficulty.player import PERFECT, Hole, Intent, Position, outcomes, swings
 from golf.difficulty.solver import GREEN, _blur, _spread, guess, pixel_class
+from golf.formats.hole_data import HoleData
 from golf.physics import (
+    Flag,
+    HoleGround,
     Lie,
     PhysicsTables,
     ShotInput,
@@ -35,6 +38,7 @@ from golf.physics import (
     UniformGround,
     simulate,
 )
+from golf.physics.terrain import TerrainTables
 
 ROM_PATH = "nes_open_us.nes"
 
@@ -162,3 +166,47 @@ def test_guesses_grow_with_distance():
     assert guess(50, GREEN) < 2.0
     assert guess(100, 0) < guess(200, 0)
     assert guess(100, 0) < guess(100, pixel_class(Lie.ROUGH, 1))
+
+
+def test_back_2_is_back_1_where_the_screen_drops_it(tables):
+    """
+    From around the US 1st's green, BACK 2 plays exactly as BACK 1 for the
+    woods and from the rough, as `_usable` assumes, and not for an iron from
+    the fairway.
+    """
+    rom = RomReader(ROM_PATH)
+    hole_data = HoleData()
+    hole_data.load(Path("courses/us/hole_01.json"))
+    ground = HoleGround(hole_data, TerrainTables.from_rom(rom))
+    flag = Flag.for_pin(hole_data, 0)
+    pin_x, pin_y = flag.x >> 8, flag.y >> 8
+
+    def near(lie: Lie) -> Position:
+        for distance in range(20, 60):
+            for x in range(pin_x - 8, pin_x + 9):
+                y = pin_y + distance
+                if ground.classify(x, 0, y, 0).lie == lie:
+                    return Position(x, y)
+        raise AssertionError(f"no {lie.name} below the green")
+
+    hole = Hole(ground, tables, flag)
+
+    def rests(club: int, position: Position, spin: Spin) -> list:
+        aim = round(math.atan2(pin_x - position.x, position.y - pin_y) * 128 / math.pi)
+        return [
+            outcomes(
+                Intent(club, aim % 256, power, spin=spin),
+                position,
+                hole,
+                (0, 0),
+                PERFECT,
+            )
+            for power in range(0, 0x30, 3)
+        ]
+
+    rough, fairway = near(Lie.ROUGH), near(Lie.FAIRWAY)
+    for club, position in ((0, fairway), (3, fairway), (10, rough), (13, rough)):
+        assert rests(club, position, Spin.BACK_1) == rests(
+            club, position, Spin.BACK_2
+        ), (club, position)
+    assert rests(13, fairway, Spin.BACK_1) != rests(13, fairway, Spin.BACK_2)

@@ -25,12 +25,20 @@ from typing import Any
 
 import numpy as np
 
-from golf.difficulty.player import PERFECT, Intent, power_press, swings
+from golf.difficulty.player import (
+    ERROR_POINTS,
+    PERFECT,
+    Intent,
+    Skill,
+    power_press,
+    swings,
+)
 from golf.physics import meter
 from golf.physics.shot import simulate
 from golf.physics.state import (
     PERFECT_ACCURACY,
     PUTTER,
+    Ground,
     Lie,
     ShotInput,
     Spin,
@@ -130,9 +138,25 @@ def _rest(
     (across, along) the aim in pixels: NaN if it leaves the playfield or whiffs.
     """
     (timing,) = swings(tables, intent, False, PERFECT)
+    return _rest_of(tables, intent, lie, aim, timing)
+
+
+def _rest_of(
+    tables: PhysicsTables,
+    intent: Intent,
+    lie: LieClass,
+    aim: int,
+    timing: meter.SwingTiming | None,
+    ground: Ground | None = None,
+    start: tuple[int, int] | None = None,
+) -> tuple[float, float]:
+    """
+    `_rest` for the swing `timing`, however well it hit the intent: over
+    plain fairway, or over `ground` from `start` when both are given.
+    """
     if timing is None:
         return math.nan, math.nan
-    x, y = _start(aim)
+    x, y = start if start is not None else _start(aim)
     shot = ShotInput(
         club=intent.club,
         swing_speed=intent.swing_speed,
@@ -147,7 +171,10 @@ def _rest(
         y=y,
         frames_to_impact=timing.frames_to_impact or 0,
     )
-    result = simulate(shot, _FAIRWAY_EVERYWHERE, tables, launch_terrain=lie.terrain)
+    if ground is None:
+        result = simulate(shot, _FAIRWAY_EVERYWHERE, tables, launch_terrain=lie.terrain)
+    else:
+        result = simulate(shot, ground, tables)
     if result.ball.lie == Lie.OUT_OF_BOUNDS:
         return math.nan, math.nan
     dx, dy = result.rest.x - x, result.rest.y - y
@@ -155,6 +182,33 @@ def _rest(
     across = dx * math.cos(angle) + dy * math.sin(angle)
     along = dx * math.sin(angle) - dy * math.cos(angle)
     return across, along
+
+
+def scatter(
+    tables: PhysicsTables,
+    intent: Intent,
+    lie: LieClass,
+    skill: Skill,
+    points: int = ERROR_POINTS,
+    ground: Ground | None = None,
+    start: tuple[int, int] | None = None,
+) -> np.ndarray:
+    """
+    Where `intent` comes to rest under `skill`'s timing errors, as rows of
+    (across, along, probability) about its aim: NaN where it whiffs or leaves
+    the playfield. Over plain fairway, or over `ground` from `start` when both
+    are given, as a real hole rolls a ball differently (on the green above
+    all). The aim error is left out, since a turned shot is its rest turned
+    (see the module docstring), near enough for a few steps on real ground.
+    """
+    rows = [
+        (
+            *_rest_of(tables, intent, lie, intent.aim, timing, ground, start),
+            probability,
+        )
+        for timing, probability in swings(tables, intent, False, skill, points).items()
+    ]
+    return np.array(rows, dtype=np.float64).reshape(-1, 3)
 
 
 _FAIRWAY_EVERYWHERE = UniformGround(Terrain(Lie.FAIRWAY))

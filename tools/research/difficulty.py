@@ -8,6 +8,8 @@ and no wind.
 
 The first run builds the landing table the solver screens intents with (about
 a million shots, some minutes on every core) and caches it under `.cache/`.
+The first run on each hole and pin also plays every putt on its green once
+(`golf.difficulty.green`, a few minutes) and caches that too.
 
 Examples:
     golf-difficulty nes_open_us.nes --course us --hole 1
@@ -17,6 +19,7 @@ Examples:
 
 import argparse
 import json
+import math
 import time
 from pathlib import Path
 
@@ -24,7 +27,7 @@ from golf.core.clubs import Club
 from golf.core.rom_reader import RomReader
 from golf.difficulty.landing import cache_path, load_or_build
 from golf.difficulty.player import Intent, Skill
-from golf.difficulty.solver import TEE, HoleSolver, Settings
+from golf.difficulty.solver import GREEN, TEE, HoleSolver, Settings
 from golf.physics import PhysicsTables
 
 SPEEDS = ("slow", "medium", "fast")
@@ -64,11 +67,40 @@ def main() -> None:
     defaults = Settings()
     parser.add_argument("--grid", type=int, default=defaults.grid)
     parser.add_argument("--shortlist", type=int, default=defaults.shortlist)
-    parser.add_argument("--putts", type=int, default=defaults.putts)
+    parser.add_argument(
+        "--candidates",
+        type=int,
+        default=defaults.candidates,
+        help="groups the screen scores again under the player's errors; 0 for none",
+    )
     parser.add_argument("--reach", type=float, default=defaults.reach)
+    parser.add_argument(
+        "--scatter-on-fairway",
+        action="store_true",
+        help="play the screen's second pass over plain fairway, not the hole",
+    )
     parser.add_argument("--refresh", type=int, default=defaults.refresh)
+    parser.add_argument(
+        "--race",
+        type=int,
+        default=defaults.race,
+        help="intents kept after playing a shortlist roughly; 0 plays all exactly",
+    )
+    parser.add_argument("--refresh-reach", type=float, default=defaults.refresh_reach)
     parser.add_argument("--tolerance", type=float, default=defaults.tolerance)
     parser.add_argument("--rounds", type=int, default=defaults.rounds)
+    parser.add_argument(
+        "--rng-states",
+        type=int,
+        default=defaults.rng_states,
+        help="RNG states each full swing is played from",
+    )
+    parser.add_argument(
+        "--error-points",
+        type=int,
+        default=defaults.error_points,
+        help="about how many errors stand for each draw off the green",
+    )
     parser.add_argument("--workers", type=int, help="processes; default every core")
     parser.add_argument(
         "--build-table", action="store_true", help="only build the landing table"
@@ -87,11 +119,16 @@ def main() -> None:
     settings = Settings(
         grid=args.grid,
         shortlist=args.shortlist,
-        putts=args.putts,
+        candidates=args.candidates,
+        scatter_on_hole=not args.scatter_on_fairway,
         reach=args.reach,
         refresh=args.refresh,
+        race=args.race,
+        refresh_reach=args.refresh_reach,
         tolerance=args.tolerance,
         rounds=args.rounds,
+        rng_states=args.rng_states,
+        error_points=args.error_points,
     )
     solver_args = {"workers": args.workers} if args.workers else {}
     solver = HoleSolver(
@@ -116,6 +153,23 @@ def main() -> None:
     )
     print(f"  visits to spots too rare to value: {solution.unvalued:.4f} a hole")
 
+    played = {
+        key: sorted(
+            (
+                {
+                    "intent": describe(t.intent),
+                    "rank": t.rank,
+                    "screened": t.screened,
+                    "expected": q,
+                }
+                for t, q in zip(transitions, solver.q(transitions), strict=True)
+            ),
+            key=lambda p: p["expected"],
+        )
+        for key, transitions in solution.transitions.items()
+    }
+    print_ranks(solution.visits, played)
+
     if args.output:
         states = [
             {
@@ -125,10 +179,29 @@ def main() -> None:
                 "expected": solution.expected[key],
                 "visits": solution.visits.get(key, 0.0),
                 "intent": describe(solution.policy[key]),
+                "played": played[key],
             }
             for key in solution.policy
         ]
         args.output.write_text(json.dumps({"tee": solution.tee, "states": states}))
+
+
+def print_ranks(visits: dict, played: dict) -> None:
+    """
+    How well the screen ranked the intents the solver chose off the green,
+    weighted by visits (the green is solved whole, with no screen).
+    """
+    visits = {key: mass for key, mass in visits.items() if key[0] != GREEN}
+    total = sum(visits.values())
+    if not total:
+        return
+    limits = {"1st": 1, "2nd-4th": 4, "5th-8th": 8, "9th+": math.inf}
+    buckets = dict.fromkeys(limits, 0.0)
+    for key, mass in visits.items():
+        rank = played[key][0]["rank"]
+        buckets[next(name for name, limit in limits.items() if rank < limit)] += mass
+    shares = ", ".join(f"{name} {mass / total:.0%}" for name, mass in buckets.items())
+    print(f"  the screen ranked the chosen intent (by visits): {shares}")
 
 
 if __name__ == "__main__":

@@ -47,9 +47,9 @@ A toolset for reverse engineering, editing and patching the NES Open Tournament 
   - `physics/` - Python model of the ball physics (launch to rest), checked frame by frame
     against the ROM under py65; see `docs/shot_physics.md`
   - `adr.py` - architecture decision records: parsing, checks, the index, new records
-- `golf/difficulty/` - rating holes: the player model, the landing table and the solver
+- `golf/difficulty/` - rating holes: the player model, the landing table, the green
+  solved whole and the solver
   (`golf-difficulty`; `docs/planning/hole_difficulty.md`)
-  (`docs/planning/hole_difficulty.md`)
 - `editor/` - the course editor
 - `server/` - the randomizer website (FastAPI); conventions in `server/CLAUDE.md`, design in
   `docs/randomizer_devplan.md`

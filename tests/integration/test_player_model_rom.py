@@ -1,5 +1,6 @@
 """The player model (`golf.difficulty.player`), over the physics read from the ROM."""
 
+import math
 import random
 from pathlib import Path
 
@@ -7,6 +8,8 @@ import pytest
 
 from golf.core.rom_reader import RomReader
 from golf.difficulty.player import (
+    ERROR_POINTS,
+    ERROR_REACH,
     HOLED,
     PERFECT,
     Hole,
@@ -61,6 +64,20 @@ def test_errors():
     assert sum(spread.values()) == pytest.approx(1)
     assert all(spread[k] == pytest.approx(spread[-k]) for k in spread)
     assert spread[0] > spread[1] > spread[2]
+
+
+@pytest.mark.parametrize("deviation", [2.0, 3.0, 5.0, 8.0])
+def test_wide_errors_are_strided(deviation):
+    spread = dict(errors(deviation))
+    assert len(spread) <= ERROR_POINTS
+    assert sum(spread.values()) == pytest.approx(1)
+    assert all(spread[k] == pytest.approx(spread[-k]) for k in spread)
+    # The spread of every whole unit out to the reach, within a few percent.
+    full = math.ceil(ERROR_REACH * deviation)
+    weights = {k: math.exp(-0.5 * (k / deviation) ** 2) for k in range(-full, full + 1)}
+    wanted = sum(k * k * w for k, w in weights.items()) / sum(weights.values())
+    got = sum(k * k * p for k, p in spread.items())
+    assert math.sqrt(got) == pytest.approx(math.sqrt(wanted), rel=0.08)
 
 
 @pytest.mark.parametrize("putting", [False, True])
@@ -177,3 +194,12 @@ def test_only_the_putter_on_the_green(tables, vanilla_courses):
     start = Position(flag.x >> 8, (flag.y >> 8) + 4)
     with pytest.raises(ValueError):
         outcomes(Intent(12, aim=0, power_target=0x20), start, hole, CALM, PERFECT)
+
+
+@pytest.mark.parametrize("deviation", [1.0, 3.0, 5.0])
+def test_a_rough_grid_has_three_errors(deviation):
+    rough = dict(errors(deviation, 3))
+    assert len(rough) == 3
+    assert rough[0] > 0
+    assert sum(rough.values()) == pytest.approx(1)
+    assert all(rough[k] == pytest.approx(rough[-k]) for k in rough)
