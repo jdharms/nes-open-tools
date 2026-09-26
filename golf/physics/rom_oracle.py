@@ -29,6 +29,11 @@ from golf.core.rom_reader import RomReader
 from golf.formats.hole_data import HoleData
 from golf.physics.state import Ball, Ground, Lie, ShotInput, Slope, Terrain
 from golf.physics.tables import PHYSICS_BANK
+from golf.physics.terrain import (
+    GREEN_BUFFER_OPERANDS,
+    TERRAIN_BUFFER_OPERANDS,
+    TERRAIN_COLUMNS,
+)
 
 CALC_LAUNCH_VECTOR = 0xAD0A
 #: Return address pushed for each frame's call; reaching it ends the frame.
@@ -312,14 +317,14 @@ def read_ball(m: bytearray) -> Ball:
 # --- the terrain probe ------------------------------------------------------
 
 CLASSIFY_PROBE_POSITION = 0xEDEA
-TERRAIN_BUFFER = 0x7186
-"""`DecompressTerrain`'s output: 22 tiles a row, rows `TerrainRowOffsets` apart."""
-GREEN_BUFFER = 0x75A6
-"""`DecompressGreen`'s output: 24x24 tiles, row-major."""
-TERRAIN_ATTRS = 0x0533
-"""`TerrainAttrs`: `LoadTerrainAndAttrs` copies 72 attribute bytes here."""
-TERRAIN_ATTRS_SIZE = 72
-TERRAIN_COLUMNS = 22
+#: Where the hole goes: operands of the instructions that read or copy it, so
+#: a ROM with the `wram_expansion` patch, which moves both buffers, is loaded
+#: where it reads. The terrain buffer holds `DecompressTerrain`'s output, 22
+#: tiles a row; the green buffer `DecompressGreen`'s, 24x24 tiles, row-major.
+TERRAIN_ATTRS_OPERAND = 0xEF05
+"""$EF04: LDA TerrainAttrs,Y ($0533, or $6F9C expanded)."""
+TERRAIN_ATTRS_COUNT_OPERAND = 0xDB97
+"""$DB96: LDY #count-1 in `LoadTerrainAndAttrs`'s copy: 72 bytes, or 90 expanded."""
 GREEN_X = 0xA3
 GREEN_Y = 0xA4
 SCROLL_LIMIT = 0x010D
@@ -339,13 +344,20 @@ class RomTerrainProbe:
         self.memory[0xC000:0x10000] = rom.read_fixed(0xC000, 0x4000)
         self.cpu = MPU(memory=self.memory)
         m = self.memory
+
+        def word(low: int, high: int) -> int:
+            return m[low] | m[high] << 8
+
+        terrain = word(*TERRAIN_BUFFER_OPERANDS)
+        green = word(*GREEN_BUFFER_OPERANDS)
+        attributes = word(TERRAIN_ATTRS_OPERAND, TERRAIN_ATTRS_OPERAND + 1)
         for row, tiles in enumerate(hole.terrain[: hole.terrain_height]):
-            start = TERRAIN_BUFFER + row * TERRAIN_COLUMNS
+            start = terrain + row * TERRAIN_COLUMNS
             m[start : start + TERRAIN_COLUMNS] = bytes(tiles)
-        attrs = pack_attributes(hole.attributes)[:TERRAIN_ATTRS_SIZE]
-        m[TERRAIN_ATTRS : TERRAIN_ATTRS + len(attrs)] = attrs
+        attrs = pack_attributes(hole.attributes)[: m[TERRAIN_ATTRS_COUNT_OPERAND] + 1]
+        m[attributes : attributes + len(attrs)] = attrs
         for row, tiles in enumerate(hole.greens):
-            start = GREEN_BUFFER + row * 24
+            start = green + row * 24
             m[start : start + 24] = bytes(tiles)
         m[GREEN_X] = hole.green_x
         m[GREEN_Y] = hole.green_y

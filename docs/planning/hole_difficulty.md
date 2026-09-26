@@ -1,17 +1,16 @@
 # Hole Difficulty Analysis: Development Plan
 
 > **Note**: This document was written by Claude from decisions made with jdharms.
-> It is the plan for rating how hard NES Open holes are, from the game's own physics:
-> what is built, what is decided, and the order of work.
+> It is the plan for rating how hard NES Open and Mario Open holes are, from the game's
+> own physics: what is built, what is decided, and the order of work.
 
-**Status**: phases 1 and 2 are done, apart from two phase 1 leftovers. Phase 3 has a
+**Status**: phases 1 and 2 are done, apart from the Mesen spot checks. Phase 3 has a
 working solver for one pin and no wind (`golf-difficulty`), run under PyPy, with each
-green solved whole from a table of every putt. The US 1st solves to 3.66 strokes from the
-tee at skill 3 and 4.09 at skill 4, in 5-7 minutes with the default settings; searching
-more widely was worth about 0.03 at skill 3 (**How widely to search**, phase 3). All three NES Open courses are solved
-at skill 3, and come out within half a stroke of one another (**The three courses**,
-phase 3). **The next step** is solving them again with the fixes that run turned up,
-then the calibration of phase 4.
+green solved whole from a table of every putt. All three NES Open courses are solved at
+skill 3 (**The three courses**, phase 3), and every Mario Open hole, the 7 over 48 rows
+included, loads on a ROM with the `wram_expansion` patch. **The next step** is solving the
+90 Mario Open holes at skill 3 and ranking all 144 holes against par (**Next steps**,
+phase 3).
 
 ## Goal
 
@@ -20,6 +19,13 @@ average, with no wind, over the hole's four pins. The solver works this out from
 spot on the hole, so strokes-to-hole maps, difficulty against a featureless baseline and
 per-hole summaries can be derived from it afterwards. Any of them could feed the
 randomizer's catalog.
+
+What the randomizer needs most (jdharms) is where the 90 Mario Open holes sit against the
+54 NES Open holes. Its players know the Mario Open holes an order of magnitude less well,
+and with every hole's expected score against par, the randomizer could build courses
+that play close to their par instead of drawing holes that each play a little over it.
+For that, the holes' places relative to one another matter more than the absolute
+numbers or the exact skill.
 
 The idea comes from Matthew Schoolfield's course-strategy simulator
 ([I spent the last month and a half...](https://golfcoursewiki.substack.com/p/i-spent-the-last-month-and-a-half)).
@@ -58,6 +64,11 @@ site.
 - **Skill is solved for, not assumed.** A scratch player is whoever averages 72 over a
   round, with no allowance for physical strength since NES Open has none. That skill is
   then carried to other holes and courses unchanged.
+- **Skill 3 for placing the Mario Open holes** (jdharms). The U.K. round is 73.4 at skill
+  3, so a scratch player's skill is a little under 3, about 2.7-2.9, and a skill that close
+  moves individual holes by hundredths to a tenth. Fitting one number to one target
+  cannot test the model, so a careful calibration waits; a rough one (one more U.K.
+  round, near 2.5) is enough when a label is wanted.
 - **Calibrate on the U.K. course.** It is harder than Japan ("course zero", with some
   beginner feel) and the US (the course menus put first), but easier than Mario Open's
   hardest. That leaves US and Japan as out-of-sample checks, with Mario Open as the hard
@@ -82,12 +93,19 @@ site.
   is taken to average out across holes, and the calibration absorbs what is left. Calm is
   rare in the game (a speed-0 anchor is 4 in 64), so this is a modelling choice, not the
   typical case. Revisit if the hole rankings disagree with real scores; the machinery for
-  it is `golf/physics/wind.py`.
+  it is `golf/physics/wind.py`. Wind changes the best strategy on some holes (**Wind on
+  two holes**, phase 3), which the average hides.
 - **The first solver has one pin** (jdharms): the hole's first pin. The other three
-  (`Flag.for_pin`) come after the U.K. round holds up.
+  (`Flag.for_pin`) come after the Mario Open holes are placed; a seed knows each hole's
+  pin (`seed_holes.pin_index`), so they matter to the randomizer.
 - **Only spots that play reaches are valued** (jdharms): the tee, and every spot the best
   play from it visits often enough. Most of a hole is rough nobody plays from.
 - **Errors reach 2 standard deviations** (jdharms), to be revisited in phase 4.
+- **The player aims from the overhead view** (jdharms). The behind-the-golfer scene is
+  built once, along the aim at setup (`$BD`), and holds only what lies in its wedge, so
+  aiming away before it is built and turning back afterwards leaves nearby trees out of
+  it. That is taken as an obscure exploit, not strategy: every shot's scene is built
+  along the aim it is played on (`ShotInput.scene_aim` left to default).
 - **Expected score is averaged over the hole's four pins**, all equally likely, as
   `InitHole` deals them (`docs/seeded_wind.md`, `golf/physics/wind.py`).
 
@@ -245,8 +263,17 @@ Things that will trip you up:
 Done:
 
 - **`ClassifyProbePosition`** (`$EDEA`), as `HoleGround` in `golf/physics/terrain.py`.
-  It matches the ROM at every pixel of all 54 NES Open holes and at sampled pixels of 83
-  Mario Open holes.
+  It matches the ROM at every pixel of all 54 NES Open holes on the vanilla ROM, and of
+  all 90 Mario Open holes on a ROM with the `wram_expansion` patch.
+- **Holes over 48 rows**: the 7 tall Mario Open holes (Hawaii 5, 14 and 18, U.K. 9, 14
+  and 18, France 18, all par 5s) need the `wram_expansion` patch, which moves the terrain
+  buffer and grows the tables indexed by `ScrollLimit`. `TerrainTables` reads those
+  tables and buffers through the operands of the instructions that use them, so it reads
+  either ROM as it plays, and `HoleGround` refuses a hole taller than the ROM's terrain
+  buffer (48 rows vanilla, 60 expanded). The randomizer plays every Mario Open hole on
+  such a ROM, so the solver does too: `nes_open_wram.nes` (gitignored), built with
+  `uv run golf-patch nes_open_us.nes -p wram_expansion -o nes_open_wram.nes`. Its physics
+  tables are the vanilla ROM's, so it shares the landing table's cache.
 - **Views, trees and the bunker lip rule**: the view switch, the overhead tree probe, the
   behind-the-golfer projection and scene collision, the distance readout and the lip
   rule, in `golf/physics/shot.py`, `perspective.py` and `distance.py`.
@@ -257,8 +284,6 @@ Done:
 
 Left:
 
-- **Holes over 46 rows**: read `TerrainBottomY` and the row tables from a
-  `wram_expansion` ROM, so the 7 tall Mario Open holes work too.
 - **Emulator spot checks** (jdharms, in Mesen): a perfect medium 1W drive (235 carry, 268
   total), and the `$40` wind distortion (`docs/shot_physics.md`). What they check now is
   the emulated machine: that nothing it leaves out (the PPU, sprite 0, IRQs) changes a
@@ -496,6 +521,53 @@ Done:
   hardest against par: U.K. 11th (+0.99), US 8th and 16th (+0.44, +0.73), Japan 9th
   (+0.56).
 
+  Solved again with both fixes, ten U.K. holes moved by 0.04 or less: 1st 4.216, 2nd
+  3.760, 5th 4.290, 7th 4.239, 9th 4.737, 10th 3.802, 14th 4.187, 15th 4.098, 16th 4.879,
+  18th 4.489. The table stands as the NES Open side of the comparison with Mario Open.
+  Against the game's own hole handicaps (the `handicap` in each hole's JSON), expected
+  strokes over par rank the holes with a Spearman correlation of 0.55 (U.K.), 0.62 (US)
+  and 0.69 (Japan).
+- **Trees in the behind-the-golfer view, measured** on eight U.K. holes (jdharms picked
+  the ones where trees shape the tee shot or which parts of the fairway are good). For
+  every off-green spot the solved play visits at least 0.002 times a hole, the best 8
+  intents played there, the chosen one among them, were played again with the game's own scene
+  for each start and aim, and valued one shot ahead against the solve's values; the sum
+  over visits is the change to the tee's value.
+
+  | Hole | No trees | Chosen intents kept | Best of those played at each spot |
+  |------|----------|---------------------|-----------------------------------|
+  | 1st | 4.216 | +0.147 | +0.050 |
+  | 2nd | 3.760 | +0.067 | +0.012 |
+  | 5th | 4.290 | +0.038 | +0.008 |
+  | 10th | 3.802 | +0.076 | +0.029 |
+  | 14th | 4.187 | +1.285 | +0.040 |
+  | 15th | 4.098 | 0.000 | 0.000 |
+  | 16th | 4.879 | +0.258 | +0.077 |
+  | 18th | 4.489 | +0.004 | +0.001 |
+
+  Trees change strategy far more than score: about 0.2 strokes over the eight holes once
+  each spot plays the best intent it already had. The 14th's fast high drive meets trees
+  close to the tee (penalties from 23% to 54%), where a medium 2W aimed wider and curved
+  back loses 0.03. The rest is approaches whose line crosses trees, on the 1st, 10th and
+  16th, and the west side of the 2nd's forest; most forest spots play high woods that
+  clear the trees. The 15th's clumps are out of bounds, so play already avoids them.
+
+  How it was done, in scratch scripts not kept: `RomGameShot`'s machine, with the ball
+  and aim poked in and a breakpoint at `AFTER_SCENE_BUILT` that snapshots WRAM as a
+  `PerspectiveScene` and stops (0.2 s a scene under PyPy); `player.shot_result` replaced
+  by one that plays `ShotInFlight(..., scene=...)` with the scene for the shot's start and
+  aim. Checked against the game: 324 shots from twelve of the 2nd's forest spots through
+  `RomGameShot`, where the model with the game's scene matched all 324 and the trees
+  changed 60. Only vanilla holes load this way, so Mario Open holes would need writing
+  into a ROM first (`golf-write`, untried) or the scene builder ported.
+- **Wind on two holes.** Played on the drive only, with the approach valued at no wind,
+  the U.K. 7th's best drive is a slow, low 1W with backspin up the fairway (4.24) in
+  calm, headwinds and crosswinds, and a fast, high 1W due north only in a strong
+  tailwind (`$00`, speed 9: 4.19 against 4.22), when it carries past the lake. At skill
+  2 in calm the fast drive is already level. On the Japan 17th a good NE or E wind lets
+  the drive carry the river (jdharms). Wind changes which shot is right on such holes,
+  which averaging it out hides.
+
 Assumptions to revisit in phase 4:
 
 - Errors reach 2 standard deviations (jdharms), so one intent at skill 1.0 is 5 × 5
@@ -517,7 +589,9 @@ Assumptions to revisit in phase 4:
   the window for their aim errors. A putt starts from the pixel the last one stopped on,
   as every state does.
 - **No trees in the behind-the-golfer view**: `outcomes()` has no scene to collide with
-  until the scene builder is ported or cached (below). Overhead-view trees work.
+  until the scene builder is ported (below). Overhead-view trees work. On eight U.K.
+  holes this costs about 0.2 strokes, and the wrong drive on the 14th (**Trees in the
+  behind-the-golfer view, measured**).
 - **The solver's approximations**: the 4-pixel cells (a cell's value is its first spot's),
   the screen and racing (only what they keep is played; every value is exact physics),
   the 5 accuracy targets, every other aim, and reach 0.001. Each is a setting of `Settings`
@@ -573,25 +647,46 @@ PYTHONPATH=. .cache/pypy/bin/python -u -m tools.research.difficulty nes_open_us.
 
 **Next steps**, in order:
 
-1. **Solve the three courses again** with the fringe screen and the loop fix: the
-   table above predates both, and the calibration needs them.
-2. **Trees in the behind-the-golfer view.** Every U.K. hole has tree tiles near its
-   fairways (4 to 74 within about 30 yards). To measure what they cost: for each state
-   the policy visits, capture the ROM's scene along the chosen aim (`RomGameShot`) and
-   play the chosen intent with and without it (`ShotInFlight(..., scene=...)`).
-3. **The approach screen from 120 yards out**, where it is 0.1 optimistic, and the
-   search settings for the calibration (jdharms).
-4. **Calibrate** (phase 4): bisect the skill for a U.K. round of 72, then predict the US
-   and Japan courses. At skill 3 the U.K. round is 73.4; at skill 4 its 1st and 13th
-   solve to 4.73 and 5.44, so 72 wants a skill a little under 3.
-5. **The other three pins.**
+1. **Solve the 90 Mario Open holes** at skill 3, pin 0, on `nes_open_wram.nes` (build it
+   first if missing, phase 1). Each hole builds its green's table (about 200 s) and then
+   solves: 7-12 minutes for a NES Open hole, and 38 minutes for the Mario Open U.K. 14th
+   (60 rows, 1,807 states, 6.498 from the tee, par 5), so a course may take 6-10 hours
+   and all five a few nights. The courses are independent:
 
-Then:
+   ```bash
+   for c in jp_japan jp_australia jp_france jp_hawaii jp_uk; do
+     mkdir -p .cache/difficulty/solves/$c
+     PYTHONPATH=. .cache/pypy/bin/python -u -m tools.research.difficulty \
+         nes_open_wram.nes --course jp/$c --hole 1-18 --skill 3 --workers 16 \
+         --output .cache/difficulty/solves/$c/ 2>&1 | tee .cache/difficulty/solves/$c.log
+   done
+   ```
 
-- **The scene builder** (bank 9 `$8829`), ported or its scenes cached per start and aim,
-  so the behind-the-golfer view has its trees. Shared flights assume no scene; with one,
-  `Flight` would have to check the scene's collisions for each start too.
-- **The baseline**, later: the same solver on uniform fairway with a cup.
+   Each log ends with the course's hole-by-hole table against par. Note each hole's
+   "visits to spots too rare to value": the U.K. 14th left 0.28 a hole there, where NES
+   Open holes leave 0.05-0.11, so its value leans on borrowed ones more than theirs.
+2. **Rank all 144 holes against par**: expected strokes minus par, the NES Open side from
+   **The three courses** (the ten U.K. holes solved again replacing theirs), the Mario
+   Open side from step 1. This is what the randomizer needs (**Goal**).
+3. **The other three pins**, starting with the holes whose place against par is closest
+   to a boundary the randomizer cares about.
+
+Then, in no fixed order:
+
+- **The scene builder** (bank 9 `$8829`), ported, so the solver sees behind-the-golfer
+  trees and chooses the right drive on holes like the U.K. 14th. It samples a 20 × 64
+  grid (`docs/shot_physics.md`, **Not modelled yet**) and builds the maps in `$9C1C`,
+  `$8EE4`, `$9CB8`, `$A30B`, `$8FE4`, `$99B2`, `$91C9` (282 instructions, and the RNG)
+  and `$9A79`, some of which only draw. The scenes `RomGameShot` captures are the oracle.
+  Shared flights assume no scene; with one, `Flight` would have to check the scene's
+  collisions for each start too.
+- **Wind**, at least for holes where it changes the best play (**Wind on two holes**).
+  A seed knows each hole's wind (`seed_holes`), so the randomizer could use it directly.
+- **Validation against real play**: per-hole scores from the site's rounds, with their
+  pins and winds, and the game's handicaps.
+- **A rough calibration**, if a label for the skill is wanted (**Decisions**).
+- **The approach screen from 120 yards out**, where it is 0.1 optimistic.
+- **The baseline**: the same solver on uniform fairway with a cup.
 
 ### 4. Calibration and validation
 

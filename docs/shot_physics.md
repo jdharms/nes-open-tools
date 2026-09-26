@@ -384,8 +384,10 @@ Three references check it (`tests/physics/`, run with `--physics`):
 - `rom_oracle.py` runs the ROM's `CalcLaunchVector` alone under py65, with the terrain
   routed to the same `Ground`, and `RomTerrainProbe` runs `ClassifyProbePosition` over a
   hole loaded into RAM. `test_shot_rom.py` plays random shots through both over uniform
-  and striped ground. `test_terrain_rom.py` compares every pixel of all 54 NES Open holes,
-  and sampled pixels of the 83 Mario Open holes short enough for the vanilla ROM.
+  and striped ground. `test_terrain_rom.py` compares every pixel of all 54 NES Open holes
+  on the vanilla ROM, and of all 90 Mario Open holes on a ROM with the `wram_expansion`
+  patch, which holes over 48 rows need. `TerrainTables` finds the tables and buffers that
+  patch moves through the operands of the instructions that read them.
 - `nes.py` is just enough of an NES to run the game's own frame loop: MMC1 banking, the
   controller, and the game's NMI handler at each vblank. `rom_game.py` loads a hole with
   the game's `InitHole` and plays a shot through `ShotSetupSequence` by pressing buttons,
@@ -400,8 +402,11 @@ Three references check it (`tests/physics/`, run with `--physics`):
 - **The scene builder** (bank 9 `$8829`, from `ShotSetupSequence`): it probes 64 × 20
   points ahead along the aim and draws the scene into the maps. The model takes a
   `PerspectiveScene` the ROM built; without one, the behind-the-golfer phase has no trees.
-- **Holes over 46 rows.** `TerrainBottomY` in the vanilla ROM stops at scroll limit 9.
-  Taller holes need the `wram_expansion` tables.
+  Row `r` of the probe grid lies `$8ED0[r]` pixels ahead (99, 67, 49, ... 1, 0, −1), and
+  its 64 points `$89D0[64r + i]` pixels to the side (about ±70 on the farthest row),
+  turned by the aim; nothing farther than 99 pixels ahead is in the scene. The builder
+  draws on the RNG (`$91C9`): between RNG states, one tile of the tile map near the
+  horizon differs (`$D7`, `$E7`, `$E8` or `$FC`), and the depth map does not.
 - **View `$FF`**, which the physics treats like the cup view (both test bits 6 and 7). It
   does not occur during a normal shot.
 - **The drive-distance statistic** accumulated in `$05C0/$05C1`.

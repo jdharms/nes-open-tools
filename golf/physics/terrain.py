@@ -16,6 +16,12 @@ tile of the green's own 24x24 grid, and that tile also gives the slope.
 
 Every table is read from the ROM. The hole comes from `HoleData`, in the same
 tiles, palettes and green grid the game decompresses into RAM.
+
+Holes over 48 rows need a ROM with the `wram_expansion` patch, which moves
+the terrain buffer to make room for 60 rows and grows the tables indexed by
+`ScrollLimit` (`docs/wram_expansion.md`). `TerrainTables` finds those tables
+and buffers through the operands of the instructions that read them, so it
+reads either ROM as it plays.
 """
 
 from dataclasses import dataclass, replace
@@ -52,6 +58,21 @@ GREEN_FLAG_LIGHT_SLOPE = 0x40
 
 TREE_TRUNK_COLOUR = 2
 
+TERRAIN_COLUMNS = 22
+"""Tiles in a row of the terrain buffer."""
+MAX_SCROLL_LIMIT = 16
+"""`ScrollLimit` of a 60-row hole, the tallest the `wram_expansion` patch makes room for."""
+
+#: Operands that say where `ClassifyProbePosition` and `LEE9F` find things.
+BOTTOM_Y_LO_OPERAND = 0xEE04
+"""$EE03: SBC TerrainBottomYLo,Y."""
+BOTTOM_Y_HI_OPERAND = 0xEE09
+"""$EE08: SBC TerrainBottomYHi,Y (moved to $E4F9 by `wram_expansion`)."""
+TERRAIN_BUFFER_OPERANDS = (0xEEC5, 0xEECB)
+"""$EEC4/$EECA: ADC #lo, ADC #hi of the terrain buffer's base."""
+GREEN_BUFFER_OPERANDS = (0xEE74, 0xEE7A)
+"""$EE73/$EE79: ADC #lo, ADC #hi of the green buffer's base."""
+
 
 @dataclass(frozen=True)
 class TerrainTables:
@@ -72,12 +93,29 @@ class TerrainTables:
     slope_magnitudes: bytes
     """$F3C0: the magnitude byte ($EB/$EE) for each slope code."""
     bottom_y: tuple[int, ...]
-    """`TerrainBottomYLo/Hi` ($EFE2/$EFEC): Y at and past which is out of bounds, by scroll limit."""
+    """
+    `TerrainBottomYLo/Hi`: Y at and past which is out of bounds, by scroll
+    limit, for every scroll limit a hole can have. The vanilla tables hold
+    10; the entries past them are the bytes the game reads there.
+    """
+    terrain_rows: int
+    """How many rows the terrain buffer holds before it runs into the green's: 48, or 60 expanded."""
 
     @classmethod
     def from_rom(cls, rom: RomReader) -> Self:
-        lo = rom.read_fixed(0xEFE2, 10)
-        hi = rom.read_fixed(0xEFEC, 10)
+        def operand(address: int) -> int:
+            return int.from_bytes(rom.read_fixed(address, 2), "little")
+
+        def immediates(addresses: tuple[int, int]) -> int:
+            low, high = (rom.read_fixed(address, 1)[0] for address in addresses)
+            return high << 8 | low
+
+        entries = MAX_SCROLL_LIMIT + 1
+        lo = rom.read_fixed(operand(BOTTOM_Y_LO_OPERAND), entries)
+        hi = rom.read_fixed(operand(BOTTOM_Y_HI_OPERAND), entries)
+        terrain_bytes = immediates(GREEN_BUFFER_OPERANDS) - immediates(
+            TERRAIN_BUFFER_OPERANDS
+        )
         return cls(
             surface_masks=rom.read_fixed(0xF020, 0x40 * 8),
             rough_masks=rom.read_fixed(0xF220, len(SHAPED_ROUGH_TILES) * 8),
@@ -87,6 +125,7 @@ class TerrainTables:
             slope_fractions=rom.read_fixed(0xF3B9, 7),
             slope_magnitudes=rom.read_fixed(0xF3C0, 7),
             bottom_y=tuple(h << 8 | lo_ for lo_, h in zip(lo, hi, strict=True)),
+            terrain_rows=terrain_bytes // TERRAIN_COLUMNS,
         )
 
 
@@ -94,12 +133,14 @@ class HoleGround:
     """A `Ground` for one hole."""
 
     def __init__(self, hole: HoleData, tables: TerrainTables):
-        scroll_limit = hole.metadata["scroll_limit"]
-        if scroll_limit >= len(tables.bottom_y):
+        if hole.terrain_height > tables.terrain_rows:
+            # The game would decompress it over the green's buffer.
             raise ValueError(
-                f"scroll limit {scroll_limit} is past the vanilla ROM's table; "
-                "holes this tall need the wram_expansion tables"
+                f"a {hole.terrain_height}-row hole does not fit this ROM's "
+                f"{tables.terrain_rows}-row terrain buffer; use a ROM with the "
+                "wram_expansion patch"
             )
+        scroll_limit = hole.metadata["scroll_limit"]
         self.hole = hole
         self.tables = tables
         self.bottom_y = tables.bottom_y[scroll_limit]
