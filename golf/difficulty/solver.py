@@ -12,7 +12,8 @@ own state, and the tee is one too.
 **Intents.** From each state off the green the landing table screens every
 intent it holds for a club in the vanilla bag, at every other aim within a
 quarter turn of the pin, against the current value of where each would come to
-rest; the best few are scored again under the player's errors, and the best of
+rest (over plain fairway, or near the pin on the hole itself: `NEAR_PIN`); the
+best few are scored again under the player's errors, and the best of
 those are played exactly (`player.outcomes`). Where more than `race` are new,
 all are first played roughly (one RNG state, few errors a draw), and only the
 best of them exactly.
@@ -26,7 +27,12 @@ screens every state off it found so far against the current values, plays what i
 (all of it for a new state, the top `refresh` for one screened before and still
 visited at least `refresh_reach` times), runs
 value iteration, then follows the best play forward from the tee and adds every
-state it visits at least `reach` times on average. Screening and playing are
+state it visits at least `reach` times on average. A spot whose value has
+moved `rescreen_move` since it was screened is screened again however rarely
+play reaches it: intents chosen against values far off can hop between spots
+that all looked better than they were, a loop value iteration only climbs.
+After `rounds` no spot is added, and the solve stops only once no spot is due
+to be screened again. Screening and playing are
 separate tasks, so even the first round, the tee alone, is spread over every
 core.
 A state not yet valued borrows from valued neighbours of the same lie class, or
@@ -34,9 +40,10 @@ failing those a guess from its distance to the pin (`guess`).
 """
 
 import math
+import multiprocessing
 import os
 import time
-from collections.abc import Callable
+from collections.abc import Callable, Sequence
 from concurrent.futures import ProcessPoolExecutor
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -52,6 +59,7 @@ from golf.difficulty.landing import (
     LIE_CLASSES,
     LandingTable,
     LieClass,
+    _rest_of,
     cache_path,
     lie_class,
     load,
@@ -59,6 +67,7 @@ from golf.difficulty.landing import (
 )
 from golf.difficulty.player import (
     ERROR_POINTS,
+    PERFECT,
     RNG_STATES,
     Hole,
     Intent,
@@ -67,6 +76,8 @@ from golf.difficulty.player import (
     Skill,
     errors,
     outcomes,
+    rng_states,
+    swings,
 )
 from golf.formats.hole_data import HoleData
 from golf.physics.landing import FIRST_SPIN_CLUB
@@ -77,12 +88,28 @@ from golf.physics.terrain import HoleGround, TerrainTables
 
 NO_WIND = (0, 0)
 
+#: Value iteration's sweeps in each round. Values carry over from round to
+#: round, so a round need not settle them, and where intents loop among
+#: themselves (`Settings.rescreen_move`) they climb until the next round's
+#: screen replaces them. The solve ends with a full run.
+ROUND_SWEEPS = 300
+#: Rounds past `Settings.rounds` that add no states, only screen again those
+#: whose values moved, so the solve does not stop on intents that loop.
+CLEANUP_ROUNDS = 6
+
 #: Errors a draw when intents are raced (`Settings.race`).
 RACE_POINTS = 5
 #: Full swings are tried at every other aim up to this far either side of the pin.
 SWING_AIMS = 64
 #: How many aims the screen scores at once.
 AIMS_AT_ONCE = 8
+#: From spots within `NEAR_SPOT` pixels of the pin, the intents whose rest over
+#: plain fairway, aimed at the pin, stops within `NEAR_PIN` of it are played on
+#: the hole in the screen's first pass: the green rolls, and bites backspin,
+#: unlike the fairway the table was played on. Farther out few shots stop near
+#: the pin, and the table ranks them well enough.
+NEAR_PIN = 24
+NEAR_SPOT = 40
 
 #: Classes of pixel in the value map: the lie classes, then these.
 GREEN = len(LIE_CLASSES)
@@ -91,6 +118,9 @@ OUT = GREEN + 2
 
 #: A state: (class, x, y), x and y a grid cell off the green and a pixel on it.
 Key = tuple[int, int, int]
+#: Per class, what each cell's state is worth or borrows (`HoleSolver._borrowed`),
+#: by [y][x].
+Borrowed = dict[int, list[list[float]]]
 TEE: Key = (-1, 0, 0)
 
 
@@ -117,6 +147,13 @@ class Settings:
     it at least this often: what a spot's play can add to the tee's value is
     its visits times its own improvement.
     """
+    rescreen_move: float = 0.5
+    """
+    A spot is screened again, however rarely play visits it, once its value
+    has moved this far since it was last screened: intents chosen against
+    values that were far off can loop among themselves (short hops between
+    spots that all looked better than they are) and never be replaced.
+    """
     tolerance: float = 0.002
     """Stop once no spots are added and the tee's value moves less than this."""
     reach: float = 1e-3
@@ -131,7 +168,7 @@ class Settings:
     """
     rounds: int = 12
     rng_states: int = len(RNG_STATES)
-    """How many of `player.RNG_STATES` each full swing is played from."""
+    """How many RNG states each full swing is played from (`player.rng_states`)."""
     scatter_on_hole: bool = True
     """
     The screen's second pass plays each candidate's timing errors on the hole
@@ -251,8 +288,22 @@ def _play(
         context.hole,
         NO_WIND,
         context.skill,
-        RNG_STATES[:_RNG_COUNT],
+        rng_states(_RNG_COUNT),
         _ERROR_POINTS,
+    )
+    return key, intent, results, time.perf_counter() - started
+
+
+def _play_as(
+    task: tuple[Key, Position, Intent, int, tuple[int, ...]],
+) -> tuple[Key, Intent, dict[Result, float], float]:
+    """Play one intent from one spot with the errors and RNG states given."""
+    context = _context
+    assert context is not None
+    started = time.perf_counter()
+    key, position, intent, points, states = task
+    results = outcomes(
+        intent, position, context.hole, NO_WIND, context.skill, states, points
     )
     return key, intent, results, time.perf_counter() - started
 
@@ -271,7 +322,7 @@ def _play_roughly(
         context.hole,
         NO_WIND,
         context.skill,
-        RNG_STATES[:1],
+        rng_states(1),
         RACE_POINTS,
     )
     return key, intent, results, time.perf_counter() - started
@@ -321,9 +372,16 @@ def _screen_swings(
     best_aim = np.zeros(len(usable), dtype=int)
     # A few aims at a time, keeping each intent's best: all at once is
     # hundreds of megabytes a worker.
+    near, rests = _near_pin(context, task, lie, toward, usable)
     for start in range(0, len(aims), AIMS_AT_ONCE):
         chunk = aims[start : start + AIMS_AT_ONCE]
         offsets = table.offsets(lie, chunk.astype(np.float32))  # (intents, aims, 2)
+        if len(near):
+            angle = chunk * 2 * np.pi / 256
+            sin, cos = np.sin(angle)[None], np.cos(angle)[None]
+            across, along = rests[:, :1], rests[:, 1:]
+            offsets[near, :, 0] = along * sin + across * cos
+            offsets[near, :, 1] = -along * cos + across * sin
         x = np.rint(task.position.x + offsets[..., 0])
         y = np.rint(task.position.y + offsets[..., 1])
         missing = np.isnan(x)
@@ -433,6 +491,48 @@ def _scattered(
     expected = (score * weights[None]).sum(axis=(1, 2))
     best = int(expected.argmin())
     return table.intent(lie, index, int(aims[best])), float(expected[best])
+
+
+def _near_pin(
+    context: _Context, task: _Task, lie: LieClass, toward: int, usable: np.ndarray
+) -> tuple[np.ndarray, np.ndarray]:
+    """
+    From a spot within `NEAR_SPOT` of the pin, the usable intents whose perfect
+    rest over plain fairway at `toward` stops within `NEAR_PIN` of it, and where
+    each really stops on the hole: (indices, (across, along) the aim in pixels).
+    """
+    table = context.table
+    assert table is not None
+    position = task.position
+    pin_x, pin_y = context.flag.x >> 8, context.flag.y >> 8
+    if math.hypot(position.x - pin_x, position.y - pin_y) > NEAR_SPOT:
+        return np.zeros(0, dtype=int), np.zeros((0, 2))
+    key = (task.key, toward)
+    if key in _near_cache:
+        return _near_cache[key]
+    flat = table.offsets(lie, np.array([toward], dtype=np.float32))[:, 0]
+    miss = np.hypot(position.x + flat[:, 0] - pin_x, position.y + flat[:, 1] - pin_y)
+    near = np.nonzero(usable & (miss <= NEAR_PIN))[0]
+    rests = np.empty((len(near), 2))
+    aim = toward % 256
+    for row, index in enumerate(near):
+        intent = table.intent(lie, int(index), aim)
+        (timing,) = swings(context.tables, intent, False, PERFECT)
+        rests[row] = _rest_of(
+            context.tables,
+            intent,
+            lie,
+            aim,
+            timing,
+            context.ground,
+            (position.x, position.y),
+        )
+    _near_cache[key] = (near, rests)
+    return near, rests
+
+
+#: `_near_pin`'s answers in this worker, as a spot is screened every round.
+_near_cache: dict[tuple, tuple[np.ndarray, np.ndarray]] = {}
 
 
 _group_cache: dict[tuple, np.ndarray] = {}
@@ -605,39 +705,41 @@ class HoleSolver:
 
     # --- values ---------------------------------------------------------
 
-    def _borrowed(self) -> dict[int, np.ndarray]:
+    def _borrowed(self) -> Borrowed:
         """
         Per class, a grid of values: valued states' own, spread twice to
-        neighbouring cells of the same class, and a guess beyond.
+        neighbouring cells of the same class, and NaN beyond (`value` guesses).
+        As lists, not arrays: `value` reads single cells, hundreds of thousands
+        a sweep, and under PyPy a read from an array costs microseconds.
         """
         grid = self.settings.grid
         rows, columns = -(-self.height // grid), -(-0xB0 // grid)
-        filled: dict[int, np.ndarray] = {}
+        filled: Borrowed = {}
         for klass in range(len(LIE_CLASSES)):
             cells = np.full((rows, columns), np.nan)
             for key, value in self.expected.items():
                 if key[0] == klass:
                     cells[key[2], key[1]] = value
-            filled[klass] = _spread(cells, 2)
+            filled[klass] = _spread(cells, 2).tolist()
         green = np.full((self.height, 0xB0), np.nan)
         for key, value in self.expected.items():
             if key[0] == GREEN:
                 green[key[2], key[1]] = value
-        filled[GREEN] = _spread(green, 2)
+        filled[GREEN] = _spread(green, 2).tolist()
         return filled
 
-    def value(self, key: Key, borrowed: dict[int, np.ndarray]) -> float:
+    def value(self, key: Key, borrowed: Borrowed) -> float:
         if key in self.expected:
             return self.expected[key]
         if key == TEE:
             return guess(self.distance(self.tee), 0)
         klass, x, y = key
-        value = borrowed[klass][y, x]
-        if np.isnan(value):
+        value = borrowed[klass][y][x]
+        if math.isnan(value):
             grid = 1 if klass == GREEN else self.settings.grid
             centre = Position(x * grid + grid // 2, y * grid + grid // 2)
             value = guess(self.distance(centre), klass)
-        return float(value)
+        return value
 
     def value_map(self) -> np.ndarray:
         """(class..., classes) by (y, x): each class's value at every pixel, then each pixel's class."""
@@ -647,10 +749,10 @@ class HoleSolver:
         ys, xs = np.mgrid[0 : self.height, 0:0xB0]
         distance = np.hypot(xs - (self.flag.x >> 8), ys - (self.flag.y >> 8))
         for klass in range(len(LIE_CLASSES)):
-            cells = borrowed[klass][ys // grid, xs // grid]
+            cells = np.array(borrowed[klass])[ys // grid, xs // grid]
             fallback = np.vectorize(lambda d, k=klass: guess(d, k))(distance)
             layers[klass] = np.where(np.isnan(cells), fallback, cells)
-        green = borrowed[GREEN]
+        green = np.array(borrowed[GREEN])
         layers[GREEN] = np.where(
             np.isnan(green), np.vectorize(lambda d: guess(d, GREEN))(distance), green
         )
@@ -667,7 +769,7 @@ class HoleSolver:
             change = 0.0
             for key in order:
                 best = min(
-                    self._q(transition, borrowed)
+                    self._q(transition, borrowed, key)
                     for transition in self.transitions[key]
                 )
                 change = max(change, abs(best - self.expected[key]))
@@ -677,23 +779,41 @@ class HoleSolver:
             if change < tolerance:
                 break
 
-    def q(self, transitions: list[Transition]) -> list[float]:
-        """The expected strokes of playing each transition's intent, on the current values."""
+    def q(self, transitions: list[Transition], own: Key | None = None) -> list[float]:
+        """
+        The expected strokes of playing each transition's intent, on the current
+        values, from the state `own` when given (`_q`).
+        """
         borrowed = self._borrowed()
-        return [self._q(transition, borrowed) for transition in transitions]
+        return [self._q(transition, borrowed, own) for transition in transitions]
 
-    def _q(self, transition: Transition, borrowed: dict[int, np.ndarray]) -> float:
-        total = 0.0
+    def _q(
+        self,
+        transition: Transition,
+        borrowed: Borrowed,
+        own: Key | None = None,
+    ) -> float:
+        """
+        The expected strokes of a transition. Outcomes back at `own`, the state it
+        is played from (a whiff, a drop, out of bounds), are solved rather than
+        iterated: playing it until it leaves costs (strokes + the rest) / (1 -
+        the chance of staying), which value iteration would only creep towards.
+        """
+        total = stay = 0.0
         for key, strokes, probability in transition.outcomes:
-            total += probability * (
-                strokes + (0.0 if key is None else self.value(key, borrowed))
-            )
-        return total
+            total += probability * strokes
+            if key is None:
+                continue
+            if key == own:
+                stay += probability
+            else:
+                total += probability * self.value(key, borrowed)
+        return total / (1 - stay) if stay < 1 else math.inf
 
     def policy(self) -> dict[Key, Transition]:
         borrowed = self._borrowed()
         return {
-            key: min(transitions, key=lambda t: self._q(t, borrowed))
+            key: min(transitions, key=lambda t, key=key: self._q(t, borrowed, key))
             for key, transitions in self.transitions.items()
         }
 
@@ -725,30 +845,42 @@ class HoleSolver:
 
     # --- rounds ---------------------------------------------------------
 
-    def solve(self) -> Solution:
-        settings = self.settings
-        pending = {TEE}
-        shots = 0
-        started = time.perf_counter()
-        with ProcessPoolExecutor(
+    def _pool(self, table_path: str | None) -> ProcessPoolExecutor:
+        """
+        Workers for this hole, started fresh rather than forked: a fork copies
+        the whole main process, which grows with every hole solved, and each
+        worker's collector soon touches (and so duplicates) all of it.
+        """
+        return ProcessPoolExecutor(
             self.workers,
+            mp_context=multiprocessing.get_context("spawn"),
             initializer=_start,
             initargs=(
                 self.rom_path,
                 str(self.hole_path),
                 self.pin,
-                str(self.table_path),
+                table_path,
                 self.skill,
-                settings,
+                self.settings,
             ),
-        ) as pool:
+        )
+
+    def solve(self) -> Solution:
+        settings = self.settings
+        pending = {TEE}
+        shots = 0
+        started = time.perf_counter()
+        with self._pool(str(self.table_path)) as pool:
             self.scratch.mkdir(parents=True, exist_ok=True)
             greens = green.GreenSolver(self._green_table(pool), self.tables, self.skill)
             round_number = 0
             previous_tee = math.inf
             inside: dict[Key, float] = {}
-            for round_number in range(1, settings.rounds + 1):
+            screened_at: dict[Key, float] = {}
+            for round_number in range(1, settings.rounds + CLEANUP_ROUNDS + 1):
+                clock = time.perf_counter()
                 self._value_green(greens)
+                greening = time.perf_counter() - clock
                 values = str(self.scratch / f"values-{os.getpid()}-{round_number}.npy")
                 np.save(values, self.value_map().astype(np.float32))
                 borrowed = self._borrowed()
@@ -760,6 +892,8 @@ class HoleSolver:
                         and (
                             k not in self.transitions
                             or inside.get(k, 0.0) >= settings.refresh_reach
+                            or abs(self.value(k, borrowed) - screened_at[k])
+                            >= settings.rescreen_move
                         )
                     },
                     key=lambda k: (self.positions[k].y, self.positions[k].x),
@@ -768,6 +902,8 @@ class HoleSolver:
                     _Task(key, self.positions[key], values, self.value(key, borrowed))
                     for key in keys
                 ]
+                for task in screens:
+                    screened_at[task.key] = task.here
                 screening = playing = 0.0
                 plays: list[tuple[Key, Position, Intent]] = []
                 screened: dict[tuple[Key, Intent], tuple[int, float]] = {}
@@ -784,6 +920,8 @@ class HoleSolver:
                     for rank, intent, score in fresh:
                         screened[key, intent] = (rank, score)
                         plays.append((key, self.positions[key], intent))
+                # Only the screens read the map.
+                Path(values).unlink(missing_ok=True)
                 plays, racing = self._race(pool, plays, borrowed)
                 # Like shots next to each other, for each worker's caches.
                 plays.sort(
@@ -801,25 +939,39 @@ class HoleSolver:
                     added += 1
                 shots += added
                 pending.clear()
-                self.iterate()
+                clock = time.perf_counter()
+                self.iterate(ROUND_SWEEPS)
+                iterating = time.perf_counter() - clock
                 inside, outside = self.visits()
-                for key, mass in outside.items():
-                    if mass >= settings.reach:
-                        pending.add(key)
+                if round_number < settings.rounds:
+                    for key, mass in outside.items():
+                        if mass >= settings.reach:
+                            pending.add(key)
+                borrowed = self._borrowed()
+                due = sum(
+                    abs(self.value(k, borrowed) - screened_at[k])
+                    >= settings.rescreen_move
+                    for k in screened_at
+                )
                 tee = self.expected[TEE]
                 self.log(
                     f"round {round_number}: {len(keys)} of "
                     f"{sum(k[0] != GREEN for k in self.transitions)} states screened, "
                     f"{added} intents played, {len(pending)} to add, "
+                    f"{due} to screen again, "
                     f"tee {self.expected[TEE]:.3f}, "
                     f"{time.perf_counter() - started:.0f} s "
                     f"({screening:.0f} s screening, {racing:.0f} s racing, "
-                    f"{playing:.0f} s playing)"
+                    f"{playing:.0f} s playing; here {greening:.0f} s on the green, "
+                    f"{iterating:.0f} s iterating)"
                 )
                 settled = abs(tee - previous_tee) < settings.tolerance
-                if not pending and (not added or settled):
+                if not pending and not due and (not added or settled):
                     break
                 previous_tee = tee
+            # Each round's iteration stopped at ROUND_SWEEPS: settle the values.
+            self._value_green(greens)
+            self.iterate()
         inside, outside = self.visits()
         policy = self.policy()
         return Solution(
@@ -833,11 +985,57 @@ class HoleSolver:
             {key: list(ts) for key, ts in self.transitions.items()},
         )
 
+    def recheck(
+        self, points: int, states: Sequence[int], reach: float = 1e-3
+    ) -> tuple[float, int]:
+        """
+        The tee's value, and the states played again, when the policy `solve`
+        chose is played under a finer model: `points` errors a draw and the
+        RNG `states`, at every state off the green its play visits at least
+        `reach` times, and the green solved again at `points` (every putt is
+        in its table already). The other states keep their outcomes. The
+        policy is held fixed, so the gap to the solve's own value is how far
+        the solve's model flattered its own choices.
+        """
+        policy = self.policy()
+        inside, _ = self.visits()
+        keys = [k for k, mass in inside.items() if k[0] != GREEN and mass >= reach]
+        tasks = [
+            (k, self.positions[k], policy[k].intent, points, tuple(states))
+            for k in keys
+        ]
+        tasks.sort(key=lambda t: (t[2].club, t[2].swing_speed, t[2].aim, t[1].y))
+        saved = (dict(self.transitions), dict(self.expected), dict(self.positions))
+        with self._pool(None) as pool:
+            played = {
+                key: results
+                for key, _, results, _ in pool.map(_play_as, tasks, chunksize=1)
+            }
+            greens = green.GreenSolver(
+                self._green_table(pool), self.tables, self.skill, points
+            )
+        try:
+            self.transitions = {k: [t] for k, t in policy.items() if k[0] != GREEN}
+            for key, results in played.items():
+                self.transitions[key] = [
+                    Transition(policy[key].intent, self._outcomes(results))
+                ]
+            previous = math.inf
+            for _ in range(50):
+                self._value_green(greens)
+                self.iterate()
+                if abs(self.expected[TEE] - previous) < 1e-6:
+                    break
+                previous = self.expected[TEE]
+            return self.expected[TEE], len(keys)
+        finally:
+            self.transitions, self.expected, self.positions = saved
+
     def _race(
         self,
         pool: ProcessPoolExecutor,
         plays: list[tuple[Key, Position, Intent]],
-        borrowed: dict[int, np.ndarray],
+        borrowed: Borrowed,
     ) -> tuple[list[tuple[Key, Position, Intent]], float]:
         """
         The plays worth making exactly: where a spot has more than

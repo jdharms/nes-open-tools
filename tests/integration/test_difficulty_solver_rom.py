@@ -25,7 +25,15 @@ from golf.difficulty.landing import (
     save,
 )
 from golf.difficulty.player import PERFECT, Hole, Intent, Position, outcomes, swings
-from golf.difficulty.solver import GREEN, _blur, _spread, guess, pixel_class
+from golf.difficulty.solver import (
+    GREEN,
+    HoleSolver,
+    Transition,
+    _blur,
+    _spread,
+    guess,
+    pixel_class,
+)
 from golf.formats.hole_data import HoleData
 from golf.physics import (
     Flag,
@@ -210,3 +218,14 @@ def test_back_2_is_back_1_where_the_screen_drops_it(tables):
             club, position, Spin.BACK_2
         ), (club, position)
     assert rests(13, fairway, Spin.BACK_1) != rests(13, fairway, Spin.BACK_2)
+
+
+def test_a_shot_that_can_come_back_is_solved_not_iterated():
+    """A quarter of the time it stays (out of bounds, say); else 2 strokes are left."""
+    solver = HoleSolver.__new__(HoleSolver)
+    here, there = (0, 1, 1), (0, 5, 5)
+    solver.expected = {here: 9.0, there: 2.0}
+    shot = Transition(Intent(4, 0, 0), [(here, 2, 0.25), (there, 1, 0.75)])
+    # V = 0.25 (2 + V) + 0.75 (1 + 2), so V = 2.75 / 0.75, whatever V was.
+    assert solver._q(shot, {}, here) == pytest.approx(2.75 / 0.75)
+    assert solver._q(shot, {}) == pytest.approx(0.25 * 11 + 0.75 * 3)

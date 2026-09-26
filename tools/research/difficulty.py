@@ -11,9 +11,14 @@ a million shots, some minutes on every core) and caches it under `.cache/`.
 The first run on each hole and pin also plays every putt on its green once
 (`golf.difficulty.green`, a few minutes) and caches that too.
 
+Several holes (`--hole 1-18`, `--hole 1,4,9`) are solved one after another,
+with the round's total at the end; `--output` is then a directory, with one
+file per hole.
+
 Examples:
     golf-difficulty nes_open_us.nes --course us --hole 1
     golf-difficulty nes_open_us.nes --course uk --hole 9 --skill 1.5 --grid 8
+    golf-difficulty nes_open_us.nes --course uk --hole 1-18 --skill 3 --output uk/
     golf-difficulty nes_open_us.nes --build-table
 """
 
@@ -26,7 +31,7 @@ from pathlib import Path
 from golf.core.clubs import Club
 from golf.core.rom_reader import RomReader
 from golf.difficulty.landing import cache_path, load_or_build
-from golf.difficulty.player import Intent, Skill
+from golf.difficulty.player import Intent, Skill, rng_sample, rng_states
 from golf.difficulty.solver import GREEN, TEE, HoleSolver, Settings
 from golf.physics import PhysicsTables
 
@@ -56,7 +61,9 @@ def main() -> None:
     )
     parser.add_argument("rom", help="ROM whose physics to use")
     parser.add_argument("--course", default="us", help="directory under courses/")
-    parser.add_argument("--hole", type=int, default=1)
+    parser.add_argument(
+        "--hole", type=holes, default=[1], help="a hole, or several: 1-18, 1,4,9"
+    )
     parser.add_argument("--pin", type=int, default=0, choices=range(4))
     parser.add_argument(
         "--skill",
@@ -87,6 +94,12 @@ def main() -> None:
         help="intents kept after playing a shortlist roughly; 0 plays all exactly",
     )
     parser.add_argument("--refresh-reach", type=float, default=defaults.refresh_reach)
+    parser.add_argument(
+        "--rescreen-move",
+        type=float,
+        default=defaults.rescreen_move,
+        help="screen a spot again once its value has moved this far",
+    )
     parser.add_argument("--tolerance", type=float, default=defaults.tolerance)
     parser.add_argument("--rounds", type=int, default=defaults.rounds)
     parser.add_argument(
@@ -101,11 +114,26 @@ def main() -> None:
         default=defaults.error_points,
         help="about how many errors stand for each draw off the green",
     )
+    parser.add_argument(
+        "--recheck-error-points",
+        type=int,
+        help="then play the chosen policy again with this many errors a draw",
+    )
+    parser.add_argument(
+        "--recheck-rng-states",
+        type=int,
+        help="then play the chosen policy again from this many RNG states, "
+        "spread evenly (player.rng_sample)",
+    )
     parser.add_argument("--workers", type=int, help="processes; default every core")
     parser.add_argument(
         "--build-table", action="store_true", help="only build the landing table"
     )
-    parser.add_argument("--output", type=Path, help="write every state's value as JSON")
+    parser.add_argument(
+        "--output",
+        type=Path,
+        help="write every state's value as JSON; a directory for several holes",
+    )
     args = parser.parse_args()
 
     tables = PhysicsTables.from_rom(RomReader(args.rom))
@@ -125,15 +153,57 @@ def main() -> None:
         refresh=args.refresh,
         race=args.race,
         refresh_reach=args.refresh_reach,
+        rescreen_move=args.rescreen_move,
         tolerance=args.tolerance,
         rounds=args.rounds,
         rng_states=args.rng_states,
         error_points=args.error_points,
     )
+    totals = {"par": 0, "tee": 0.0, "recheck": 0.0}
+    rows = []
+    for hole in args.hole:
+        output = args.output
+        if output is not None and len(args.hole) > 1:
+            output.mkdir(parents=True, exist_ok=True)
+            output = output / f"hole_{hole:02}.json"
+        par, tee, recheck = solve_hole(args, settings, hole, output)
+        rows.append((hole, par, tee, recheck))
+        totals["par"] += par
+        totals["tee"] += tee
+        totals["recheck"] += recheck if recheck is not None else math.nan
+    if len(rows) > 1:
+        print(f"\n{args.course}, pin {args.pin}, skill {args.skill}:")
+        for hole, par, tee, recheck in rows:
+            again = "" if recheck is None else f"  rechecked {recheck:.3f}"
+            print(f"  hole {hole:2}  par {par}  {tee:.3f} ({tee - par:+.3f}){again}")
+        again = (
+            ""
+            if math.isnan(totals["recheck"])
+            else (f"  rechecked {totals['recheck']:.2f}")
+        )
+        print(
+            f"  total   par {totals['par']}  {totals['tee']:.2f} "
+            f"({totals['tee'] - totals['par']:+.2f}){again}"
+        )
+
+
+def holes(text: str) -> list[int]:
+    """`--hole`: 7, 1-18 or 1,4,9."""
+    chosen: list[int] = []
+    for part in text.split(","):
+        first, _, last = part.partition("-")
+        chosen.extend(range(int(first), int(last or first) + 1))
+    return chosen
+
+
+def solve_hole(
+    args: argparse.Namespace, settings: Settings, hole: int, output: Path | None
+) -> tuple[int, float, float | None]:
+    """Solve one hole and report it: its par, the tee's value and any recheck's."""
     solver_args = {"workers": args.workers} if args.workers else {}
     solver = HoleSolver(
         args.rom,
-        Path("courses") / args.course / f"hole_{args.hole:02}.json",
+        Path("courses") / args.course / f"hole_{hole:02}.json",
         pin=args.pin,
         skill=Skill.scaled(args.skill),
         settings=settings,
@@ -143,7 +213,7 @@ def main() -> None:
     solution = solver.solve()
     par = solver.hole.metadata["par"]
     print(
-        f"\n{args.course} hole {args.hole} (par {par}), pin {args.pin}, "
+        f"\n{args.course} hole {hole} (par {par}), pin {args.pin}, "
         f"skill {args.skill}: {solution.tee:.3f} strokes from the tee"
     )
     print(f"  from the tee: {describe(solution.policy[TEE])}")
@@ -162,7 +232,7 @@ def main() -> None:
                     "screened": t.screened,
                     "expected": q,
                 }
-                for t, q in zip(transitions, solver.q(transitions), strict=True)
+                for t, q in zip(transitions, solver.q(transitions, key), strict=True)
             ),
             key=lambda p: p["expected"],
         )
@@ -170,7 +240,23 @@ def main() -> None:
     }
     print_ranks(solution.visits, played)
 
-    if args.output:
+    recheck = None
+    if args.recheck_error_points or args.recheck_rng_states:
+        points = args.recheck_error_points or settings.error_points
+        states = (
+            rng_sample(args.recheck_rng_states)
+            if args.recheck_rng_states
+            else rng_states(settings.rng_states)
+        )
+        started = time.perf_counter()
+        recheck, count = solver.recheck(points, states, settings.reach)
+        print(
+            f"  the same policy with {points} errors a draw and {len(states)} RNG "
+            f"states: {recheck:.3f} from the tee ({recheck - solution.tee:+.3f}), "
+            f"{count} states played again, {time.perf_counter() - started:.0f} s"
+        )
+
+    if output:
         states = [
             {
                 "class": key[0],
@@ -183,7 +269,11 @@ def main() -> None:
             }
             for key in solution.policy
         ]
-        args.output.write_text(json.dumps({"tee": solution.tee, "states": states}))
+        pin = [solver.flag.x >> 8, solver.flag.y >> 8]
+        output.write_text(
+            json.dumps({"tee": solution.tee, "par": par, "pin": pin, "states": states})
+        )
+    return par, solution.tee, recheck
 
 
 def print_ranks(visits: dict, played: dict) -> None:

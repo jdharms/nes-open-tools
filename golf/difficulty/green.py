@@ -27,6 +27,7 @@ import numpy as np
 
 from golf.difficulty.landing import power_targets
 from golf.difficulty.player import (
+    EVERY_UNIT,
     HOLED,
     RNG_STATES,
     Hole,
@@ -142,7 +143,8 @@ def build_pixel(
 def cache_path(rom: bytes, hole_json: bytes, pin: int, directory: Path) -> Path:
     """Where in `directory` the table for this ROM, hole and pin is kept."""
     digest = hashlib.sha256()
-    for part in (rom, hole_json, f"{pin} {AIM_WINDOW} {FRAME_MARGIN} v1".encode()):
+    settings = f"{pin} {AIM_WINDOW} {FRAME_MARGIN} {RNG_STATES[0]} v1"
+    for part in (rom, hole_json, settings.encode()):
         digest.update(part)
     return directory / f"green-{digest.hexdigest()[:16]}.npz"
 
@@ -166,7 +168,17 @@ def load(path: Path) -> GreenTable:
 class GreenSolver:
     """The green's values under one skill, from its table."""
 
-    def __init__(self, table: GreenTable, tables: PhysicsTables, skill: Skill) -> None:
+    def __init__(
+        self,
+        table: GreenTable,
+        tables: PhysicsTables,
+        skill: Skill,
+        points: int = EVERY_UNIT,
+    ) -> None:
+        """
+        `points` is about how many errors stand for each draw (`errors`): by
+        default every unit, as the green is lookups alone.
+        """
         self.table = table
         count = len(table.pixels)
         rests = table.rests
@@ -197,7 +209,7 @@ class GreenSolver:
         self.valid = strokes != UNREACHED
 
         # The press errors, as each aimed press's chance of each stop.
-        power = errors(skill.power)
+        power = errors(skill.power, points)
         self.frames = [aimed_frames(tables, speed) for speed in range(SPEEDS)]
         self.stop_of = [frame_stops(tables, speed) for speed in range(SPEEDS)]
         self.power = []
@@ -210,7 +222,7 @@ class GreenSolver:
                     weights[row, stops[pressed - 1]] += p
             self.power.append(weights)
         # The aim errors, and the aims intended, far enough inside the window.
-        self.aim = errors(skill.aim)
+        self.aim = errors(skill.aim, points)
         reach = max(abs(error) for error, _ in self.aim)
         if reach >= AIM_WINDOW:
             raise ValueError(f"aim errors reach {reach} steps, past the table's window")

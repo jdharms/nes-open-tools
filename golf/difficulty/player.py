@@ -22,6 +22,7 @@ from collections.abc import Sequence
 from dataclasses import dataclass, field, replace
 from functools import cache
 
+from golf.core.rng import lfsr_step
 from golf.physics import meter
 from golf.physics.flights import Flights
 from golf.physics.rules import play_on
@@ -41,10 +42,64 @@ ERROR_REACH = 2.0
 #: About this many distinct errors stand for each draw: a wider error is
 #: played at every few whole units, so a shot costs much the same at any skill.
 ERROR_POINTS = 7
+#: Enough points for every whole unit, however wide the error.
+EVERY_UNIT = 1 << 16
 
-#: The RNG states each shot is played from, standing for all of them. Two of
-#: each parity, as the fairway's first bounce reads the low bit.
-RNG_STATES = (0x0001, 0x4E6C, 0x9A3B, 0xD5C2)
+#: The RNG states each shot is played from, standing for all of them:
+#: `rng_sample(4)`, which spreads the rough and bunker draw evenly and takes the
+#: fairway's coin both ways. Kept as numbers, as the search takes a few seconds.
+RNG_STATES = (0x1D9E, 0x19DF, 0x0A0E, 0x1581)
+
+
+def lie_draw(state: int) -> float:
+    """
+    The share of its variance a rough or bunker shot from `state` adds to its
+    power, -1 to 1: the launch's one draw, signed by the new state's top bit.
+    """
+    after, draw = lfsr_step(state)
+    return -draw / 256 if after & 0x8000 else draw / 256
+
+
+def rng_states(count: int) -> tuple[int, ...]:
+    """`count` states standing for all of them: `RNG_STATES` for 4."""
+    return RNG_STATES if count == len(RNG_STATES) else rng_sample(count)
+
+
+@cache
+def rng_sample(count: int) -> tuple[int, ...]:
+    """
+    `count` RNG states standing evenly for all of them: their rough and bunker
+    draws (`lie_draw`) at the middles of `count` equal slices of -1 to 1; the
+    fairway's coin flip, read before the draw and after it, each side equally
+    often; and their low bytes, which a landing in sand reads for its depth,
+    spread over the same slices in another order.
+    """
+    # $5555 and $AAAA cycle on their own; play never meets them.
+    states = [
+        (s, lie_draw(s), (s & 1, lfsr_step(s)[0] & 1))
+        for s in range(1, 0x10000)
+        if s not in (0x5555, 0xAAAA)
+    ]
+    chosen: list[int] = []
+    for i in range(count):
+        target = -1 + (2 * i + 1) / count
+        low = ((i * 5 + 2) % count + 0.5) / count * 256
+        coins = (i & 1, (i ^ i >> 1) & 1)
+        near = [
+            (abs(draw - target), s)
+            for s, draw, c in states
+            if c == coins and s not in chosen
+        ]
+        # Within a couple of draws of the slice's middle, the nearest low byte.
+        closest = min(miss for miss, _ in near)
+        chosen.append(
+            min(
+                (s for miss, s in near if miss <= closest + 2 / 256),
+                key=lambda s: abs((s & 0xFF) - low),
+            )
+        )
+    return tuple(chosen)
+
 
 #: How much each error is, per unit of skill: a stated assumption, which the
 #: calibration's sensitivity runs vary (`docs/planning/hole_difficulty.md`).

@@ -8,7 +8,14 @@ import pytest
 from golf.core.rom_reader import RomReader
 from golf.difficulty import green
 from golf.difficulty.green import GreenSolver, GreenTable, aim_at, build_pixel
-from golf.difficulty.player import RNG_STATES, Hole, Position, Skill, outcomes
+from golf.difficulty.player import (
+    EVERY_UNIT,
+    RNG_STATES,
+    Hole,
+    Position,
+    Skill,
+    outcomes,
+)
 from golf.formats.hole_data import HoleData
 from golf.physics import Flag, HoleGround, Lie, PhysicsTables
 from golf.physics.terrain import TerrainTables
@@ -82,6 +89,7 @@ def test_the_table_gives_what_outcomes_gives(hole, table, scale, monkeypatch):
                         (0, 0),
                         skill,
                         (RNG_STATES[0],),
+                        EVERY_UNIT,
                     )
                     looked_up = solver._outcomes(pixel, speed, row, column)
                     assert looked_up.keys() == exact.keys(), intent

@@ -6,12 +6,14 @@ from pathlib import Path
 
 import pytest
 
+from golf.core.rng import lfsr_step
 from golf.core.rom_reader import RomReader
 from golf.difficulty.player import (
     ERROR_POINTS,
     ERROR_REACH,
     HOLED,
     PERFECT,
+    RNG_STATES,
     Hole,
     Intent,
     Position,
@@ -19,8 +21,10 @@ from golf.difficulty.player import (
     Skill,
     accuracy_press,
     errors,
+    lie_draw,
     outcomes,
     power_press,
+    rng_sample,
     swings,
 )
 from golf.formats.hole_data import HoleData
@@ -203,3 +207,20 @@ def test_a_rough_grid_has_three_errors(deviation):
     assert rough[0] > 0
     assert sum(rough.values()) == pytest.approx(1)
     assert all(rough[k] == pytest.approx(rough[-k]) for k in rough)
+
+
+@pytest.mark.parametrize("count", [2, 4, 8])
+def test_an_rng_sample_spreads_the_draws_and_coins(count):
+    states = rng_sample(count)
+    assert len(set(states)) == count
+    draws = sorted(lie_draw(s) for s in states)
+    middles = [-1 + (2 * i + 1) / count for i in range(count)]
+    assert draws == pytest.approx(middles, abs=3 / 256)
+    before = [s & 1 for s in states]
+    after = [lfsr_step(s)[0] & 1 for s in states]
+    assert sum(before) == count // 2
+    assert sum(after) == count // 2
+
+
+def test_the_rng_states_are_an_even_sample():
+    assert rng_sample(len(RNG_STATES)) == RNG_STATES
