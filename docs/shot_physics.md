@@ -86,9 +86,11 @@ step (a higher launch) and holding Up subtracts it. sin(angle) × power is the v
 speed and cos(angle) × power the ground speed. The ground speed is then split along the aim
 into X and Y velocity.
 
-**Backspin** is a second budget, sin(base loft) × `$D0` × power, pointing opposite the aim
-(`VelocityScaleX/Y` `$E4-$E7`). It ignores hi/lo. In the air it gives lift; on the ground
-it brakes the roll until it is spent. Despite the name `VelocityScale`, it is not a scale.
+**Backspin** is a second budget, sin(base loft) × `#$D0` × power, pointing opposite the aim
+(`VelocityScaleX/Y` `$E4-$E7`). `#$D0` is a constant, 208/256, built at `$AEB5` as
+`$1C << 2 + $60`; it is not zero page `$D0`. It ignores hi/lo and the spin setting. In the
+air it gives lift; on the ground it brakes the roll until it is spent. Despite the name
+`VelocityScale`, it is not a scale.
 
 **Curve**: how far the accuracy meter stopped from centre (`$D7` against `$30`), capped at
 `$18`, minus the club's `ClubAimForgivenessTable` entry, times 8, is `AimDeviationMag`. The
