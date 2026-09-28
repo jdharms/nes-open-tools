@@ -26,7 +26,9 @@ in this package.
   takes credentials for a signed-in download and none for a guest. Builds run in the threadpool (`run_in_threadpool`), never on the event
   loop.
 - Route helpers with no web types live beside the app: `server/forms.py` (the generate
-  form to `Settings`, the download form to `PlayerOptions` and ROM hashes),
+  form to `Settings`, the download form to `PlayerOptions` and ROM hashes, and a player's
+  `SavedSettings`, with `fit` to start a seed's form from them and `to_save` for what a
+  download remembers),
   `server/views.py` (what a page shows, as dataclasses, and the download file name) and
   `server/ratelimit.py`.
 - `server/auth.py` holds sign-in: `DiscordClient` (the two OAuth2 calls), `safe_next` for
