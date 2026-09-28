@@ -1,5 +1,45 @@
 {% extends "base.html" %}
 {% import "_scorecard.html" as scorecard %}
+{% macro bgm_label(on) -%}
+  {%- if on -%}{{ t_plain("seed.download.bgm.on") }}{%- else -%}{{ t_plain("seed.download.bgm.off") }}{%- endif -%}
+{%- endmacro %}
+{% macro speed_label(value) -%}
+  {%- if value == "slow" -%}{{ t_plain("seed.download.speed.slow") }}
+  {%- elif value == "medium" -%}{{ t_plain("seed.download.speed.medium") }}
+  {%- elif value == "fast" -%}{{ t_plain("seed.download.speed.fast") }}
+  {%- else -%}{{ t_plain("seed.download.speed.off") }}
+  {%- endif -%}
+{%- endmacro %}
+{% macro spin_label(value) -%}
+  {%- if value == "top2" -%}{{ t_plain("seed.download.spin.top2") }}
+  {%- elif value == "top1" -%}{{ t_plain("seed.download.spin.top1") }}
+  {%- elif value == "normal" -%}{{ t_plain("seed.download.spin.normal") }}
+  {%- elif value == "back1" -%}{{ t_plain("seed.download.spin.back1") }}
+  {%- elif value == "back2" -%}{{ t_plain("seed.download.spin.back2") }}
+  {%- else -%}{{ t_plain("seed.download.spin.off") }}
+  {%- endif -%}
+{%- endmacro %}
+{# A summary value, marked so download.js can copy the control's current value into it. #}
+{% macro summary_value(field, value) -%}
+  <span data-summary="{{ field }}">{{ value }}</span>
+{%- endmacro %}
+{% macro bgm_summary(on) -%}
+  <span data-summary="bgm"
+        data-on="{{ t_plain('seed.download.bgm.on') }}"
+        data-off="{{ t_plain('seed.download.bgm.off') }}">{{ bgm_label(on) }}</span>
+{%- endmacro %}
+{% macro speed_options(selected) %}
+  {% for value in ("off", "slow", "medium", "fast") %}
+    <option value="{{ value }}"
+            {% if value == selected %} selected{% endif %}>{{ speed_label(value) }}</option>
+  {% endfor %}
+{% endmacro %}
+{% macro spin_options(selected) %}
+  {% for value in ("off", "top2", "top1", "normal", "back1", "back2") %}
+    <option value="{{ value }}"
+            {% if value == selected %} selected{% endif %}>{{ spin_label(value) }}</option>
+  {% endfor %}
+{% endmacro %}
 {% block title %}{{ t_plain("seed.page_title", words=seed.magic_words|join(" ")) }}{% endblock %}
 {% block content %}
   <hgroup>
@@ -31,42 +71,96 @@
           <p><mark>{{ t("seed.download.noscript") }}</mark></p>
         </noscript>
 
+        {% set state = download.state %}
         <form method="post" action="{{ download.ips_url }}" id="download-form">
-          <label for="download-name">{{ t("seed.download.name_label") }}</label>
-          <input type="text"
-                 id="download-name"
-                 name="player_name"
-                 value="{{ download.default_name }}"
-                 maxlength="{{ download.name_max }}"
-                 autocomplete="off"
-                 autocapitalize="characters"
-                 spellcheck="false"
-                 required>
+          {% set summary_name = summary_value("name", state.player_name) %}
+          {% set summary_clubs = summary_value("clubs", download.bag_count) %}
+          <details class="download-settings"
+                   data-clubs-max="{{ download.clubs_max }}"
+                   data-over-max="{{ 'true' if download.over_max else 'false' }}"
+                   {% if download.open %}open{% endif %}>
+            <summary>
+              {% if download.option_defaults %}
+                {{ t("seed.download.summary", name=summary_name, clubs=summary_clubs, bgm=bgm_summary(state.bgm), swing=summary_value("swing", speed_label(state.swing)), putt=summary_value("putt", speed_label(state.putt)), spin=summary_value("spin", spin_label(state.spin))) }}
+              {% else %}
+                {{ t("seed.download.summary_no_defaults", name=summary_name, clubs=summary_clubs, bgm=bgm_summary(state.bgm)) }}
+              {% endif %}
+              {% if download.removed %}
+                <mark class="download-removed">{{ t("seed.download.adjusted.removed", clubs=download.removed|join(" ")) }}</mark>
+              {% endif %}
+              <mark class="download-over-max">{{ t("seed.download.adjusted.over_max", count=summary_clubs, max=download.clubs_max) }}</mark>
+            </summary>
 
-          {% if download.required_bag %}
-            <p>{{ t("seed.download.locked_bag", clubs=download.required_bag|join(" ")) }}</p>
-          {% else %}
+            <label for="download-name">{{ t("seed.download.name_label") }}</label>
+            <input type="text"
+                   id="download-name"
+                   name="player_name"
+                   value="{{ state.player_name }}"
+                   maxlength="{{ download.name_max }}"
+                   autocomplete="off"
+                   autocapitalize="characters"
+                   spellcheck="false"
+                   required>
+
+            {% if download.required_bag %}
+              <p>{{ t("seed.download.locked_bag", clubs=download.required_bag|join(" ")) }}</p>
+            {% else %}
+              <fieldset>
+                <legend>{{ t("seed.download.clubs_legend") }}</legend>
+                <div class="club-grid">
+                  {% for label in download.club_labels %}
+                    <label>
+                      {% if label in download.banned %}
+                        <input type="checkbox"
+                               name="clubs"
+                               value="{{ label }}"
+                               disabled>
+                        <s>{{ label }}</s>
+                      {% else %}
+                        <input type="checkbox"
+                               name="clubs"
+                               value="{{ label }}"
+                               {% if label in state.clubs %}checked{% endif %}>
+                        {{ label }}
+                      {% endif %}
+                    </label>
+                  {% endfor %}
+                </div>
+                <small>{{ t("seed.download.clubs_help", max=download.clubs_max) }}</small>
+              </fieldset>
+            {% endif %}
+
             <fieldset>
-              <legend>{{ t("seed.download.clubs_legend") }}</legend>
-              <div class="club-grid">
-                {% for label in download.club_labels %}
+              <legend>{{ t("seed.download.options_legend") }}</legend>
+              {# a hidden off before the checkbox: no bgm field at all means an older page #}
+              <input type="hidden" name="bgm" value="off">
+              <label>
+                <input type="checkbox"
+                       name="bgm"
+                       value="on"
+                       role="switch"
+                       {% if state.bgm %}checked{% endif %}>
+                {{ t("seed.download.bgm_label") }}
+              </label>
+              {% if download.option_defaults %}
+                <div class="grid download-defaults">
                   <label>
-                    {% if label in download.banned %}
-                      <input type="checkbox" name="clubs" value="{{ label }}" disabled>
-                      <s>{{ label }}</s>
-                    {% else %}
-                      <input type="checkbox"
-                             name="clubs"
-                             value="{{ label }}"
-                             {% if label in download.default_clubs %}checked{% endif %}>
-                      {{ label }}
-                    {% endif %}
+                    {{ t("seed.download.swing_label") }}
+                    <select name="swing">{{ speed_options(state.swing) }}</select>
                   </label>
-                {% endfor %}
-              </div>
-              <small>{{ t("seed.download.clubs_help", max=download.clubs_max) }}</small>
+                  <label>
+                    {{ t("seed.download.putt_label") }}
+                    <select name="putt">{{ speed_options(state.putt) }}</select>
+                  </label>
+                  <label>
+                    {{ t("seed.download.spin_label") }}
+                    <select name="spin">{{ spin_options(state.spin) }}</select>
+                  </label>
+                </div>
+                <small>{{ t("seed.download.options_help") }}</small>
+              {% endif %}
             </fieldset>
-          {% endif %}
+          </details>
 
           <p class="download-status" role="status" aria-live="polite"></p>
           <p class="download-rom-setup"><a href="/rom">{{ t("seed.download.rom_setup_link") }}</a></p>

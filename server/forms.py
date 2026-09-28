@@ -207,7 +207,9 @@ def writes_option_defaults(abi: int) -> bool:
 class DownloadState:
     """The seed page's download form: the player's choices and the ROM hashes the script adds.
 
-    Swing, putt and spin are named as in `SPEED_CHOICES` and `SPIN_CHOICES`.
+    Swing, putt and spin are named as in `SPEED_CHOICES` and `SPIN_CHOICES`. The form sends
+    BGM as a hidden `off` followed by a checkbox's `on`, so a submission with no `bgm`
+    field at all, from a page that predates it, keeps the music on.
     """
 
     player_name: str
@@ -235,16 +237,30 @@ class DownloadState:
             value = form.get(key)
             if key.startswith(ROM_HASH_PREFIX) and isinstance(value, str):
                 hashes[key.removeprefix(ROM_HASH_PREFIX)] = value.strip().lower()
+
+        def choice(name: str) -> str:
+            value = form.get(name)
+            return value.strip().lower() if isinstance(value, str) else OFF
+
+        bgm = form.getlist("bgm")
         return cls(
             player_name=name.strip() if isinstance(name, str) else "",
             clubs={value for value in form.getlist("clubs") if isinstance(value, str)},
             rom_hashes=hashes,
+            bgm="on" in bgm if bgm else True,
+            swing=choice("swing"),
+            putt=choice("putt"),
+            spin=choice("spin"),
         )
 
     def to_pairs(self) -> list[tuple[str, str]]:
         """The state as the fields a browser would submit for it, hashes included."""
         pairs = [("player_name", self.player_name)]
         pairs += [("clubs", club.label) for club in Club if club.label in self.clubs]
+        pairs.append(("bgm", "off"))
+        if self.bgm:
+            pairs.append(("bgm", "on"))
+        pairs += [("swing", self.swing), ("putt", self.putt), ("spin", self.spin)]
         pairs += [
             (ROM_HASH_PREFIX + rom_id, sha1) for rom_id, sha1 in self.rom_hashes.items()
         ]
@@ -398,10 +414,13 @@ def check_rom_hashes(state: DownloadState, required: Iterable[str]) -> None:
         )
 
 
-def player_options_from_state(state: DownloadState, rules: ClubRules) -> PlayerOptions:
+def player_options_from_state(
+    state: DownloadState, rules: ClubRules, abi: int = FINISH_ABI_VERSION
+) -> PlayerOptions:
     """The options a download asks for under the seed's club rules. Raises FormError for anything they forbid.
 
-    A seed with a required bag ignores the submitted clubs and uses its bag.
+    A seed with a required bag ignores the submitted clubs and uses its bag. A seed whose
+    ABI cannot write swing, putt and spin, whose form leaves them out, takes only off.
     """
     name = state.player_name.upper()
     bad = "".join(sorted(set(name) - set(NAME_CHARS)))
@@ -423,8 +442,23 @@ def player_options_from_state(state: DownloadState, rules: ClubRules) -> PlayerO
     if len(bag) > rules.max:
         raise FormError(CLUBS_OVER_MAX, count=len(bag), max=rules.max)
 
+    for field_name, value, choices in (
+        ("swing", state.swing, SPEED_CHOICES),
+        ("putt", state.putt, SPEED_CHOICES),
+        ("spin", state.spin, SPIN_CHOICES),
+    ):
+        if value not in choices or (value != OFF and not writes_option_defaults(abi)):
+            raise FormError(INVALID, field=field_name)
+
     try:
-        return PlayerOptions(player_name=name, clubs=bag)
+        return PlayerOptions(
+            player_name=name,
+            clubs=bag,
+            bgm=state.bgm,
+            swing=SwingSpeed[state.swing.upper()],
+            putt=SwingSpeed[state.putt.upper()],
+            spin=BallSpin[state.spin.upper()],
+        )
     except (
         BuildError
     ):  # pragma: no cover - every rule PlayerOptions checks is checked above

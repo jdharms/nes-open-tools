@@ -16,7 +16,7 @@ note = "h2 over the download form"
 text = "Download"
 
 [seed.download.lead]
-note = "line at the top of the download form; choose a name and bag; the ROM is patched in this browser from the ROM set up there"
+note = "line at the top of the download form; choose a name, bag and new-save options; the ROM is patched in this browser from the ROM set up there"
 text = """
 Change customizable settings here and download the patched ROM.
 The ROM is patched in this browser."""
@@ -39,6 +39,30 @@ text = "You're currently <mark>not signed in</mark>, so this download would be a
 note = "plain: link after seed.download.guest_notice; signs in with Discord and comes back to this seed page"
 text = "Log in here"
 
+[seed.download.summary]
+note = "summary line of the collapsed download settings, click to open them; what the ROM will be patched with: {name} player name, {clubs} bag size with the putter, {bgm} seed.download.bgm.* word, {swing} and {putt} seed.download.speed.* words, {spin} a seed.download.spin.* word; starts from the player's saved settings"
+text = """
+Name: {name}, {clubs} clubs, BGM: {bgm}, Swing: {swing}, Putt: {putt}, Spin: {spin}
+"""
+
+[seed.download.summary_no_defaults]
+note = "as seed.download.summary, for an older seed whose ROM can't take swing, putt or spin defaults: {name}, {clubs} and {bgm} only"
+text = """
+Name: {name}, {clubs} clubs, BGM: {bgm}
+"""
+
+[seed.download.adjusted.removed]
+note = "marker in the settings summary; saved clubs this seed bans were taken out of the bag, their slots left empty; {clubs} their labels"
+text = """
+Check club bag, this seed removed clubs: {clubs}
+"""
+
+[seed.download.adjusted.over_max]
+note = "marker in the settings summary, settings start open; the bag is over this seed's limit and the download will be refused until clubs are removed; {count} clubs in the bag with the putter, {max} the limit"
+text = """
+Check club bag, this seed limits to {max} clubs including the putter, you have {count} selected
+"""
+
 [seed.download.name_label]
 note = "label for the player name input; A-Z, '.' and space, at most 10; what a new save starts with"
 text = "Default Player Name"
@@ -59,6 +83,81 @@ note = "shown instead of club checkboxes when the seed has a locked bag; {clubs}
 text = """
 This seed has a Locked Club Bag, with the following clubs: {clubs}
 """
+
+[seed.download.options_legend]
+note = "legend over the new-save option controls: music, and on newer seeds swing speed, putt speed and ball spin defaults; the game's club house OPTIONS screen can still change them"
+text = "Player Options"
+
+[seed.download.bgm_label]
+note = "label beside the music switch; on plays course music; what a new save starts with"
+text = "Course Background Music"
+
+[seed.download.swing_label]
+note = "label over the swing speed default select; the speed each full shot starts at"
+text = "Default Swing Speed"
+
+[seed.download.putt_label]
+note = "label over the putt speed default select; the speed each putt starts at"
+text = "Default Putt Speed"
+
+[seed.download.spin_label]
+note = "label over the ball spin default select; the spin each shot starts with"
+text = "Default Swing Spin"
+
+[seed.download.options_help]
+note = "small line under the option selects; a default resets that setting at the start of every shot; off keeps whatever the player chose last, as the unmodified game does; TOP 1 and TOP 2 play as normal spin"
+text = """
+"Off" keeps whatever the previous swing was.  Another default will change the speed/spin at the start of the shot setup process.
+"""
+
+
+[seed.download.bgm.on]
+note = "plain: music on, as a value in seed.download.summary"
+text = "On"
+
+[seed.download.bgm.off]
+note = "plain: music off, as a value in seed.download.summary"
+text = "Off"
+
+[seed.download.speed.off]
+note = "plain: select option and summary value; no default, each shot keeps the speed last chosen; the game's own behavior"
+text = "Off"
+
+[seed.download.speed.slow]
+note = "plain: select option and summary value; the game's SLOW speed"
+text = "Slow"
+
+[seed.download.speed.medium]
+note = "plain: select option and summary value; the game's MEDIUM speed"
+text = "Medium"
+
+[seed.download.speed.fast]
+note = "plain: select option and summary value; the game's FAST speed"
+text = "Fast"
+
+[seed.download.spin.off]
+note = "plain: select option and summary value; no default, each shot keeps the spin last chosen; the game's own behavior"
+text = "Off"
+
+[seed.download.spin.top2]
+note = "plain: select option and summary value; the game's TOP 2 spin, which plays as normal"
+text = "Top2"
+
+[seed.download.spin.top1]
+note = "plain: select option and summary value; the game's TOP 1 spin, which plays as normal"
+text = "Top1"
+
+[seed.download.spin.normal]
+note = "plain: select option and summary value; the game's normal spin"
+text = "Normal"
+
+[seed.download.spin.back1]
+note = "plain: select option and summary value; the game's BACK 1 spin"
+text = "Back1"
+
+[seed.download.spin.back2]
+note = "plain: select option and summary value; the game's BACK 2 spin"
+text = "Back2"
 
 [seed.download.rom_setup_link]
 note = "link to ROM setup; shown only while a ROM this seed needs is not set up in this browser"

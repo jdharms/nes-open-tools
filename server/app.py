@@ -530,7 +530,9 @@ def create_app(
             outcome(request, problem.reason)
             return json_refusal(403, problem.reason, problem.values)
         try:
-            options = player_options_from_state(state, manifest.course.clubs)
+            options = player_options_from_state(
+                state, manifest.course.clubs, manifest.finish_abi_version
+            )
         except FormError as problem:
             outcome(request, problem.reason)
             return json_refusal(400, problem.reason, problem.values)

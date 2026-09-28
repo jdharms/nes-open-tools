@@ -9,6 +9,7 @@ from pathlib import Path
 
 import pytest
 
+from golf.core.patches.new_save_options import BallSpin, SwingSpeed
 from golf.core.patches.sram_defaults import VANILLA_CLUBS, Club
 from golf.randomizer.build import PlayerOptions, finish
 from golf.randomizer.manifest import Manifest
@@ -78,8 +79,36 @@ def test_the_downloaded_rom_is_the_finished_rom(
             seed_id = page.url.rsplit("/", 1)[1]
             page.wait_for_selector('article.download[data-state="ready"]')
 
+            page.click("details.download-settings > summary")
             page.fill("#download-name", "yoshi")
             page.uncheck('input[name="clubs"][value="2W"]')
+            page.uncheck('input[name="bgm"][value="on"]')
+            page.select_option('select[name="swing"]', "fast")
+            page.select_option('select[name="spin"]', "back1")
+            summary = {
+                field: page.text_content(f'summary [data-summary="{field}"]')
+                for field in ("name", "clubs", "bgm", "swing", "putt", "spin")
+            }
+            options = {
+                field: page.text_content(f'select[name="{field}"] option:checked')
+                for field in ("swing", "putt", "spin")
+            }
+            music_off = page.get_attribute('summary [data-summary="bgm"]', "data-off")
+
+            settings = "details.download-settings"
+            assert page.get_attribute(settings, "data-over-max") == "false"
+            assert not page.is_visible(".download-over-max")
+            for club in ("4W", "1I", "2W"):
+                page.check(f'input[name="clubs"][value="{club}"]')
+            assert page.get_attribute(settings, "data-over-max") == "true"
+            assert page.is_visible(".download-over-max")
+            assert (
+                page.text_content('.download-over-max [data-summary="clubs"]') == "16"
+            )
+            for club in ("4W", "1I"):
+                page.uncheck(f'input[name="clubs"][value="{club}"]')
+            page.uncheck('input[name="clubs"][value="2W"]')
+            assert page.get_attribute(settings, "data-over-max") == "false"
             with page.expect_download() as caught:
                 page.click("#download-form button[type=submit]")
             saved = tmp_path / "download.nes"
@@ -95,9 +124,21 @@ def test_the_downloaded_rom_is_the_finished_rom(
             ).fetchone()
 
     assert not errors
+    assert summary == {
+        "name": "YOSHI",
+        "clubs": "13",
+        "bgm": music_off,
+        **options,
+    }
     manifest = Manifest.from_json(json.loads(row["manifest"]))
     assert suggested == f"notgr_par{manifest.course.par}_{seed_id}.nes"
-    options = PlayerOptions("YOSHI", frozenset(VANILLA_CLUBS) - {Club.W2})
+    options = PlayerOptions(
+        "YOSHI",
+        frozenset(VANILLA_CLUBS) - {Club.W2},
+        bgm=False,
+        swing=SwingSpeed.FAST,
+        spin=BallSpin.BACK1,
+    )
     expected = finish(
         manifest, US_ROM_PATH.read_bytes(), row["unfinished_ips"], options
     )

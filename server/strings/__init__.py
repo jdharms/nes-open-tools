@@ -125,8 +125,11 @@ class Strings:
         """The string for an HTML body: its text may hold inline HTML, and values are escaped."""
         entry = self.entry(key)
         if not entry.text:
+            # built as Markup, so a Markup value renders as it would in written text
+            parts = [key, *(Markup("{}={}").format(n, v) for n, v in values.items())]
+            placeholder = Markup("⟦{}⟧").format(Markup(" ").join(parts))
             return Markup('<span class="unwritten" title="{}">{}</span>').format(
-                entry.note, _placeholder(key, values)
+                entry.note, placeholder
             )
         return self._format(key, Markup(entry.text), values)
 
