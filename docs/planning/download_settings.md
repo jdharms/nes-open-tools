@@ -20,9 +20,11 @@ In scope:
   with a place on `/me` to edit the account's.
 - Fitting saved settings to a seed's club rules, and a collapsed summary of the settings
   on the seed page.
+- Freezing the bag: in a seed with club rules, CHOOSE CLUBS leaves the club house, so the
+  bag a ROM plays with is the one chosen on the download form.
 
-Out of scope: seeds that constrain anything other than clubs, recording the new settings
-in `entries`, and a bag enforced from PRG ROM (the devplan's "Bag from ROM" polish item).
+Out of scope: seeds that constrain anything other than clubs, and recording the new
+settings in `entries`.
 
 ## Terms
 
@@ -52,13 +54,33 @@ the label file:
 | Putt speed | `$6F9A` `PuttSwingSpeedDefault` | `$FF` off, `$00` slow, `$01` medium, `$02` fast | off |
 | Ball spin | `$6F9B` `BallSpinDefault` | `$FF` off, `$00` TOP 2, `$01` TOP 1, `$02` normal, `$03` BACK 1, `$04` BACK 2 | off |
 
-TOP 1 and TOP 2 have no effect on play (`docs/topspin.md`). Whether the form offers them
-is an open question below.
+TOP 1 and TOP 2 have no effect on play (`docs/topspin.md`). The form offers them anyway,
+as it offers every value the game accepts.
 
-Before making the changes to the sram_defaults patch, recommend spending time doing some
-reverse-engineering/rom-research to figure out how these SRAM values are *read*.  It
-might turn out to be a good time to do the work from converting this from an SRAM-defaults
-patch to a "hardcode the values into the rom somewhere" patch.
+### How the game uses them
+
+These are the settings on the club house's Options screen (bank 11, reached by the far
+call at `$851A` to `$8B1B`). That screen reads and writes all four in SRAM: BGM at
+`$8BCE`/`$8BF2`, swing and putt by stepping them with `DEC`/`INC` (`$8C56`-`$8C92`,
+`$8CF6`-`$8D32`), and spin from a six-entry grid at `$8FEF` (`FF 00 01 / 02 04 03`,
+indexed by `$0728 * 3 + $0727` at `$8E3A`). That grid includes off, TOP 2 and TOP 1, so
+the game itself offers all six spin values.
+
+Play reads them in two places:
+
+- **BGM**: `StartCourseBgm` (`$DA05`) skips the course music when `BGMOnFlag` is `$00`.
+- **Swing, putt, spin**: `ShotSetupSequence` (bank 13, `$8793`-`$87A8`), at the start of
+  every shot, copies each default that is not negative (`BMI` skips `$FF`) over the
+  current player's setting: `PlayerSwingSpeed` (`$0123,X`), `PlayerPuttSwingSpeed`
+  (`$0125,X`) and the committed spin (`$0127,X`). So a default resets that setting on
+  every shot, and off (`$FF`) leaves it as the player last chose it. Off is a real choice,
+  and it is what vanilla does.
+
+Because the player can change all four on the Options screen and the game keeps the
+change in SRAM, the ROM sets where a new save starts and nothing more. Writing the values
+into PRG ROM in place of SRAM would mean patching the Options screen as well, for no gain
+in space: the new-save table needs four bytes. Clubs are the one setting worth enforcing
+from PRG ROM, and that is a separate piece of work (see the open questions).
 
 ## Decisions
 
@@ -86,6 +108,10 @@ patch to a "hardcode the values into the rom somewhere" patch.
   flagged, and the player removes clubs. The vanilla default goes through the same
   function, so a seed with a max below 14 and no required bag also flags its starting bag,
   where today it starts over the max and is refused on submit.
+- **An entry does not lock the form.** Once a round is recorded, `upsert_entry` stops
+  updating the entry, but the form still accepts any name and bag, and the ROM may
+  differ from the entry. Downloading a seed again after submitting a round is rare, and
+  the mismatch affects nothing after it.
 - **Collapsed form.** The download form shows a summary of the settings that will be
   written, with the controls in a `<details>` below it, like the seed page's hole table
   and details. The details start open when the fitted form would be refused as it stands
@@ -127,8 +153,69 @@ to leave vanilla. So this work introduces finish ABI 2:
 - An ABI 1 seed's form omits swing, putt and spin, and saving treats them as forced, so
   downloading an old seed never overwrites them.
 
-The exact routine and its placement are settled in item 1, which may find a better fit.
-Anything that keeps ABI 1 artifacts finishable is acceptable.
+### Placement
+
+The routine goes in bank 9, beside `InitializeSram`, so the loop reaches it with a plain
+`JSR` or `JMP`; the fixed bank is too full to spend on this. Bank 9 has no padding (its
+one long run, 256 zeros at `$8DD0`, sits inside a table), so the space comes from code the
+randomizer can no longer reach:
+
+- **PLAYER STATS, `$B519`-`$BF89`, about 2.6KB.** The club house's PLAYER STATS screen
+  (far call from bank 12 `$852B`, code `$84`), which `menu_trim` removes from the club
+  house. Static references into the region come only from inside it:
+  `StrokePlayStatsDisplay`, the match play and tournament stats displays, `ConvertToBCD`
+  and the 32-bit multiply and divide are all called from the screen alone. The
+  `wram_expansion` stubs write inside it (`$BA92`, `$BAE4`, `$BAED`, `$BBA2`, `$BBA8`), so
+  the new routine avoids those bytes.
+- Also out of reach, but smaller or less certain: match play's opponent pick (`$B322`,
+  far-called from bank 13 `$8049`), the prize money and wager code around `$B0CC`-`$B2C8`,
+  and `DefaultRosterNamesTable` (190 bytes, only for tournaments).
+
+The ten-byte `$FF` loop at `$AD46` becomes `JMP $B519`, the entry of PLAYER STATS. The
+28-byte routine there (`NewSaveOptions`, in `golf/core/patches/new_save_options.py`)
+fills `$6F98-$6FAF` with `$FF`, copies the four-byte table at `$B531` (BGM, swing, putt,
+spin) over `$6F98-$6F9B`, and jumps back to the magic writes at `$AD50`. The patch
+requires `menu_trim`'s removal of PLAYER STATS (`PLAYER_STATS_REMOVED`). Item 1 confirms
+with a Mesen breakpoint across the region, through a round and every remaining club house
+screen, that nothing reaches it. ADR 0007 records the decision.
+
+## Freezing the bag
+
+The bags are in SRAM: `Player1ClubBag` at `$6027` and `Player2ClubBag` at `$6035`, 14
+bytes each. SRAM is mapped at `$6000-$7FFF` whatever PRG bank is switched in, so every
+reader sees the bag without a bank switch. Static references, which item 1 confirms with
+a Mesen write watchpoint on `$6027-$6042`:
+
+- **Writes**: only `InitializeSram` (bank 9 `$AD3D`, `$AD40`), copying
+  `DefaultClubBagTable` (`$AE23`), which the finisher fills, into both bags. The CHOOSE
+  CLUBS screen must also write the bags, but not with an absolute store the search
+  finds; the watchpoint shows where.
+- **Reads**: the shot's club panel and `AutoSelectClub` (bank 13 `$8AF8`, `$8B71`,
+  `$8B99`), and the CHOOSE CLUBS screen loading each bag (bank 14 `$AEE9`, `$AF4B`).
+
+So the bag is frozen by taking away the one screen that changes it: `menu_trim` gains a
+`choose_clubs` parameter (default true, as today), and false drops CHOOSE CLUBS from the
+club house, leaving REGISTER NAME, OPTIONS, TRAINING and CLEAR
+SAVED DATA. That is the recipe `docs/menu_system.md` gives for a club house entry: the
+count at `$8D64` drops to 4, the destination list at `$8B00` becomes `81 83 87 89`, and
+the entries below move up a row. CLEAR SAVED DATA runs `InitializeSram` again, which
+copies the same bag back from the ROM.
+
+`unfinished_steps` passes `choose_clubs=False` when the seed places any constraint on
+clubs, `manifest.course.clubs != ClubRules()`: a required bag, a banned club or a max
+below 14. That is the same test the saving rule uses to decide whether a download's bag
+is saved. A seed without club rules keeps CHOOSE CLUBS, and its bag stays on the honour
+system as it is today, since no bag breaks its rules. The removal is part of the
+unfinished build, so it bumps `BUILD_VERSION` but not the finish ABI; seeds already
+stored keep CHOOSE CLUBS. Repointing the bank 13 reads at a
+table in PRG ROM was the alternative. It would need the table in bank 13 or the fixed
+bank, a new location for the finisher to write, and the bank 14 screen changed or
+removed anyway.
+
+A save outlives a re-download: every ROM of a seed shares the seed's SRAM magic, so a
+save made from an earlier download keeps that download's bag. Freezing guarantees the
+bag played in a seed with club rules is one those rules allowed, not that it is the
+entry's latest bag.
 
 ## Storage
 
@@ -158,34 +245,51 @@ row gets the cookie's settings, and their first download creates the row.
 - **Seed page.** The download article leads with a summary line of the fitted settings:
   name, the number of clubs, and BGM, swing, putt and spin. A marker is added when the bag
   was adjusted for this seed's rules (clubs removed, or over the max). Below it, a
-  `<details>` holds the name field, the club grid and the four option controls as
-  `<select>`s or radio groups. It is open when the bag is over the max. All text comes
-  from new `seed.download.*` keys with empty `text`.
+  `<details>` holds the name field, the club grid, a BGM checkbox and a `<select>` each
+  for swing, putt and spin, listing every value the game accepts, off included. It is
+  open when the bag is over the max. All text comes from new `seed.download.*` keys with
+  empty `text`.
 - **`/me`.** Signed in, a "download settings" section holds the same controls without a
   seed's rules (any bag of up to 14 clubs with the putter), posting to
   `POST /me/download-settings`. The route validates, saves, and redirects back with
-  `?result=`, following the admin pages' pattern. Text is new `me.*` keys.
+  `?result=`, following the admin pages' pattern. Below the controls, a "forget my
+  settings" button posts to `POST /me/download-settings/forget`, which deletes the row,
+  expires this browser's `golf_download` cookie and redirects back the same way. Text is
+  new `me.*` keys. A guest has no `/me`; their cookie is replaced by their next download,
+  or cleared in the browser.
 
 ## Development plan
 
 Each item is about one pull request and ends with tests passing. Items 1 and 2 end with
 a ROM the user playtests.
 
-1. **ROM research.** Confirm in Mesen what each value of the three defaults does in play,
-   including what "off" means for each. Choose the routine and table placement for ABI 2
-   with `golf-rom-peek`, checking that nothing in the unfinished stack uses the space.
-   Add labels for anything named on the way (following
-   `nes-open-golf-label-conventions`). Record the findings in the `sram_defaults.py`
-   docstring, and resolve the TOP 1/TOP 2 and "off" open questions with the user.
+1. **ROM research.** Confirm in Mesen the reads described under "How the game uses
+   them": a breakpoint on `$6F99-$6F9B` hits only the Options screen and
+   `ShotSetupSequence`, and a default resets its setting on the next shot. Choose the
+   routine and table placement for ABI 2 with `golf-rom-peek`, checking that nothing in
+   the unfinished stack uses the space. Add labels for anything named on the way
+   (following `nes-open-golf-label-conventions`): the per-player spin at `$0127`, the
+   Options screen at bank 11 `$8B1B` and its spin grid at `$8FEF`. Put a write
+   watchpoint on the bags (`$6027-$6042`) through CHOOSE CLUBS, a round, TRAINING and
+   each CLEAR SAVED DATA option, and label the CHOOSE CLUBS screen's write. Record the
+   findings in the `sram_defaults.py` docstring.
 2. **Patch and finish ABI 2.** The build-time routine and table (written with
    `golf/core/asm6502.py`) and a finisher step that fills the table.
    `PlayerOptions` gains `swing`, `putt` and `spin`, each defaulting to off. Register any
    new patch in `golf/core/patches/registry.py` so `golf-patch` recipes can use it. Bump
    `BUILD_VERSION` and `FINISH_ABI_VERSION`, keep `_finish_abi_1`, and add `_finish_abi_2`.
+   `menu_trim` gains `choose_clubs`, which `unfinished_steps` sets false for a seed with
+   club rules; add it to the recipe parameters in the registry and in
+   `docs/patch_stack.md`'s table, update `menu_trim`'s docstring and the worked example
+   in `docs/menu_system.md`, replace the "Future option" note in `sram_defaults.py`, and
+   update the devplan's honour-system paragraph under entries and its "Bag from ROM"
+   polish item.
    Draft an ADR (`golf-adr`, proposed, `--drafted-by Claude`) for ABI 2 and how old seeds
    are finished. Tests: unit tests for the patch bytes; the ABI golden for ABI 2 beside
    ABI 1's; `tests/integration/test_build_rom.py` finishing both ABIs, and a simulator or
-   SRAM check that a new save holds the chosen values. Update `docs/patch_stack.md`'s
+   SRAM check that a new save holds the chosen values; `test_menu_trim.py` and
+   `test_menu_trim_rom.py` for the four-entry club house, and `test_build.py` for a seed
+   with club rules getting it and one without keeping five entries. Update `docs/patch_stack.md`'s
    list of what the ABI covers, and `docs/manifest.md` if its example shows the ABI.
 3. **Saved settings and fitting.** In `server/forms.py`: the saved-settings record with
    lenient `from_json` and `to_json`; `fit(saved, rules, abi)` returning the form's
@@ -210,7 +314,8 @@ a ROM the user playtests.
    and to the devplan's "Users and access" section.
 6. **Account settings.** A migration adding `download_settings`,
    `server/download_settings.py`, the precedence above for signed-in players, the upsert
-   on download, and the `/me` section with `POST /me/download-settings`. Tests in
+   on download, and the `/me` section with `POST /me/download-settings` and
+   `POST /me/download-settings/forget`. Tests in
    `tests/unit/test_server_app.py` and a database test for the module. Update the
    devplan's data model table and routes table, and `server/CLAUDE.md`'s Database section
    with the module's ownership. Draft an ADR for storing saved settings in the cookie and
@@ -224,14 +329,4 @@ a ROM the user playtests.
 
 ## Open questions
 
-- **TOP 1 and TOP 2.** Offer them as spin defaults though they play as normal spin, leave
-  them out, or offer them with a note?
-- **"Off" for each default.** What the game does with `$FF` for swing, putt and spin, and
-  whether "off" is worth offering or should be shown as the vanilla behavior. Item 1
-  answers the first part.
-- **An entry with a recorded round.** `upsert_entry` does not update such an entry, but
-  the finisher still writes the name and bag the form submitted, so the ROM can differ
-  from the entry. Should the form lock name and clubs to the entry once a round is
-  recorded, as it does for a required bag?
-- **Resetting.** Is editing the settings enough, or should `/me` also have a "forget my
-  settings" action that removes the row (and a way to clear the cookie)?
+None.

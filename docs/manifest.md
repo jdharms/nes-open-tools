@@ -17,8 +17,8 @@ With the hole list trimmed to one of its 18 slots:
 {
   "schema": 2,
   "generator_version": 1,
-  "build_version": 3,
-  "finish_abi_version": 1,
+  "build_version": 4,
+  "finish_abi_version": 2,
   "catalog_version": 1,
   "curation_stamp": "f640f8d1…",
   "settings": {
@@ -85,7 +85,8 @@ is strict: a missing or unknown field is an error. `golf/randomizer/build.py` tu
 |---|---:|---:|---|
 | 1 | 1 (implicit) | 1 (implicit) | The randomizer 1.0 manifest. Current code reads it for display and finishes its stored artifact through ABI 1, but does not rebuild it. |
 | 2 | 2 | 1 | Adds the required `build_version` and `finish_abi_version` fields. Current code reads it and finishes its stored artifact through ABI 1, but does not rebuild it. |
-| 2 | 3 | 1 | `wram_expansion` moves the terrain attribute buffer into WRAM, replacing `attr_streaming`, and the unfinished stack adds `green_shortcut`. This is the current schema and unfinished buildchain. |
+| 2 | 3 | 1 | `wram_expansion` moves the terrain attribute buffer into WRAM, replacing `attr_streaming`, and the unfinished stack adds `green_shortcut`. Current code finishes its stored artifact through ABI 1, but does not rebuild it. |
+| 2 | 4 | 2 | The unfinished stack adds `new_save_options`, a table the finisher fills with the BGM, swing, putt and spin defaults, and a seed with club rules leaves CHOOSE CLUBS out of the club house. This is the current schema and unfinished buildchain. |
 
 Loading schema 1 supplies `build_version = 1` and `finish_abi_version = 1` in memory and
 serializes it back in its original shape without adding either field. The website stores

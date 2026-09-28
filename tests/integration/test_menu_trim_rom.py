@@ -5,6 +5,7 @@ from pathlib import Path
 import pytest
 
 from golf.core.patches import PatchError, menu_trim_patch, menu_trim_patches
+from golf.core.patches.menu_trim import PLAYER_STATS_REMOVED
 from golf.core.rom_writer import RomWriter
 
 ROM_PATH = "nes_open_us.nes"
@@ -82,9 +83,19 @@ def patched(tmp_path) -> MenuTables:
     return MenuTables(out.read_bytes())
 
 
-def test_vanilla_rom_has_expected_bytes_at_every_site(tmp_path):
+@pytest.fixture
+def without_choose_clubs(tmp_path) -> MenuTables:
+    out = tmp_path / "menu_trim_without_choose_clubs.nes"
+    writer = RomWriter(ROM_PATH, str(out))
+    menu_trim_patch(WORDS, choose_clubs=False).apply(writer)
+    writer.save()
+    return MenuTables(out.read_bytes())
+
+
+@pytest.mark.parametrize("choose_clubs", [True, False])
+def test_vanilla_rom_has_expected_bytes_at_every_site(tmp_path, choose_clubs):
     writer = RomWriter(ROM_PATH, str(tmp_path / "out.nes"))
-    for sub in menu_trim_patches(WORDS):
+    for sub in menu_trim_patches(WORDS, choose_clubs):
         assert sub.can_apply(writer), sub.name
 
 
@@ -184,6 +195,26 @@ def test_club_house_keeps_only_the_five_retained_entries(patched):
 
 def test_club_house_rows_have_no_gaps(patched):
     assert [y for _, y, _ in patched.options(0x15)] == [0x06, 0x08, 0x0A, 0x0C, 0x0E]
+
+
+def test_without_choose_clubs_the_club_house_keeps_four_entries(without_choose_clubs):
+    club_house = without_choose_clubs.options(0x15)
+    assert [text for _, _, text in club_house] == [
+        "REGISTER NAME",
+        "OPTIONS",
+        "TRAINING",
+        "CLEAR SAVED DATA",
+    ]
+    assert [y for _, y, _ in club_house] == [0x06, 0x08, 0x0A, 0x0C]
+    assert without_choose_clubs.destinations(0x15) == [0x81, 0x83, 0x87, 0x89]
+
+
+@pytest.mark.parametrize("choose_clubs", [True, False])
+def test_either_club_house_drops_player_stats(tmp_path, choose_clubs):
+    writer = RomWriter(ROM_PATH, str(tmp_path / "out.nes"))
+    assert not PLAYER_STATS_REMOVED.is_applied(writer)
+    menu_trim_patch(WORDS, choose_clubs).apply(writer)
+    assert PLAYER_STATS_REMOVED.is_applied(writer)
 
 
 def test_play_mode_guard_only_fires_for_selection_zero(patched):

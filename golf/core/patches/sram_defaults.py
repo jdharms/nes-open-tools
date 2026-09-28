@@ -17,7 +17,9 @@ tables:
   the putter always among them, in ascending order, padded with $FF.
 - bgm: off turns the $FF fill loop's `BPL` at $AD4E into `BNE`, so the loop
   stops before X=0 and BGMOnFlag ($6F98) keeps $00 from the zero fill. The
-  other bytes the loop fills are unchanged.
+  other bytes the loop fills are unchanged. `new_save_options` replaces the
+  loop, and with it the BGM option and the swing, putt and spin defaults the
+  loop cannot write; after it, only `bgm=True` applies.
 - sram_magic: the operands of the check's two `CMP #` and the final two
   `LDA #`. A save holding any other magic is wiped and rebuilt at boot, so a
   save from another ROM cannot carry its bag in. Neither byte may be $00 or
@@ -26,8 +28,13 @@ tables:
 
 Only a save being initialised gets these defaults.
 
-Future option for bag contents: repoint the bank 13 bag reads (`LDA $6027,Y`
-at $8AF8, $8B71, $8B99) at a table in PRG ROM, so no save can change the bag.
+The bags live in SRAM (`Player1ClubBag` $6027, `Player2ClubBag` $6035), which
+every bank sees. `InitializeSram` is the only absolute store to them ($AD3D,
+$AD40); the shot's club panel and `AutoSelectClub` read them (bank 13 $8AF8,
+$8B71, $8B99), and the CHOOSE CLUBS screen loads and saves them (bank 14 $AEE9,
+$AF4B). So `menu_trim` with `choose_clubs=False` freezes the bag this patch
+writes: nothing left in the game changes it, and CLEAR SAVED DATA copies it back
+from $AE23.
 """
 
 import string

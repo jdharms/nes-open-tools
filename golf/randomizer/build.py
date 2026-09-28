@@ -3,12 +3,15 @@ The two-stage build: a manifest into an unfinished ROM, and an unfinished ROM in
 
 - **Unfinished**, once per seed: the base patches, the course, seeded wind, the course theme,
   mercy tap-in, the green detail view and scorecard shortcuts, the scorecard QR image with
-  its credential placeholders at the fill, the signpost banner and the magic words on the
-  menus and scorecard. Everything it reads is
+  its credential placeholders at the fill, the signpost banner, the magic words on the
+  menus and scorecard, and the new-save options routine with its table at the vanilla
+  values. A seed with club rules leaves CHOOSE CLUBS out of the club house, so the bag
+  the finisher writes is the bag the save keeps. Everything it reads is
   the manifest's `course`, the catalog and the hole store. The site stores the result as an
   IPS against the vanilla ROM.
-- **Finished**, per download: the player's new-save defaults under the seed's SRAM magic,
-  then either `qr_credentials` (signed in) or `qr_disable` (guest). It runs as a second
+- **Finished**, per download: the player's new-save defaults under the seed's SRAM magic
+  (name, clubs, and under finish ABI 2 the BGM, swing, putt and spin table), then either
+  `qr_credentials` (signed in) or `qr_disable` (guest). It runs as a second
   `PatchStack` on the unfinished ROM, since both QR finishing patches rewrite bytes
   `scorecard_qr` wrote.
 
@@ -49,6 +52,13 @@ from golf.core.patches import (
     seeded_wind_patch,
     sram_defaults_patch,
 )
+from golf.core.patches.new_save_options import (
+    NEW_SAVE_OPTIONS_PATCH,
+    BallSpin,
+    SwingSpeed,
+    new_save_option_values_patch,
+    option_values,
+)
 from golf.core.patches.signpost_random_banner import signpost_banner_patch
 from golf.core.patches.sram_defaults import (
     Club,
@@ -72,9 +82,9 @@ SIGNPOST_ART = (
 MAX_SEED_ID = (1 << (8 * payload.SEED_ID_LEN)) - 1
 MAX_PLAYER_ID = (1 << (8 * payload.PLAYER_ID_LEN)) - 1
 #: the unfinished-ROM recipe this release implements
-BUILD_VERSION = 3
+BUILD_VERSION = 4
 #: the interface current unfinished ROMs expose to the per-download finisher
-FINISH_ABI_VERSION = 1
+FINISH_ABI_VERSION = 2
 
 
 class BuildError(ValueError):
@@ -86,11 +96,19 @@ class BuildError(ValueError):
 
 @dataclass(frozen=True)
 class PlayerOptions:
-    """What a player chooses at download time. The putter is added to the bag if missing."""
+    """What a player chooses at download time. The putter is added to the bag if missing.
+
+    `swing`, `putt` and `spin` are the new-save defaults for the swing speed, putt speed
+    and ball spin; off leaves each as the player last chose it. Only finish ABI 2 can
+    write them.
+    """
 
     player_name: str
     clubs: frozenset[Club]
     bgm: bool = True
+    swing: SwingSpeed = SwingSpeed.OFF
+    putt: SwingSpeed = SwingSpeed.OFF
+    spin: BallSpin = BallSpin.OFF
 
     def __post_init__(self):
         clubs = frozenset(self.clubs) | {Club.PT}
@@ -102,6 +120,25 @@ class PlayerOptions:
             raise BuildError(str(problem)) from None
         if not isinstance(self.bgm, bool):
             raise BuildError("bgm must be true or false")
+        for name, kind in (
+            ("swing", SwingSpeed),
+            ("putt", SwingSpeed),
+            ("spin", BallSpin),
+        ):
+            value = getattr(self, name)
+            if isinstance(value, bool) or not isinstance(value, int):
+                raise BuildError(f"{name} must be a {kind.__name__}, got {value!r}")
+            try:
+                object.__setattr__(self, name, kind(value))
+            except ValueError:
+                raise BuildError(
+                    f"{name} must be a {kind.__name__}, got {value!r}"
+                ) from None
+
+    @property
+    def has_option_defaults(self) -> bool:
+        """Whether swing, putt or spin differs from off, which finish ABI 1 cannot write."""
+        return option_values(True, self.swing, self.putt, self.spin) != option_values()
 
     def check(self, rules: ClubRules) -> None:
         """Raise BuildError if the bag breaks the seed's club rules."""
@@ -212,7 +249,10 @@ def unfinished_steps(
         SCORECARD_QR_PATCH,
         signpost_step(vanilla),
         scorecard_course_name_patch(title=scorecard_title(course.magic_words)),
-        menu_trim_patch(list(course.magic_words)),
+        menu_trim_patch(
+            list(course.magic_words), choose_clubs=course.clubs == ClubRules()
+        ),
+        NEW_SAVE_OPTIONS_PATCH,
     ]
     return steps
 
@@ -265,14 +305,37 @@ def build_unfinished(
 
 
 def finishing_steps(
-    options: PlayerOptions, sram_magic: int, credentials: QrCredentials | None
+    options: PlayerOptions,
+    sram_magic: int,
+    credentials: QrCredentials | None,
+    abi: int = FINISH_ABI_VERSION,
 ) -> list[ROMPatch]:
-    """New-save defaults, then credentials when signed in or the QR screen disabled for a guest."""
-    steps: list[ROMPatch] = [
-        sram_defaults_patch(
-            options.player_name, sorted(options.clubs), options.bgm, sram_magic
-        ),
-    ]
+    """New-save defaults, then credentials when signed in or the QR screen disabled for a guest.
+
+    Under ABI 1 `sram_defaults` writes the BGM option with its fill-loop edit, and swing,
+    putt and spin stay off. Under ABI 2 the new-save options table holds all four.
+    """
+    if abi == 1:
+        if options.has_option_defaults:
+            raise BuildError(
+                "this seed's ROM cannot set swing, putt or spin defaults; leave them off"
+            )
+        steps: list[ROMPatch] = [
+            sram_defaults_patch(
+                options.player_name, sorted(options.clubs), options.bgm, sram_magic
+            ),
+        ]
+    elif abi == 2:
+        steps = [
+            sram_defaults_patch(
+                options.player_name, sorted(options.clubs), True, sram_magic
+            ),
+            new_save_option_values_patch(
+                options.bgm, options.swing, options.putt, options.spin
+            ),
+        ]
+    else:
+        raise BuildError(f"this release cannot finish artifact ABI {abi}")
     steps.append(
         QR_DISABLE_PATCH if credentials is None else qr_credentials_patch(credentials)
     )
@@ -288,6 +351,24 @@ class FinishedBuild:
     regions: dict[str, list[tuple[int, int]]]
 
 
+def _finish_through(
+    abi: int,
+    manifest: Manifest,
+    vanilla: bytes,
+    unfinished_ips: bytes,
+    options: PlayerOptions,
+    credentials: QrCredentials | None,
+) -> FinishedBuild:
+    _check_vanilla(vanilla)
+    options.check(manifest.course.clubs)
+    steps = finishing_steps(options, manifest.course.sram_magic, credentials, abi)
+    unfinished = ips.apply(vanilla, unfinished_ips)
+    build = PatchStack(steps, base_sha1=None).build(unfinished)
+    return FinishedBuild(
+        rom=build.rom, ips=ips.diff(vanilla, build.rom), regions=build.regions
+    )
+
+
 def _finish_abi_1(
     manifest: Manifest,
     vanilla: bytes,
@@ -295,17 +376,22 @@ def _finish_abi_1(
     options: PlayerOptions,
     credentials: QrCredentials | None = None,
 ) -> FinishedBuild:
-    _check_vanilla(vanilla)
-    options.check(manifest.course.clubs)
-    unfinished = ips.apply(vanilla, unfinished_ips)
-    steps = finishing_steps(options, manifest.course.sram_magic, credentials)
-    build = PatchStack(steps, base_sha1=None).build(unfinished)
-    return FinishedBuild(
-        rom=build.rom, ips=ips.diff(vanilla, build.rom), regions=build.regions
-    )
+    """Name, clubs and BGM through `sram_defaults`' vanilla locations."""
+    return _finish_through(1, manifest, vanilla, unfinished_ips, options, credentials)
 
 
-_FINISHERS = {1: _finish_abi_1}
+def _finish_abi_2(
+    manifest: Manifest,
+    vanilla: bytes,
+    unfinished_ips: bytes,
+    options: PlayerOptions,
+    credentials: QrCredentials | None = None,
+) -> FinishedBuild:
+    """Name and clubs as ABI 1; BGM, swing, putt and spin into the new-save options table."""
+    return _finish_through(2, manifest, vanilla, unfinished_ips, options, credentials)
+
+
+_FINISHERS = {1: _finish_abi_1, 2: _finish_abi_2}
 
 
 def finish(

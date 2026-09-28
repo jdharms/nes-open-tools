@@ -8,11 +8,13 @@ import pytest
 
 from golf.core import ips
 from golf.core.patches import PatchStack, StackError
+from golf.core.patches.new_save_options import BallSpin, SwingSpeed
 from golf.core.patches.qr_credentials import PLACEHOLDERS, placeholder_offset
 from golf.core.patches.scorecard_qr import SCORECARD_QR_PATCH
 from golf.core.patches.sram_defaults import MAGIC_CHECK_ADDRS, Club, magic_bytes
 from golf.qr import port
 from golf.randomizer.build import (
+    BUILD_VERSION,
     BuildError,
     PlayerOptions,
     build_unfinished,
@@ -31,6 +33,7 @@ from golf.randomizer.manifest import (
     ClubRules,
     Settings,
 )
+from tests.new_save import new_save
 
 ROOT = Path(__file__).resolve().parents[2]
 ROM_PATH = ROOT / "nes_open_us.nes"
@@ -53,10 +56,20 @@ UNFINISHED_ORDER = [
     "signpost_random_banner",
     "scorecard_course_name",
     "menu_trim",
+    "new_save_options",
 ]
 
 OPTIONS = PlayerOptions(
-    "LUIGI", frozenset({Club.W1, Club.W3, Club.I5, Club.PW, Club.SW}), bgm=False
+    "LUIGI",
+    frozenset({Club.W1, Club.W3, Club.I5, Club.PW, Club.SW}),
+    bgm=False,
+    swing=SwingSpeed.FAST,
+    putt=SwingSpeed.SLOW,
+    spin=BallSpin.BACK1,
+)
+#: what finish ABI 1 can write: no swing, putt or spin defaults
+ABI_1_OPTIONS = replace(
+    OPTIONS, swing=SwingSpeed.OFF, putt=SwingSpeed.OFF, spin=BallSpin.OFF
 )
 CREDENTIALS = credentials_for(
     839299365868340223, 0xDEADBEEF, (b"\x11" * 8, b"\x22" * 8)
@@ -147,17 +160,18 @@ def test_the_unfinished_build_is_deterministic(
     assert build_unfinished(jp_manifest, catalog, store, vanilla).ips == unfinished.ips
 
 
-def test_build_version_three_golden_unfinished_ips_hashes(
+def test_build_version_four_golden_unfinished_ips_hashes(
     unfinished, jp_manifest, nes_manifest, catalog, store, vanilla
 ):
+    assert BUILD_VERSION == 4
     assert any(str(slot.id) == "jp_france/18" for slot in jp_manifest.course.holes)
     nes = build_unfinished(nes_manifest, catalog, store, vanilla)
     assert {
         "jp_france_18": hashlib.sha256(unfinished.ips).hexdigest(),
         "nes_only": hashlib.sha256(nes.ips).hexdigest(),
     } == {
-        "jp_france_18": "b151ced21516450c173cef3aac2cee52279b7a7c29c0f3bd3ac179ae9006ed22",
-        "nes_only": "b6f073f244d99a75e6af2c48ec63bbeab3ffc53bd036352e146e82bd1fa83fd4",
+        "jp_france_18": "46f5848c0175750a14e5a74a83a40b54b2141ae26c01465d8fb8abf4882f05a0",
+        "nes_only": "34c13cbb8e9be9e57b49bf26d80f38c651c4086386cef3dcf0abec45757ed4b4",
     }
 
 
@@ -182,6 +196,27 @@ def test_a_nes_open_seed_repoints_the_theme_and_can_leave_out_mercy(
     assert build.rom[table : table + 3] == b"\x02\x02\x02"
 
 
+def club_house(steps) -> list[str]:
+    menu_trim = next(step for step in steps if step.name == "menu_trim")
+    options = next(
+        sub for sub in menu_trim.patches if sub.name == "menu_trim_club_house_options"
+    )
+    return [f"{options.patched[0]} entries"]
+
+
+def test_only_a_seed_with_club_rules_drops_choose_clubs(
+    jp_manifest, catalog, store, vanilla
+):
+    assert jp_manifest.course.clubs == ClubRules()
+    strict = replace(
+        jp_manifest, course=replace(jp_manifest.course, clubs=ClubRules(max=10))
+    )
+    open_steps = unfinished_steps(jp_manifest, catalog, store, vanilla)
+    strict_steps = unfinished_steps(strict, catalog, store, vanilla)
+    assert club_house(open_steps) == ["5 entries"]
+    assert club_house(strict_steps) == ["4 entries"]
+
+
 def test_the_base_must_be_vanilla(jp_manifest, catalog, store, unfinished):
     with pytest.raises(BuildError, match="SHA-1"):
         build_unfinished(jp_manifest, catalog, store, unfinished.rom)
@@ -193,10 +228,12 @@ def test_the_base_must_be_vanilla(jp_manifest, catalog, store, unfinished):
 def test_signed_in_finishing_changes_only_defaults_and_credentials(
     signed_in, unfinished, vanilla
 ):
-    assert list(signed_in.regions) == ["sram_defaults", "qr_credentials"]
-    allowed = file_offsets(signed_in.regions["sram_defaults"]) | file_offsets(
-        signed_in.regions["qr_credentials"]
-    )
+    assert list(signed_in.regions) == [
+        "sram_defaults",
+        "new_save_option_values",
+        "qr_credentials",
+    ]
+    allowed = set().union(*(file_offsets(r) for r in signed_in.regions.values()))
     assert changed(unfinished.rom, signed_in.rom) <= allowed
     assert ips.apply(vanilla, signed_in.ips) == signed_in.rom
 
@@ -210,27 +247,67 @@ def test_signed_in_finishing_changes_only_defaults_and_credentials(
         assert signed_in.rom[start : start + length] == values[suffix]
 
 
-def test_a_stored_schema_one_unfinished_ips_can_still_be_finished(
-    jp_manifest, vanilla, unfinished
-):
-    legacy = replace(
-        jp_manifest,
+@pytest.fixture(scope="module")
+def abi_1_unfinished(jp_manifest, catalog, store, vanilla) -> bytes:
+    """An unfinished IPS exposing finish ABI 1: today's stack without the options routine."""
+    steps = [
+        step
+        for step in unfinished_steps(jp_manifest, catalog, store, vanilla)
+        if step.name != "new_save_options"
+    ]
+    return PatchStack(steps).ips(vanilla)
+
+
+def legacy(manifest):
+    return replace(
+        manifest,
         schema=LEGACY_SCHEMA,
         build_version=LEGACY_BUILD_VERSION,
         finish_abi_version=LEGACY_FINISH_ABI_VERSION,
     )
-    assert (
-        finish(legacy, vanilla, unfinished.ips, OPTIONS).rom
-        == finish(jp_manifest, vanilla, unfinished.ips, OPTIONS).rom
-    )
+
+
+def test_a_stored_abi_one_unfinished_ips_can_still_be_finished(
+    jp_manifest, vanilla, abi_1_unfinished
+):
+    finished = finish(legacy(jp_manifest), vanilla, abi_1_unfinished, ABI_1_OPTIONS)
+    assert list(finished.regions) == ["sram_defaults", "qr_disable"]
+    sram = new_save(finished.rom)
+    assert sram[0x0F98:0x0FB0] == bytes([0x00]) + bytes([0xFF] * 23)
+    assert sram[0x0004:0x000E] == b"LUIGI     "
+
+
+def test_an_abi_one_seed_refuses_options_it_cannot_write(
+    jp_manifest, vanilla, abi_1_unfinished
+):
+    with pytest.raises(BuildError, match="cannot set swing, putt or spin"):
+        finish(legacy(jp_manifest), vanilla, abi_1_unfinished, OPTIONS)
+
+
+def test_a_finished_rom_starts_a_new_save_with_the_players_options(
+    signed_in, jp_manifest
+):
+    sram = new_save(signed_in.rom)
+    assert sram[0x0F98:0x0F9C] == bytes([0x00, 0x02, 0x00, 0x03])
+    assert sram[0x0F9C:0x0FB0] == bytes([0xFF] * 20)
+    assert sram[0x0004:0x000E] == b"LUIGI     "
+    assert sram[0x0001:0x0003] == magic_bytes(jp_manifest.course.sram_magic)
 
 
 def test_guest_finishing_changes_only_defaults_and_the_splice(
     guest, unfinished, vanilla
 ):
-    assert list(guest.regions) == ["sram_defaults", "qr_disable"]
+    assert list(guest.regions) == [
+        "sram_defaults",
+        "new_save_option_values",
+        "qr_disable",
+    ]
     splice = HEADER + SCORECARD_QR_PATCH.splice_offset
-    allowed = file_offsets(guest.regions["sram_defaults"]) | {splice, splice + 1}
+    allowed = (
+        file_offsets(guest.regions["sram_defaults"])
+        | file_offsets(guest.regions["new_save_option_values"])
+        | {splice, splice + 1}
+    )
     assert changed(unfinished.rom, guest.rom) <= allowed
     assert guest.rom[splice : splice + 2] == vanilla[splice : splice + 2]
     assert ips.apply(vanilla, guest.ips) == guest.rom
@@ -244,7 +321,7 @@ def test_finishing_writes_the_seeds_sram_magic(signed_in, jp_manifest):
 
 
 @pytest.mark.parametrize("flavour", ["signed_in", "guest"])
-def test_the_stages_overlap_only_where_scorecard_qr_wrote(flavour, request, unfinished):
+def test_the_stages_overlap_only_at_the_placeholders(flavour, request, unfinished):
     finished = request.getfixturevalue(flavour)
     unfinished_bytes = set().union(
         *(prg_bytes(regions) for regions in unfinished.regions.values())
@@ -253,20 +330,30 @@ def test_the_stages_overlap_only_where_scorecard_qr_wrote(flavour, request, unfi
         *(prg_bytes(regions) for regions in finished.regions.values())
     )
     overlap = unfinished_bytes & finishing_bytes
-    assert overlap, "the QR finishing patch should rewrite bytes scorecard_qr wrote"
-    assert overlap <= prg_bytes(unfinished.regions["scorecard_qr"])
+    qr = prg_bytes(unfinished.regions["scorecard_qr"])
+    options = prg_bytes(unfinished.regions["new_save_options"])
+    assert overlap & qr, (
+        "the QR finishing patch should rewrite bytes scorecard_qr wrote"
+    )
+    assert overlap & options, "the options table should be rewritten"
+    assert overlap <= qr | options
 
 
 @pytest.mark.parametrize(
     "credentials, finisher", [(CREDENTIALS, "qr_credentials"), (None, "qr_disable")]
 )
-def test_one_stack_of_both_stages_is_refused_at_the_qr_patch(
+def test_one_stack_of_both_stages_is_refused_at_the_first_placeholder(
     credentials, finisher, jp_manifest, catalog, store, vanilla
 ):
     steps = unfinished_steps(jp_manifest, catalog, store, vanilla)
     steps += finishing_steps(OPTIONS, jp_manifest.course.sram_magic, credentials)
-    with pytest.raises(StackError, match=f"step '{finisher}'.*scorecard_qr"):
+    with pytest.raises(
+        StackError, match="step 'new_save_option_values'.*'new_save_options'"
+    ):
         PatchStack(steps).build(vanilla)
+    without_options = [step for step in steps if step.name != "new_save_option_values"]
+    with pytest.raises(StackError, match=f"step '{finisher}'.*scorecard_qr"):
+        PatchStack(without_options).build(vanilla)
 
 
 def test_finishing_refuses_a_bag_the_seed_forbids(jp_manifest, vanilla, unfinished):

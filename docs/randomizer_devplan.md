@@ -145,8 +145,10 @@ once the entry has a round.
 
 An entry's name and clubs are the new-save defaults of the latest download, not a record of
 the bag a round was played with. A save made before a re-download keeps its old defaults
-under the seed's SRAM magic, an older ROM file still submits, and the club house's CHOOSE
-CLUBS changes the bag in-game, so the bag is on the honour system.
+under the seed's SRAM magic, and an older ROM file still submits. In a seed with club
+rules the club house has no CHOOSE CLUBS, so the bag played is one the rules allowed; in a
+seed without them CHOOSE CLUBS changes the bag in-game, and the bag is on the honour
+system.
 
 A scan is submitted; a scan the server accepts becomes a round, and a rejected one is
 stored nowhere. A round's `public_id` is drawn when it is recorded, moves to
@@ -423,11 +425,10 @@ says so, a ROM playtested. Items 1 to 6 build the library; 7 onward build the si
       account is undecided; candidates are a share code shown on `/me` that the teammate
       gives the downloader, and an invite link the teammate opens signed in to join the
       entry.
-    - **Bag from ROM.** Repointing the bag reads at a table in PRG ROM (see
-      `golf/core/patches/sram_defaults.py`) so no save can change the bag, with CHOOSE
-      CLUBS out of the club house. With that in place, SRAM magic derived from the
-      player's choices, and keys that change when the choices do, would make an entry's
-      bag the bag played.
+    - **Entry bag is the bag played.** A seed with club rules has no CHOOSE CLUBS, so a
+      save keeps the bag it was created with. SRAM magic derived from the player's
+      choices, and keys that change when the choices do, would make an entry's bag the
+      bag played rather than the bag of the latest download.
     - **Phone header.** The site has been laid out for desktop, where seeds are downloaded,
       but the scan page (`/s/`) opens on the phone that scanned the QR code. At phone width
       the header wraps into the site name, the nav links and the sign-in row, taking the

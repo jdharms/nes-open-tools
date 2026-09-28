@@ -95,13 +95,20 @@ stored artifact**. It is not a promise that two releases produce byte-identical 
 ROMs. Compatible refactors, validation improvements and behavior fixes may change the
 finisher without changing its ABI.
 
-The current ABI covers:
+The current ABI, 2, covers:
 
-- the vanilla SRAM-default locations and bytes that `sram_defaults` replaces;
+- the vanilla SRAM-default locations and bytes that `sram_defaults` replaces, apart from
+  the BGM loop edit;
+- the new-save options table `new_save_options` installs at bank 9 `$B531`: four bytes,
+  BGM, swing, putt and spin, at the vanilla `$FF $FF $FF $FF`;
 - the QR seed ID, player ID and MAC key placeholder locations, sizes, fill and encoding;
 - the installed QR patch identity that `qr_credentials` requires;
 - the splice `qr_disable` restores for a guest ROM; and
 - the QR payload protocol consumed by the submission server.
+
+ABI 1, which every artifact built before build version 4 exposes, is the same without the
+options table: its finisher writes BGM with `sram_defaults`' loop edit and cannot write
+swing, putt or spin defaults.
 
 Moving or resizing a placeholder, changing a credential's representation, changing the
 guest-disable mechanism, changing the QR payload's meaning, or having the unfinished
@@ -206,7 +213,7 @@ three requirements and the `course` step.
 | `multi_bank_lookup` | | |
 | `course_mirrors` | | |
 | `course` | `course` (a directory) or `holes` (18 files); also writes the scorecard totals | `multi_bank_lookup`, `course_mirrors`, `wram_expansion` |
-| `menu_trim` | `words` (default `OPEN GOLF RANDO`; three words of 4-6 renderable characters for the header of the main, player count and course select menus) | |
+| `menu_trim` | `words` (default `OPEN GOLF RANDO`; three words of 4-6 renderable characters for the header of the main, player count and course select menus), `choose_clubs` (default true; false also drops CHOOSE CLUBS from the club house) | |
 | `scorecard_course_name` | `name` (default `RANDOM`; A-Z, 0-9 and space, at most 13), `title` (optional, replaces `18H STROKE PLAY`; at most 26) | `course_mirrors` |
 | `remove_course_banner` | | |
 | `signpost_random_banner` | `art`, `banner` (default `us`), `hole` (default 1) | |
@@ -218,7 +225,9 @@ three requirements and the `course` step.
 | `qr_disable` | none; reverts the round-end splice for a guest ROM, expecting the splice `scorecard_qr` wrote | |
 | `course_theme` | `music` (`$02` US, `$03` Japan or `$04` UK); plays that US ROM theme on every course | |
 | `music_import` | `dump`, `track` (optional; one dump music ID, imported as `$03` and made every course's theme), `transpose_adjust` (default from the dump) | |
-| `sram_defaults` | `player_name` (A-Z, `.` and space, at most 10), `clubs` (up to 14 of `1W`-`4W`, `1I`-`9I`, `PW`, `SW`, `PT`; the putter is added), `bgm` (default true), `sram_magic` (default `0x3553`, "5S"; neither byte `$00` or `$FF`). Only a save being initialised gets them | |
+| `sram_defaults` | `player_name` (A-Z, `.` and space, at most 10), `clubs` (up to 14 of `1W`-`4W`, `1I`-`9I`, `PW`, `SW`, `PT`; the putter is added), `bgm` (default true; false cannot follow `new_save_options`), `sram_magic` (default `0x3553`, "5S"; neither byte `$00` or `$FF`). Only a save being initialised gets them | |
+| `new_save_options` | none; a new save's BGM, swing, putt and spin come from a table at the vanilla values, in PLAYER STATS' code space | `menu_trim` |
+| `new_save_option_values` | `bgm` (default true), `swing` and `putt` (`off`, `slow`, `medium` or `fast`), `spin` (`off`, `top2`, `top1`, `normal`, `back1` or `back2`), each default `off`; fills the table, expecting the vanilla values | `new_save_options` |
 | `putting_practice` | (experimental) | |
 
 `course_theme` and `music_import` with a `track` both rewrite `CourseBgmTable` at `$DA14`,
@@ -229,15 +238,16 @@ so a stack holds one or the other: `course_theme` for a theme already in the ROM
 bank 12 `$AC5D`, so a stack with both fails: whichever comes second finds the other's bytes
 where it expects vanilla ones.
 
-`qr_credentials` and `qr_disable` rewrite bytes `scorecard_qr` wrote, so neither can share a
-stack with it. They are finishing patches: build the unfinished ROM with `scorecard_qr`,
-then run a second stack with `base_sha1=None` (`--any-base`) on that ROM. See the two-stage
-build in `randomizer_devplan.md`.
+`qr_credentials` and `qr_disable` rewrite bytes `scorecard_qr` wrote, and
+`new_save_option_values` bytes `new_save_options` wrote, so none of them can share a stack
+with the patch it fills. They are finishing patches: build the unfinished ROM with
+`scorecard_qr` and `new_save_options`, then run a second stack with `base_sha1=None`
+(`--any-base`) on that ROM. See the two-stage build in `randomizer_devplan.md`.
 
 ```bash
 golf-patch nes_open_us.nes recipe.json -o unfinished.nes
 golf-patch unfinished.nes --any-base -p qr_credentials:credentials=keys.json -o finished.nes
-golf-patch unfinished.nes --any-base -p qr_disable -o guest.nes
+golf-patch unfinished.nes --any-base -p qr_disable -p new_save_option_values:spin=back1 -o guest.nes
 ```
 
 ## Testing

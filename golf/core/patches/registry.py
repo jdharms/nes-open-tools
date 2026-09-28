@@ -35,6 +35,12 @@ from .menu_trim import menu_trim_patch
 from .mercy_tap_in import mercy_tap_in_patches
 from .multi_bank import COURSE_MIRRORS_PATCH, MULTI_BANK_CODE_PATCH
 from .music_import import music_import_patch
+from .new_save_options import (
+    NEW_SAVE_OPTIONS_PATCH,
+    BallSpin,
+    SwingSpeed,
+    new_save_option_values_patch,
+)
 from .practice_swing import DEFAULT_HOLD_FRAMES, practice_swing_patch
 from .putting_practice import putting_practice_patches
 from .qr_credentials import load_credentials, qr_credentials_patch
@@ -125,6 +131,8 @@ class GreenSlopePhysicsParams:
 class MenuTrimParams:
     #: three 4-6 character header words for menus $00-$02; default OPEN GOLF RANDO
     words: list[str] | None = None
+    #: false leaves CHOOSE CLUBS out of the club house, so the new-save bag stays
+    choose_clubs: bool = True
 
 
 @dataclass(frozen=True)
@@ -188,6 +196,18 @@ class SramDefaultsParams:
     bgm: bool = True
     #: the high byte is stored at $6001; neither byte may be $00 or $FF
     sram_magic: int = VANILLA_MAGIC
+
+
+@dataclass(frozen=True)
+class NewSaveOptionValuesParams:
+    #: false starts a new save with music off
+    bgm: bool = True
+    #: off, slow, medium or fast; off keeps the speed last chosen
+    swing: str = "off"
+    #: off, slow, medium or fast; off keeps the speed last chosen
+    putt: str = "off"
+    #: off, top2, top1, normal, back1 or back2; off keeps the spin last chosen
+    spin: str = "off"
 
 
 # --- Factories and reports ------------------------------------------------------
@@ -323,6 +343,25 @@ def _report_sram_defaults(params: SramDefaultsParams, patch) -> list[str]:
     ]
 
 
+def _named[E: (SwingSpeed, BallSpin)](kind: type[E], name: str, field: str) -> E:
+    try:
+        return kind[name.upper()]
+    except KeyError:
+        choices = ", ".join(member.name.lower() for member in kind)
+        raise ValueError(f"{field} must be one of {choices}, got {name!r}") from None
+
+
+def _build_new_save_option_values(
+    ctx: BuildContext, params: NewSaveOptionValuesParams
+) -> ROMPatch:
+    return new_save_option_values_patch(
+        params.bgm,
+        _named(SwingSpeed, params.swing, "swing"),
+        _named(SwingSpeed, params.putt, "putt"),
+        _named(BallSpin, params.spin, "spin"),
+    )
+
+
 def _fixed[R: ROMPatch](patch: R) -> Callable[[BuildContext, NoParams], R]:
     return lambda ctx, params: patch
 
@@ -365,7 +404,7 @@ PATCH_SPECS: dict[str, PatchSpec[Any, Any]] = {
             "menu_trim",
             "Trim the title, course select and club house menus, under a three-word header (docs/menu_system.md)",
             MenuTrimParams,
-            lambda ctx, params: menu_trim_patch(params.words),
+            lambda ctx, params: menu_trim_patch(params.words, params.choose_clubs),
         ),
         PatchSpec(
             "remove_course_banner",
@@ -440,6 +479,18 @@ PATCH_SPECS: dict[str, PatchSpec[Any, Any]] = {
                 params.player_name, params.clubs, params.bgm, params.sram_magic
             ),
             _report_sram_defaults,
+        ),
+        PatchSpec(
+            "new_save_options",
+            "Start a new save's BGM, swing, putt and spin defaults from a table at the vanilla values; needs menu_trim",
+            NoParams,
+            _fixed(NEW_SAVE_OPTIONS_PATCH),
+        ),
+        PatchSpec(
+            "new_save_option_values",
+            "Fill the new_save_options table: a new save's BGM, swing, putt and spin defaults",
+            NewSaveOptionValuesParams,
+            _build_new_save_option_values,
         ),
         PatchSpec(
             "green_slope_physics",

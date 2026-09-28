@@ -13,9 +13,14 @@ from golf.core.patches import (
 )
 from golf.core.patches.course_theme import VANILLA_COURSE_BGM
 from golf.core.patches.music_import import MusicImportPatch
+from golf.core.patches.new_save_options import (
+    NEW_SAVE_OPTIONS_PATCH,
+    BallSpin,
+    SwingSpeed,
+)
 from golf.core.patches.qr_credentials import PLACEHOLDERS, placeholder_offset
 from golf.core.patches.scorecard_qr import QR_DISABLE_PATCH, SCORECARD_QR_PATCH
-from golf.core.patches.sram_defaults import Club, magic_bytes, sram_defaults_patches
+from golf.core.patches.sram_defaults import Club, magic_bytes
 from golf.qr import payload, port
 from golf.randomizer.build import (
     FINISH_ABI_VERSION,
@@ -35,6 +40,7 @@ from golf.randomizer.curation import CurationSnapshot
 from golf.randomizer.generate import generate
 from golf.randomizer.manifest import (
     LEGACY_BUILD_VERSION,
+    LEGACY_FINISH_ABI_VERSION,
     LEGACY_SCHEMA,
     ClubRules,
     Settings,
@@ -48,7 +54,12 @@ def test_historical_build_versions_are_refused_before_building():
     current = generate(
         Catalog.load(), CurationSnapshot.load(), Settings(prng_seed="old-build")
     )
-    legacy = replace(current, schema=LEGACY_SCHEMA, build_version=LEGACY_BUILD_VERSION)
+    legacy = replace(
+        current,
+        schema=LEGACY_SCHEMA,
+        build_version=LEGACY_BUILD_VERSION,
+        finish_abi_version=LEGACY_FINISH_ABI_VERSION,
+    )
     with pytest.raises(BuildError, match="requires unfinished build version 1"):
         build_unfinished(legacy, Catalog.load(), HoleStore(), b"")
 
@@ -58,7 +69,7 @@ def test_a_build_refuses_to_mislabel_the_finish_abi_it_produces():
         Catalog.load(), CurationSnapshot.load(), Settings(prng_seed="wrong-abi")
     )
     mislabeled = replace(current, finish_abi_version=FINISH_ABI_VERSION + 1)
-    with pytest.raises(BuildError, match="produces ABI 1"):
+    with pytest.raises(BuildError, match=f"produces ABI {FINISH_ABI_VERSION}"):
         build_unfinished(mislabeled, Catalog.load(), HoleStore(), b"")
 
 
@@ -67,15 +78,15 @@ def test_finishing_refuses_an_unsupported_artifact_abi_before_reading_the_rom():
         Catalog.load(), CurationSnapshot.load(), Settings(prng_seed="future-abi")
     )
     future = replace(current, finish_abi_version=FINISH_ABI_VERSION + 1)
-    with pytest.raises(BuildError, match="cannot finish artifact ABI 2"):
+    with pytest.raises(
+        BuildError, match=f"cannot finish artifact ABI {FINISH_ABI_VERSION + 1}"
+    ):
         finish(future, b"", b"", options())
 
 
-def test_finish_abi_one_contract_is_stable_without_rom_or_course_data():
-    """Changing a consumed location, preimage, width or protocol requires an ABI decision."""
-    sram = sram_defaults_patches("LUIGI", {Club.W1, Club.PW}, False, 0x5247)
-    assert FINISH_ABI_VERSION == 1
-    assert {
+def qr_contract() -> dict:
+    """The QR half of the finish ABI, which ABIs 1 and 2 share."""
+    return {
         "protocol": payload.PROTOCOL_VERSION,
         "credential_lengths": (
             payload.SEED_ID_LEN,
@@ -98,39 +109,96 @@ def test_finish_abi_one_contract_is_stable_without_rom_or_course_data():
             QR_DISABLE_PATCH.original,
             QR_DISABLE_PATCH.patched,
         ),
-        "sram": tuple(
-            (patch.name, patch.prg_offset, patch.original, len(patch.patched))
-            for patch in sram
+    }
+
+
+QR_CONTRACT = {
+    "protocol": 1,
+    "credential_lengths": (8, 4, 8),
+    "placeholder_fill": 0,
+    "placeholders": (
+        ("seed_id", 0x8E5F, 8),
+        ("player_ids", 0x8E67, 8),
+        ("mac_keys", 0x8E6F, 16),
+    ),
+    "qr_identity": (
+        0x3DCBD,
+        bytes.fromhex("20ba852072d302978e60"),
+        0x3452E,
+        bytes.fromhex("bddc"),
+    ),
+    "guest_disable": (0x3452E, bytes.fromhex("bddc"), bytes.fromhex("ba85")),
+}
+
+SRAM_NAME_AND_CLUBS = (
+    ("sram_defaults_player_name", 0x26D5B, b"MARIO     ", 10),
+    (
+        "sram_defaults_clubs",
+        0x26E23,
+        bytes.fromhex("00010205060708090a0b0c0d0e0f"),
+        14,
+    ),
+)
+SRAM_MAGIC = (
+    ("sram_defaults_magic_check_6001", 0x26CC0, b"5", 1),
+    ("sram_defaults_magic_check_6002", 0x26CC7, b"S", 1),
+    ("sram_defaults_magic_write_6001", 0x26D51, b"5", 1),
+    ("sram_defaults_magic_write_6002", 0x26D56, b"S", 1),
+)
+
+
+def consumed(steps) -> tuple:
+    """What finishing steps read and write, apart from the QR credentials."""
+    return tuple(
+        (patch.name, patch.prg_offset, patch.original, len(patch.patched))
+        for step in steps
+        if step.name not in ("qr_credentials", "qr_disable")
+        for patch in step.patches
+    )
+
+
+def test_finish_abi_one_contract_is_stable_without_rom_or_course_data():
+    """Changing a consumed location, preimage, width or protocol requires an ABI decision."""
+    steps = finishing_steps(options(bgm=False), 0x5247, None, abi=1)
+    assert {**qr_contract(), "sram": consumed(steps)} == {
+        **QR_CONTRACT,
+        "sram": (
+            *SRAM_NAME_AND_CLUBS,
+            ("sram_defaults_bgm_off", 0x26D4E, b"\x10", 1),
+            *SRAM_MAGIC,
+        ),
+    }
+
+
+def test_finish_abi_two_contract_is_stable_without_rom_or_course_data():
+    """ABI 2 moves BGM into the new-save options table that the unfinished build installs."""
+    all_options = options(
+        bgm=False, swing=SwingSpeed.FAST, putt=SwingSpeed.SLOW, spin=BallSpin.BACK2
+    )
+    steps = finishing_steps(all_options, 0x5247, None, abi=2)
+    assert FINISH_ABI_VERSION == 2
+    assert {
+        **qr_contract(),
+        "sram": consumed(steps),
+        "new_save_options": tuple(
+            (patch.prg_offset, patch.patched)
+            for patch in NEW_SAVE_OPTIONS_PATCH.patches
         ),
     } == {
-        "protocol": 1,
-        "credential_lengths": (8, 4, 8),
-        "placeholder_fill": 0,
-        "placeholders": (
-            ("seed_id", 0x8E5F, 8),
-            ("player_ids", 0x8E67, 8),
-            ("mac_keys", 0x8E6F, 16),
-        ),
-        "qr_identity": (
-            0x3DCBD,
-            bytes.fromhex("20ba852072d302978e60"),
-            0x3452E,
-            bytes.fromhex("bddc"),
-        ),
-        "guest_disable": (0x3452E, bytes.fromhex("bddc"), bytes.fromhex("ba85")),
+        **QR_CONTRACT,
         "sram": (
-            ("sram_defaults_player_name", 0x26D5B, b"MARIO     ", 10),
+            *SRAM_NAME_AND_CLUBS,
+            *SRAM_MAGIC,
+            ("new_save_option_values_table", 0x27531, b"\xff\xff\xff\xff", 4),
+        ),
+        "new_save_options": (
             (
-                "sram_defaults_clubs",
-                0x26E23,
-                bytes.fromhex("00010205060708090a0b0c0d0e0f"),
-                14,
+                0x27519,
+                bytes.fromhex(
+                    "a217a9ff9d986fca10faa203bd31b59d986fca10f74c50adffffffff"
+                ),
             ),
-            ("sram_defaults_bgm_off", 0x26D4E, b"\x10", 1),
-            ("sram_defaults_magic_check_6001", 0x26CC0, b"5", 1),
-            ("sram_defaults_magic_check_6002", 0x26CC7, b"S", 1),
-            ("sram_defaults_magic_write_6001", 0x26D51, b"5", 1),
-            ("sram_defaults_magic_write_6002", 0x26D56, b"S", 1),
+            (0x26D46, bytes.fromhex("4c19b5eaeaeaeaeaeaea")),
         ),
     }
 
@@ -168,11 +236,25 @@ class TestPlayerOptions:
             (dict(player_name=""), "1-10 characters"),
             (dict(player_name="ABCDEFGHIJK"), "1-10 characters"),
             (dict(bgm="on"), "bgm"),
+            (dict(swing=3), "swing must be a SwingSpeed"),
+            (dict(putt=True), "putt must be a SwingSpeed"),
+            (dict(spin=5), "spin must be a BallSpin"),
+            (dict(spin="BACK2"), "spin must be a BallSpin"),
         ],
     )
     def test_rejects_options_no_rom_can_hold(self, overrides, message):
         with pytest.raises(BuildError, match=message):
             options(**overrides)
+
+    def test_option_defaults_are_off_and_take_plain_values(self):
+        assert not options().has_option_defaults
+        chosen = options(swing=2, putt=0, spin=4)
+        assert (chosen.swing, chosen.putt, chosen.spin) == (
+            SwingSpeed.FAST,
+            SwingSpeed.SLOW,
+            BallSpin.BACK2,
+        )
+        assert chosen.has_option_defaults
 
     def test_clubs_from_labels(self):
         assert clubs_from_labels(["1w", "PW"]) == {Club.W1, Club.PW}
@@ -244,16 +326,25 @@ class TestFinishingSteps:
     def test_signed_in(self):
         credentials = credentials_for(1, 2, KEYS)
         steps = finishing_steps(options(), 0x5247, credentials)
-        assert [step.name for step in steps] == ["sram_defaults", "qr_credentials"]
+        assert [step.name for step in steps] == [
+            "sram_defaults",
+            "new_save_option_values",
+            "qr_credentials",
+        ]
 
     def test_guest(self):
         assert [step.name for step in finishing_steps(options(), 0x5247, None)] == [
             "sram_defaults",
+            "new_save_option_values",
             "qr_disable",
         ]
 
+    def test_abi_one_has_no_option_table(self):
+        steps = finishing_steps(options(), 0x5247, None, abi=1)
+        assert [step.name for step in steps] == ["sram_defaults", "qr_disable"]
+
     def test_the_seed_magic_is_written(self):
-        (defaults, _) = finishing_steps(options(bgm=False), 0x5247, None)
+        (defaults, _, _) = finishing_steps(options(bgm=False), 0x5247, None)
         assert isinstance(defaults, CompositePatch)
         writes = {sub.name: sub.patched for sub in defaults.patches}
         assert writes["sram_defaults_magic_write_6001"] + writes[
@@ -262,8 +353,30 @@ class TestFinishingSteps:
         assert writes["sram_defaults_magic_check_6001"] + writes[
             "sram_defaults_magic_check_6002"
         ] == magic_bytes(0x5247)
-        assert "sram_defaults_bgm_off" in writes
         assert writes["sram_defaults_player_name"] == b"LUIGI     "
+
+    def test_abi_two_writes_every_option_into_the_table(self):
+        chosen = options(
+            bgm=False, swing=SwingSpeed.MEDIUM, putt=SwingSpeed.OFF, spin=BallSpin.TOP2
+        )
+        (defaults, table, _) = finishing_steps(chosen, 0x5247, None)
+        assert isinstance(defaults, CompositePatch)
+        assert "sram_defaults_bgm_off" not in {sub.name for sub in defaults.patches}
+        assert isinstance(table, CompositePatch)
+        assert table.patches[0].patched == bytes([0x00, 0x01, 0xFF, 0x00])
+
+    def test_abi_one_writes_bgm_with_the_loop_edit(self):
+        (defaults, _) = finishing_steps(options(bgm=False), 0x5247, None, abi=1)
+        assert isinstance(defaults, CompositePatch)
+        assert "sram_defaults_bgm_off" in {sub.name for sub in defaults.patches}
+
+    def test_abi_one_refuses_options_it_cannot_write(self):
+        with pytest.raises(BuildError, match="cannot set swing, putt or spin"):
+            finishing_steps(options(spin=BallSpin.NORMAL), 0x5247, None, abi=1)
+
+    def test_an_unknown_abi_is_refused(self):
+        with pytest.raises(BuildError, match="cannot finish artifact ABI 9"):
+            finishing_steps(options(), 0x5247, None, abi=9)
 
     def test_credentials_type(self):
         assert isinstance(credentials_for(1, 1, KEYS), QrCredentials)
