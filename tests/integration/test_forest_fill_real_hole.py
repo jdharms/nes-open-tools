@@ -7,10 +7,10 @@ placeholders: a large region with real terrain around it for the fill to match.
 
 import pytest
 
-from editor.algorithms.better_forest_fill import (
+from golf.algorithms.forest_fill import (
     PLACEHOLDER_TILE,
 )
-from editor.algorithms.better_forest_fill import (
+from golf.algorithms.forest_fill import (
     BetterForestFiller as ForestFiller,
 )
 from golf.core.neighbor_validator import TerrainNeighborValidator
@@ -140,7 +140,7 @@ def test_fill_placeholder_regions(forest_filler, hole_18_with_placeholders):
     print(f"  Remaining placeholders: {remaining_placeholders}")
 
     # Verify all filled tiles are valid forest tiles
-    from editor.algorithms.better_forest_fill import FOREST_BORDER, FOREST_FILL
+    from golf.algorithms.forest_fill import FOREST_BORDER, FOREST_FILL
 
     valid_forest_tiles = FOREST_FILL | FOREST_BORDER
 

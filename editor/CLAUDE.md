@@ -153,5 +153,6 @@ Ctrl+X (invalid tiles).
 ## Tool-specific behavior
 
 **Forest Fill**: clicking inside a forest placeholder region fills only that region, not
-all regions, and the tool stays active for multiple clicks. Algorithm notes:
+all regions, and the tool stays active for multiple clicks. The algorithm is
+`golf/algorithms/forest_fill.py`, shared with the randomizer's mirror transform; notes in
 `docs/forest_notes.md`.

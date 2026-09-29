@@ -125,8 +125,11 @@ the CLI sets all three.
 | `sram_magic` | The 16-bit value that marks a save as this seed's, neither byte `$00` or `$FF` |
 
 A slot is a catalog hole `id`, its `par` (a copy of the catalog's, for readability),
-`transforms` and a `wind_seed`. Schema 1 defines no transforms, so the list is always
-empty. The wind seed is the 16-bit state the ROM's own RNG starts the hole from
+`transforms` and a `wind_seed`. `transforms` names versioned hole transforms, applied in
+order when the course is built (`golf/randomizer/transforms.py`); a manifest naming one
+this release lacks fails to load. The only transform is `mirror@1`, which flips the hole
+left to right through the tile table in `data/tables/mirror_tiles.json`, refilling its
+forests. Generation never adds one yet, so only hand-written manifests carry them. The wind seed is the 16-bit state the ROM's own RNG starts the hole from
 (`docs/seeded_wind.md`), not a seed for generation. No hole id appears twice.
 
 The SRAM magic is what the ROM's save initialisation compares a save against at boot

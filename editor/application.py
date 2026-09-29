@@ -9,10 +9,10 @@ from pathlib import Path
 import pygame
 from pygame import Rect
 
+from golf.algorithms.forest_fill import BetterForestFiller
 from golf.core.compressor import load_compression_tables
 from golf.formats.hole_data import HoleData
 
-from .algorithms.better_forest_fill import BetterForestFiller
 from .controllers.editor_state import EditorState, GridMode
 from .controllers.event_handler import EventHandler
 from .controllers.highlight_state import HighlightState
