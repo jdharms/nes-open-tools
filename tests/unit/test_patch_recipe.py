@@ -76,6 +76,24 @@ class TestRegistry:
             PATCH_SPECS["sram_defaults"]
         )
 
+    def test_extended_sram_defaults_recipe_fills_the_table_through_sram_defaults(self):
+        (built,) = Recipe(
+            [
+                parse_step_arg(
+                    "sram_defaults:bgm=false,swing=off,putt=fast,spin=back1", ROOT
+                )
+            ]
+        ).build_steps(b"")
+        assert built.patch.name == "sram_defaults"
+        assert built.patch.requires[0].name == "extended_sram_defaults"
+        assert built.patch.patches[-1].patched == b"\x00\xff\x02\x03"
+
+    def test_partial_extended_sram_defaults_recipe_is_refused(self):
+        with pytest.raises(
+            RecipeError, match="swing, putt and spin must be supplied together"
+        ):
+            Recipe([parse_step_arg("sram_defaults:spin=back1", ROOT)]).build_steps(b"")
+
 
 class TestParams:
     def test_integers_accept_numbers_and_strings_in_any_base(self):

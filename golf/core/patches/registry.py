@@ -25,6 +25,11 @@ from .base import ROMPatch
 from .composite import CompositePatch
 from .course import CoursePatch
 from .course_theme import course_theme_patch
+from .extended_sram_defaults import (
+    EXTENDED_SRAM_DEFAULTS_PATCH,
+    BallSpin,
+    SwingSpeed,
+)
 from .green_shortcut import green_shortcut_patch
 from .green_slope_physics import (
     DEFAULT_FRICTION,
@@ -35,12 +40,6 @@ from .menu_trim import menu_trim_patch
 from .mercy_tap_in import mercy_tap_in_patches
 from .multi_bank import COURSE_MIRRORS_PATCH, MULTI_BANK_CODE_PATCH
 from .music_import import music_import_patch
-from .new_save_options import (
-    NEW_SAVE_OPTIONS_PATCH,
-    BallSpin,
-    SwingSpeed,
-    new_save_option_values_patch,
-)
 from .practice_swing import DEFAULT_HOLD_FRAMES, practice_swing_patch
 from .putting_practice import putting_practice_patches
 from .qr_credentials import load_credentials, qr_credentials_patch
@@ -196,18 +195,10 @@ class SramDefaultsParams:
     bgm: bool = True
     #: the high byte is stored at $6001; neither byte may be $00 or $FF
     sram_magic: int = VANILLA_MAGIC
-
-
-@dataclass(frozen=True)
-class NewSaveOptionValuesParams:
-    #: false starts a new save with music off
-    bgm: bool = True
-    #: off, slow, medium or fast; off keeps the speed last chosen
-    swing: str = "off"
-    #: off, slow, medium or fast; off keeps the speed last chosen
-    putt: str = "off"
-    #: off, top2, top1, normal, back1 or back2; off keeps the spin last chosen
-    spin: str = "off"
+    #: supply all three to use the extended SRAM defaults table
+    swing: str | None = None
+    putt: str | None = None
+    spin: str | None = None
 
 
 # --- Factories and reports ------------------------------------------------------
@@ -335,12 +326,17 @@ def _report_sram_defaults(params: SramDefaultsParams, patch) -> list[str]:
     name = VANILLA_NAME if params.player_name is None else params.player_name.upper()
     clubs = VANILLA_CLUBS if params.clubs is None else params.clubs
     magic = magic_bytes(params.sram_magic)
-    return [
+    lines = [
         f"player name: {name}",
         f"clubs: {' '.join(club_labels(club_bag_bytes(clubs)))}",
         f"bgm: {'on' if params.bgm else 'off'}",
         f"sram magic: ${magic[0]:02X} ${magic[1]:02X}",
     ]
+    if params.swing is not None:
+        lines.append(
+            f"defaults: swing {params.swing}, putt {params.putt}, spin {params.spin}"
+        )
+    return lines
 
 
 def _named[E: (SwingSpeed, BallSpin)](kind: type[E], name: str, field: str) -> E:
@@ -351,14 +347,19 @@ def _named[E: (SwingSpeed, BallSpin)](kind: type[E], name: str, field: str) -> E
         raise ValueError(f"{field} must be one of {choices}, got {name!r}") from None
 
 
-def _build_new_save_option_values(
-    ctx: BuildContext, params: NewSaveOptionValuesParams
-) -> ROMPatch:
-    return new_save_option_values_patch(
+def _build_sram_defaults(ctx: BuildContext, params: SramDefaultsParams) -> ROMPatch:
+    return sram_defaults_patch(
+        params.player_name,
+        params.clubs,
         params.bgm,
-        _named(SwingSpeed, params.swing, "swing"),
-        _named(SwingSpeed, params.putt, "putt"),
-        _named(BallSpin, params.spin, "spin"),
+        params.sram_magic,
+        swing=_named(SwingSpeed, params.swing, "swing")
+        if params.swing is not None
+        else None,
+        putt=_named(SwingSpeed, params.putt, "putt")
+        if params.putt is not None
+        else None,
+        spin=_named(BallSpin, params.spin, "spin") if params.spin is not None else None,
     )
 
 
@@ -473,24 +474,16 @@ PATCH_SPECS: dict[str, PatchSpec[Any, Any]] = {
         ),
         PatchSpec(
             "sram_defaults",
-            "Change a new save's player name, club bags, BGM option and SRAM magic",
+            "Change a new save's name, club bags, options and SRAM magic; swing, putt and spin require extended_sram_defaults",
             SramDefaultsParams,
-            lambda ctx, params: sram_defaults_patch(
-                params.player_name, params.clubs, params.bgm, params.sram_magic
-            ),
+            _build_sram_defaults,
             _report_sram_defaults,
         ),
         PatchSpec(
-            "new_save_options",
-            "Start a new save's BGM, swing, putt and spin defaults from a table at the vanilla values; needs menu_trim",
+            "extended_sram_defaults",
+            "Install the SRAM defaults routine and table for BGM, swing, putt and spin; needs menu_trim",
             NoParams,
-            _fixed(NEW_SAVE_OPTIONS_PATCH),
-        ),
-        PatchSpec(
-            "new_save_option_values",
-            "Fill the new_save_options table: a new save's BGM, swing, putt and spin defaults",
-            NewSaveOptionValuesParams,
-            _build_new_save_option_values,
+            _fixed(EXTENDED_SRAM_DEFAULTS_PATCH),
         ),
         PatchSpec(
             "green_slope_physics",

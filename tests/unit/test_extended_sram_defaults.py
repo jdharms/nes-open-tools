@@ -1,11 +1,12 @@
-"""Unit tests for the new-save options patch: its bytes, and its routine run under py65."""
+"""Unit tests for the extended SRAM defaults installer and its routine under py65."""
 
 import pytest
 from py65.devices.mpu6502 import MPU
 
 from golf.core import rom_utils
-from golf.core.patches.new_save_options import (
-    NEW_SAVE_OPTIONS_PATCH,
+from golf.core.patches.extended_sram_defaults import (
+    EXTENDED_SRAM_DEFAULTS_INSTALLED,
+    EXTENDED_SRAM_DEFAULTS_PATCH,
     RESUME_ADDR,
     ROUTINE_ADDR,
     ROUTINE_ORIGINAL,
@@ -16,7 +17,7 @@ from golf.core.patches.new_save_options import (
     VANILLA_VALUES,
     BallSpin,
     SwingSpeed,
-    new_save_option_values_patch,
+    option_table_patch,
     option_values,
 )
 
@@ -24,8 +25,8 @@ RETURN = 0x0002  # where the harness's RTS at RESUME_ADDR lands
 
 
 def run_routine(table: bytes) -> bytes:
-    """Run NewSaveOptions over SRAM that is not yet $FF; return $6F98-$6FAF after."""
-    routine, _ = NEW_SAVE_OPTIONS_PATCH.patches
+    """Run ExtendedSramDefaults over SRAM that is not yet $FF; return $6F98-$6FAF after."""
+    routine, _ = EXTENDED_SRAM_DEFAULTS_PATCH.patches
     mpu = MPU()
     memory = mpu.memory
     memory[ROUTINE_ADDR : ROUTINE_ADDR + len(routine.patched)] = routine.patched
@@ -42,14 +43,14 @@ def run_routine(table: bytes) -> bytes:
             break
         mpu.step()
     else:
-        pytest.fail("NewSaveOptions did not reach $AD50")
+        pytest.fail("ExtendedSramDefaults did not reach $AD50")
     assert memory[0x6F90:0x6F98] == [0x11] * 8, "wrote below $6F98"
     assert memory[0x6FB0:0x6FB8] == [0x11] * 8, "wrote past $6FAF"
     return bytes(memory[0x6F98:0x6FB0])
 
 
 def test_the_routine_replaces_only_player_stats_code():
-    routine, splice = NEW_SAVE_OPTIONS_PATCH.patches
+    routine, splice = EXTENDED_SRAM_DEFAULTS_PATCH.patches
     assert routine.prg_offset == rom_utils.cpu_to_prg_switched(ROUTINE_ADDR, 9)
     assert routine.original == ROUTINE_ORIGINAL[: len(routine.patched)]
     assert len(routine.patched) == len(routine.original)
@@ -60,7 +61,7 @@ def test_the_routine_replaces_only_player_stats_code():
 
 
 def test_the_installed_table_holds_the_vanilla_values():
-    routine, _ = NEW_SAVE_OPTIONS_PATCH.patches
+    routine, _ = EXTENDED_SRAM_DEFAULTS_PATCH.patches
     start = TABLE_ADDR - ROUTINE_ADDR
     assert routine.patched[start : start + 4] == VANILLA_VALUES
     assert routine.prg_offset + start == TABLE_OFFSET
@@ -98,10 +99,14 @@ def test_values_the_game_does_not_use_are_refused(arguments):
         option_values(*arguments)
 
 
-def test_the_values_patch_fills_the_installed_table():
-    patch = new_save_option_values_patch(spin=BallSpin.NORMAL)
-    assert patch.requires == [NEW_SAVE_OPTIONS_PATCH]
-    (table,) = patch.patches
+def test_the_value_leaf_fills_the_installed_table():
+    table = option_table_patch(spin=BallSpin.NORMAL)
     assert table.prg_offset == TABLE_OFFSET
     assert table.original == VANILLA_VALUES
     assert table.patched == b"\xff\xff\xff\x02"
+
+
+def test_installed_requirement_checks_code_without_the_mutable_table():
+    code, splice = EXTENDED_SRAM_DEFAULTS_INSTALLED.patches
+    assert len(code.patched) == TABLE_ADDR - ROUTINE_ADDR
+    assert splice is EXTENDED_SRAM_DEFAULTS_PATCH.patches[1]

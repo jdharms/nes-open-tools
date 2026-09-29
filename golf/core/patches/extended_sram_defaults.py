@@ -1,6 +1,5 @@
 """
-New-save options: start a new save with chosen BGM, swing speed, putt speed and
-ball spin defaults.
+Install extended SRAM defaults for BGM, swing speed, putt speed and ball spin.
 
 These are the four settings on the club house's OPTIONS screen, kept in SRAM:
 
@@ -27,16 +26,13 @@ in the game.
 ten-byte loop at $AD46 that the magic writes at $AD50 follow directly. A byte
 edit can turn the loop's `BPL` into `BNE` to leave `BGMOnFlag` at $00 from the
 earlier zero fill (`sram_defaults`' `bgm` parameter), but cannot produce any
-other value. So this patch replaces the loop with a `JMP` to `NewSaveOptions`,
-which does the same $FF fill, copies `NewSaveOptionTable` over $6F98-$6F9B and
+other value. So this patch replaces the loop with a `JMP` to `ExtendedSramDefaults`,
+which does the same $FF fill, copies `SramOptionDefaultsTable` over $6F98-$6F9B and
 jumps back to $AD50.
 
-Two patches, one per build stage:
-
-- `NEW_SAVE_OPTIONS_PATCH` installs the routine with the table holding the
-  vanilla values, $FF $FF $FF $FF. The unfinished randomizer build applies it.
-- `new_save_option_values_patch` writes the four values into the table,
-  expecting the vanilla ones. The finisher applies it (finish ABI 2).
+`EXTENDED_SRAM_DEFAULTS_PATCH` installs the routine with the table holding the
+vanilla values, $FF $FF $FF $FF. The unfinished randomizer build applies it.
+The finisher's `sram_defaults` patch fills the table for each download.
 
 The routine sits in bank 9 at $B519, the start of the club house's PLAYER STATS
 screen (`RunPlayerStatsScreen`), which `menu_trim` removes from the club house.
@@ -106,7 +102,7 @@ def _prg(cpu_addr: int) -> int:
 
 def _program() -> Program:
     source = """
-        NewSaveOptions:
+        ExtendedSramDefaults:
             ldx #FILL_LENGTH - 1
             lda #$FF
         @fill:
@@ -115,12 +111,12 @@ def _program() -> Program:
             bpl @fill
             ldx #OPTION_COUNT - 1
         @copy:
-            lda NewSaveOptionTable,x
+            lda SramOptionDefaultsTable,x
             sta OPTIONS_SRAM,x
             dex
             bpl @copy
             jmp RESUME_ADDR
-        NewSaveOptionTable:
+        SramOptionDefaultsTable:
             .byte $FF, $FF, $FF, $FF
     """
     program = assemble(
@@ -139,21 +135,21 @@ def _program() -> Program:
 
 _PROGRAM = _program()
 #: the table the finisher fills: BGM, swing, putt, spin
-TABLE_ADDR = _PROGRAM.symbol("NewSaveOptionTable")
+TABLE_ADDR = _PROGRAM.symbol("SramOptionDefaultsTable")
 TABLE_OFFSET = _prg(TABLE_ADDR)
 
 
-NEW_SAVE_OPTIONS_PATCH = CompositePatch(
-    name="new_save_options",
+EXTENDED_SRAM_DEFAULTS_PATCH = CompositePatch(
+    name="extended_sram_defaults",
     description=(
         "Start a new save's BGM, swing, putt and spin defaults from a table, "
         "filled with the vanilla values"
     ),
     patches=[
         BytePatch(
-            name="new_save_options_routine",
+            name="extended_sram_defaults_routine",
             description=(
-                f"NewSaveOptions and its table at bank {BANK} ${ROUTINE_ADDR:04X}, "
+                f"ExtendedSramDefaults and its table at bank {BANK} ${ROUTINE_ADDR:04X}, "
                 "over the unreachable PLAYER STATS screen"
             ),
             prg_offset=_prg(ROUTINE_ADDR),
@@ -161,20 +157,39 @@ NEW_SAVE_OPTIONS_PATCH = CompositePatch(
             patched=_PROGRAM.code,
         ),
         BytePatch(
-            name="new_save_options_splice",
+            name="extended_sram_defaults_splice",
             description=(
                 f"InitializeSram's $FF fill at ${SPLICE_ADDR:04X} jumps to "
-                "NewSaveOptions"
+                "ExtendedSramDefaults"
             ),
             prg_offset=_prg(SPLICE_ADDR),
             original=SPLICE_ORIGINAL,
             # the rest of the loop is unreachable; NOPs keep the length, and
-            # make sram_defaults' bgm edit at $AD4E refuse to apply
+            # make the legacy sram_defaults BGM edit at $AD4E refuse to apply
             patched=bytes([0x4C, ROUTINE_ADDR & 0xFF, ROUTINE_ADDR >> 8])
             + bytes([0xEA] * (len(SPLICE_ORIGINAL) - 3)),
         ),
     ],
     requires=[PLAYER_STATS_REMOVED],
+)
+
+# The table changes for each download. A finishing patch must check the stable
+# code and splice, so it remains applicable after the table has been filled.
+_ROUTINE, _SPLICE = EXTENDED_SRAM_DEFAULTS_PATCH.patches
+_TABLE_START = TABLE_ADDR - ROUTINE_ADDR
+EXTENDED_SRAM_DEFAULTS_INSTALLED = CompositePatch(
+    name="extended_sram_defaults",
+    description="The extended SRAM defaults routine and splice are installed",
+    patches=[
+        BytePatch(
+            name="extended_sram_defaults_code",
+            description="Installed extended SRAM defaults code before its value table",
+            prg_offset=_prg(ROUTINE_ADDR),
+            original=ROUTINE_ORIGINAL[:_TABLE_START],
+            patched=_PROGRAM.code[:_TABLE_START],
+        ),
+        _SPLICE,
+    ],
 )
 
 
@@ -197,30 +212,23 @@ def option_values(
     )
 
 
-def new_save_option_values_patch(
+def option_table_patch(
     bgm: bool = True,
     swing: SwingSpeed = SwingSpeed.OFF,
     putt: SwingSpeed = SwingSpeed.OFF,
     spin: BallSpin = BallSpin.OFF,
-) -> CompositePatch[BytePatch]:
-    """Fill `NewSaveOptionTable`, which `NEW_SAVE_OPTIONS_PATCH` installs."""
+) -> BytePatch:
+    """Fill the extended SRAM defaults table for one player's download."""
     values = option_values(bgm, swing, putt, spin)
     description = (
         f"Start a new save with BGM {'on' if bgm else 'off'}, swing "
         f"{SwingSpeed(swing).name.lower()}, putt {SwingSpeed(putt).name.lower()}, "
         f"spin {BallSpin(spin).name.lower()}"
     )
-    return CompositePatch(
-        name="new_save_option_values",
+    return BytePatch(
+        name="sram_defaults_option_table",
         description=description,
-        patches=[
-            BytePatch(
-                name="new_save_option_values_table",
-                description=description,
-                prg_offset=TABLE_OFFSET,
-                original=VANILLA_VALUES,
-                patched=values,
-            )
-        ],
-        requires=[NEW_SAVE_OPTIONS_PATCH],
+        prg_offset=TABLE_OFFSET,
+        original=VANILLA_VALUES,
+        patched=values,
     )

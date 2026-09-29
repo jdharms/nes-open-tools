@@ -27,14 +27,15 @@ screen (`$B519` on) is reached only from the club house entry `menu_trim` remove
 
 ## Decision
 
-- The unfinished build (build version 4) adds `new_save_options`: the `$AD46` loop becomes
+- The unfinished build (build version 4) adds `extended_sram_defaults`: the `$AD46` loop becomes
   a `JMP` to a 28-byte routine at bank 9 `$B519` that does the same `$FF` fill, copies a
   four-byte table (BGM, swing, putt, spin) over `$6F98-$6F9B`, and jumps back to `$AD50`.
   The table, at `$B531`, holds the vanilla `$FF $FF $FF $FF`. The patch requires
   `menu_trim`'s removal of PLAYER STATS.
-- Finish ABI 2 writes the player's four values into that table with
-  `new_save_option_values`, expecting the vanilla fill, and writes name, clubs and magic
-  through `sram_defaults` as ABI 1 does, without the loop edit.
+- Finish ABI 2 writes the player's four values into that table through
+  `sram_defaults`, alongside name, clubs and magic. Supplying swing, putt and spin
+  selects the table layout and avoids the legacy loop edit. The table write requires
+  the installed routine and splice, independent of the table's current values.
 - `_finish_abi_1` stays for stored seeds. It writes BGM with the loop edit and refuses
   swing, putt or spin defaults other than off.
 - The values stay SRAM defaults: the OPTIONS screen still edits them in the game.
@@ -58,13 +59,13 @@ screen (`$B519` on) is reached only from the club house entry `menu_trim` remove
   so `_finish_abi_1` is never retired; the site omits swing, putt and spin for them.
 - PLAYER STATS' code is now claimed space. Anything that brings PLAYER STATS back must
   move the routine, which is a finish ABI change.
-- `sram_defaults`' `bgm=False` refuses to follow `new_save_options`, since the loop edit's
-  byte is now a `NOP`.
+- `sram_defaults`' legacy BGM loop edit refuses to follow `extended_sram_defaults`,
+  since the loop edit's byte is now a `NOP`.
 - A new option would be a new ABI: the table has exactly four entries.
 
 ## Sources
 
 - `docs/planning/download_settings.md`, "The ROM mechanism and the finish ABI" and
   "Placement".
-- `golf/core/patches/new_save_options.py`, `golf/randomizer/build.py`.
+- `golf/core/patches/extended_sram_defaults.py`, `golf/randomizer/build.py`.
 - Planning session with Claude, 2026-09-28.

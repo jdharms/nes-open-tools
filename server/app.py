@@ -6,6 +6,7 @@ import secrets
 import time
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager, suppress
+from dataclasses import replace
 from pathlib import Path
 from urllib.parse import urlencode
 
@@ -79,7 +80,7 @@ from .timings import (
     TimingSink,
     flush_periodically,
 )
-from .users import load_user, sign_in
+from .users import User, load_user, sign_in
 from .version import site_version as read_site_version
 from .views import (
     calendar_date,
@@ -691,17 +692,22 @@ def create_app(
             },
         )
 
-    @app.get("/me", response_class=HTMLResponse)
-    def me(request: Request):
-        user = current_user(request)
-        if user is None:
-            if not config.sign_in_enabled:
-                raise not_found()
-            return RedirectResponse("/auth/login?next=/me", status_code=303)
+    def me_page(
+        request: Request,
+        user: User,
+        *,
+        state: DownloadState | None = None,
+        result: str | None = None,
+        status_code: int = 200,
+    ):
+        """Render /me with saved settings or the submitted values after an error."""
         db: Database = request.app.state.db
         has_saved = (
             load_settings(db, user.id) is not None or DOWNLOAD_COOKIE in request.cookies
         )
+        settings = settings_view(saved_settings(request), has_saved)
+        if state is not None:
+            settings = replace(settings, state=state)
         return templates.TemplateResponse(
             request,
             "me.html",
@@ -709,10 +715,20 @@ def create_app(
                 "page": "me",
                 "entries": entries_for_user(db, user.id),
                 "rounds": rounds_for_user(db, user.id),
-                "settings": settings_view(saved_settings(request), has_saved),
-                "result": request.query_params.get("result"),
+                "settings": settings,
+                "result": result,
             },
+            status_code=status_code,
         )
+
+    @app.get("/me", response_class=HTMLResponse)
+    def me(request: Request):
+        user = current_user(request)
+        if user is None:
+            if not config.sign_in_enabled:
+                raise not_found()
+            return RedirectResponse("/auth/login?next=/me", status_code=303)
+        return me_page(request, user, result=request.query_params.get("result"))
 
     def me_redirect(result: str) -> RedirectResponse:
         return RedirectResponse(
@@ -729,7 +745,9 @@ def create_app(
             saved = saved_from_state(state, saved_settings(request))
         except FormError as problem:
             outcome(request, problem.reason)
-            return me_redirect(problem.reason)
+            return me_page(
+                request, user, state=state, result=problem.reason, status_code=400
+            )
         save_settings(request.app.state.db, user.id, saved)
         outcome(request, OK)
         response = me_redirect(SETTINGS_SAVED)

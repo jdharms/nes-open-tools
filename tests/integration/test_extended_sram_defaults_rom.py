@@ -1,4 +1,4 @@
-"""Integration: the new-save options patch on the vanilla ROM, with InitializeSram run under py65."""
+"""Integration: extended SRAM defaults on the vanilla ROM, with InitializeSram run under py65."""
 
 from pathlib import Path
 
@@ -10,11 +10,10 @@ from golf.core.patches import (
     menu_trim_patch,
     sram_defaults_patch,
 )
-from golf.core.patches.new_save_options import (
-    NEW_SAVE_OPTIONS_PATCH,
+from golf.core.patches.extended_sram_defaults import (
+    EXTENDED_SRAM_DEFAULTS_PATCH,
     BallSpin,
     SwingSpeed,
-    new_save_option_values_patch,
 )
 from golf.core.patches.sram_defaults import Club, club_bag_bytes
 from tests.new_save import new_save
@@ -34,7 +33,9 @@ def vanilla() -> bytes:
 @pytest.fixture(scope="module")
 def installed(vanilla) -> bytes:
     """The routine installed, as the unfinished build leaves it."""
-    return PatchStack([menu_trim_patch(), NEW_SAVE_OPTIONS_PATCH]).build(vanilla).rom
+    return (
+        PatchStack([menu_trim_patch(), EXTENDED_SRAM_DEFAULTS_PATCH]).build(vanilla).rom
+    )
 
 
 def finish(installed: bytes, *steps) -> bytes:
@@ -49,9 +50,14 @@ def test_the_installed_routine_leaves_a_new_save_as_vanilla(vanilla, installed):
 def test_a_new_save_holds_the_chosen_options(installed):
     rom = finish(
         installed,
-        sram_defaults_patch("LUIGI", [Club.W1, Club.PW], True, 0x5247),
-        new_save_option_values_patch(
-            False, SwingSpeed.FAST, SwingSpeed.MEDIUM, BallSpin.BACK1
+        sram_defaults_patch(
+            "LUIGI",
+            [Club.W1, Club.PW],
+            False,
+            0x5247,
+            swing=SwingSpeed.FAST,
+            putt=SwingSpeed.MEDIUM,
+            spin=BallSpin.BACK1,
         ),
     )
     sram = new_save(rom)
@@ -66,12 +72,35 @@ def test_a_new_save_holds_the_chosen_options(installed):
 
 def test_the_routine_requires_player_stats_out_of_the_club_house(vanilla):
     with pytest.raises(StackError, match="requires menu_trim"):
-        PatchStack([NEW_SAVE_OPTIONS_PATCH]).build(vanilla)
+        PatchStack([EXTENDED_SRAM_DEFAULTS_PATCH]).build(vanilla)
 
 
 def test_the_values_require_the_routine(vanilla):
-    with pytest.raises(StackError, match="requires new_save_options"):
-        PatchStack([new_save_option_values_patch(False)]).build(vanilla)
+    with pytest.raises(StackError, match="requires extended_sram_defaults"):
+        PatchStack(
+            [
+                sram_defaults_patch(
+                    bgm=False,
+                    swing=SwingSpeed.OFF,
+                    putt=SwingSpeed.OFF,
+                    spin=BallSpin.OFF,
+                )
+            ]
+        ).build(vanilla)
+
+
+def test_extended_defaults_can_be_reapplied_after_the_table_changes(installed):
+    patch = sram_defaults_patch(
+        "LUIGI",
+        [Club.W1, Club.PW],
+        False,
+        0x5247,
+        swing=SwingSpeed.FAST,
+        putt=SwingSpeed.MEDIUM,
+        spin=BallSpin.BACK1,
+    )
+    finished = finish(installed, patch)
+    assert finish(finished, patch) == finished
 
 
 def test_sram_defaults_bgm_edit_refuses_the_spliced_loop(installed):

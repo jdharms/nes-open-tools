@@ -9,7 +9,7 @@ from pathlib import Path
 
 import pytest
 
-from golf.core.patches.new_save_options import BallSpin, SwingSpeed
+from golf.core.patches.extended_sram_defaults import BallSpin, SwingSpeed
 from golf.core.patches.sram_defaults import VANILLA_CLUBS, Club
 from golf.randomizer.build import PlayerOptions, finish
 from golf.randomizer.manifest import Manifest

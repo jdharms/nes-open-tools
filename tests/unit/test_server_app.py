@@ -8,7 +8,7 @@ from urllib.parse import parse_qs, urlsplit
 import pytest
 from fastapi.testclient import TestClient
 
-from golf.core.patches.new_save_options import BallSpin, SwingSpeed
+from golf.core.patches.extended_sram_defaults import BallSpin, SwingSpeed
 from golf.core.patches.sram_defaults import Club
 from golf.qr.payload import URL_PREFIX, HoleRecord, RoundPayload
 from golf.randomizer.catalog import JP_ROM, US_ROM, Catalog, HoleStore
@@ -2034,7 +2034,23 @@ def test_settings_me_cannot_save_are_refused_and_nothing_changes(
         response = test_client.post(
             "/me/download-settings", data=me_form(**changes), follow_redirects=False
         )
-        assert response.headers["location"] == f"/me?result={result}#download-settings"
+        assert response.status_code == 400
+        section = response.text[
+            response.text.index('<section id="download-settings">') :
+        ]
+        assert "<del>" in section
+        assert re.search(
+            rf'name="player_name"\s+value="{changes.get("player_name", "yoshi")}"',
+            section,
+            flags=re.IGNORECASE,
+        )
+        expected_clubs = changes.get("clubs", ["2W", "PW"])
+        assert (
+            re.findall(r'name="clubs"\s+value="(\w+)"\s+checked', section)
+            == expected_clubs
+        )
+        assert re.search(r'<option value="medium"\s+selected>', section)
+        assert re.search(r'<option value="slow"\s+selected>', section)
         assert account_settings(test_client) is None
         assert DOWNLOAD_COOKIE not in response.headers.get("set-cookie", "")
 

@@ -18,7 +18,7 @@ import sys
 from pathlib import Path
 
 from golf.core.patches import PatchError, load_credentials
-from golf.core.patches.new_save_options import BallSpin, SwingSpeed
+from golf.core.patches.extended_sram_defaults import BallSpin, SwingSpeed
 from golf.core.patches.sram_defaults import VANILLA_CLUBS, VANILLA_NAME
 from golf.randomizer.build import (
     PlayerOptions,

@@ -15,11 +15,12 @@ tables:
 - clubs: `DefaultClubBagTable` at $AE23, copied to both players' bags. It is
   written the way the choose-clubs screen saves a bag: at most 14 club ids,
   the putter always among them, in ascending order, padded with $FF.
-- bgm: off turns the $FF fill loop's `BPL` at $AD4E into `BNE`, so the loop
+- bgm: without the extended defaults routine, off turns the $FF fill loop's
+  `BPL` at $AD4E into `BNE`, so the loop
   stops before X=0 and BGMOnFlag ($6F98) keeps $00 from the zero fill. The
-  other bytes the loop fills are unchanged. `new_save_options` replaces the
-  loop, and with it the BGM option and the swing, putt and spin defaults the
-  loop cannot write; after it, only `bgm=True` applies.
+  other bytes the loop fills are unchanged. `extended_sram_defaults` replaces
+  that loop. Pass swing, putt and spin together to write BGM and those three
+  defaults into its table instead.
 - sram_magic: the operands of the check's two `CMP #` and the final two
   `LDA #`. A save holding any other magic is wiped and rebuilt at boot, so a
   save from another ROM cannot carry its bag in. Neither byte may be $00 or
@@ -45,6 +46,12 @@ from golf.core import rom_utils
 
 from .byte_patch import BytePatch
 from .composite import CompositePatch
+from .extended_sram_defaults import (
+    EXTENDED_SRAM_DEFAULTS_INSTALLED,
+    BallSpin,
+    SwingSpeed,
+    option_table_patch,
+)
 
 BANK = 9
 
@@ -167,13 +174,27 @@ def _prg(cpu_addr: int) -> int:
     return rom_utils.cpu_to_prg_switched(cpu_addr, BANK)
 
 
+def _extended_options(
+    swing: SwingSpeed | None, putt: SwingSpeed | None, spin: BallSpin | None
+) -> bool:
+    provided = (swing is not None, putt is not None, spin is not None)
+    if any(provided) and not all(provided):
+        raise ValueError("swing, putt and spin must be supplied together")
+    return all(provided)
+
+
 def sram_defaults_patches(
     player_name: str | None = None,
     clubs: Iterable[Club | str] | None = None,
     bgm: bool = True,
     sram_magic: int = VANILLA_MAGIC,
+    *,
+    swing: SwingSpeed | None = None,
+    putt: SwingSpeed | None = None,
+    spin: BallSpin | None = None,
 ) -> list[BytePatch]:
-    """The patches for every default that differs from vanilla."""
+    """The default writes; all three option values select the installed table layout."""
+    extended = _extended_options(swing, putt, spin)
     magic = magic_bytes(sram_magic)
     patches = []
     if player_name is not None:
@@ -197,7 +218,7 @@ def sram_defaults_patches(
                 patched=bag,
             )
         )
-    if not bgm:
+    if not bgm and not extended:
         patches.append(
             BytePatch(
                 name="sram_defaults_bgm_off",
@@ -220,6 +241,9 @@ def sram_defaults_patches(
                         patched=magic[index : index + 1],
                     )
                 )
+    if extended:
+        assert swing is not None and putt is not None and spin is not None
+        patches.append(option_table_patch(bgm, swing, putt, spin))
     return patches
 
 
@@ -228,9 +252,17 @@ def sram_defaults_patch(
     clubs: Iterable[Club | str] | None = None,
     bgm: bool = True,
     sram_magic: int = VANILLA_MAGIC,
+    *,
+    swing: SwingSpeed | None = None,
+    putt: SwingSpeed | None = None,
+    spin: BallSpin | None = None,
 ) -> CompositePatch[BytePatch]:
+    extended = _extended_options(swing, putt, spin)
     return CompositePatch(
         name="sram_defaults",
         description="Change what a new save starts with",
-        patches=sram_defaults_patches(player_name, clubs, bgm, sram_magic),
+        patches=sram_defaults_patches(
+            player_name, clubs, bgm, sram_magic, swing=swing, putt=putt, spin=spin
+        ),
+        requires=[EXTENDED_SRAM_DEFAULTS_INSTALLED] if extended else [],
     )

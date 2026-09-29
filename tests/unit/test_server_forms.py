@@ -3,7 +3,7 @@
 import pytest
 from starlette.datastructures import FormData
 
-from golf.core.patches.new_save_options import BallSpin, SwingSpeed
+from golf.core.patches.extended_sram_defaults import BallSpin, SwingSpeed
 from golf.core.patches.sram_defaults import VANILLA_CLUBS, VANILLA_NAME, Club
 from golf.randomizer.build import PlayerOptions
 from golf.randomizer.catalog import JP_ROM, US_ROM

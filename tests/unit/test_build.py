@@ -12,12 +12,12 @@ from golf.core.patches import (
     course_theme_patch,
 )
 from golf.core.patches.course_theme import VANILLA_COURSE_BGM
-from golf.core.patches.music_import import MusicImportPatch
-from golf.core.patches.new_save_options import (
-    NEW_SAVE_OPTIONS_PATCH,
+from golf.core.patches.extended_sram_defaults import (
+    EXTENDED_SRAM_DEFAULTS_PATCH,
     BallSpin,
     SwingSpeed,
 )
+from golf.core.patches.music_import import MusicImportPatch
 from golf.core.patches.qr_credentials import PLACEHOLDERS, placeholder_offset
 from golf.core.patches.scorecard_qr import QR_DISABLE_PATCH, SCORECARD_QR_PATCH
 from golf.core.patches.sram_defaults import Club, magic_bytes
@@ -180,18 +180,18 @@ def test_finish_abi_two_contract_is_stable_without_rom_or_course_data():
     assert {
         **qr_contract(),
         "sram": consumed(steps),
-        "new_save_options": tuple(
+        "extended_sram_defaults": tuple(
             (patch.prg_offset, patch.patched)
-            for patch in NEW_SAVE_OPTIONS_PATCH.patches
+            for patch in EXTENDED_SRAM_DEFAULTS_PATCH.patches
         ),
     } == {
         **QR_CONTRACT,
         "sram": (
             *SRAM_NAME_AND_CLUBS,
             *SRAM_MAGIC,
-            ("new_save_option_values_table", 0x27531, b"\xff\xff\xff\xff", 4),
+            ("sram_defaults_option_table", 0x27531, b"\xff\xff\xff\xff", 4),
         ),
-        "new_save_options": (
+        "extended_sram_defaults": (
             (
                 0x27519,
                 bytes.fromhex(
@@ -328,14 +328,12 @@ class TestFinishingSteps:
         steps = finishing_steps(options(), 0x5247, credentials)
         assert [step.name for step in steps] == [
             "sram_defaults",
-            "new_save_option_values",
             "qr_credentials",
         ]
 
     def test_guest(self):
         assert [step.name for step in finishing_steps(options(), 0x5247, None)] == [
             "sram_defaults",
-            "new_save_option_values",
             "qr_disable",
         ]
 
@@ -344,7 +342,7 @@ class TestFinishingSteps:
         assert [step.name for step in steps] == ["sram_defaults", "qr_disable"]
 
     def test_the_seed_magic_is_written(self):
-        (defaults, _, _) = finishing_steps(options(bgm=False), 0x5247, None)
+        (defaults, _) = finishing_steps(options(bgm=False), 0x5247, None)
         assert isinstance(defaults, CompositePatch)
         writes = {sub.name: sub.patched for sub in defaults.patches}
         assert writes["sram_defaults_magic_write_6001"] + writes[
@@ -359,11 +357,11 @@ class TestFinishingSteps:
         chosen = options(
             bgm=False, swing=SwingSpeed.MEDIUM, putt=SwingSpeed.OFF, spin=BallSpin.TOP2
         )
-        (defaults, table, _) = finishing_steps(chosen, 0x5247, None)
+        (defaults, _) = finishing_steps(chosen, 0x5247, None)
         assert isinstance(defaults, CompositePatch)
-        assert "sram_defaults_bgm_off" not in {sub.name for sub in defaults.patches}
-        assert isinstance(table, CompositePatch)
-        assert table.patches[0].patched == bytes([0x00, 0x01, 0xFF, 0x00])
+        writes = {sub.name: sub.patched for sub in defaults.patches}
+        assert "sram_defaults_bgm_off" not in writes
+        assert writes["sram_defaults_option_table"] == bytes([0x00, 0x01, 0xFF, 0x00])
 
     def test_abi_one_writes_bgm_with_the_loop_edit(self):
         (defaults, _) = finishing_steps(options(bgm=False), 0x5247, None, abi=1)

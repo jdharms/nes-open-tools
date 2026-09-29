@@ -24,7 +24,7 @@ import json
 from collections.abc import Iterable
 from dataclasses import dataclass, field, replace
 
-from golf.core.patches.new_save_options import BallSpin, SwingSpeed
+from golf.core.patches.extended_sram_defaults import BallSpin, SwingSpeed
 from golf.core.patches.sram_defaults import (
     BAG_SIZE,
     NAME_CHARS,

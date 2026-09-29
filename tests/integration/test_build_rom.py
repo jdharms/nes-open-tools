@@ -8,7 +8,7 @@ import pytest
 
 from golf.core import ips
 from golf.core.patches import PatchStack, StackError
-from golf.core.patches.new_save_options import BallSpin, SwingSpeed
+from golf.core.patches.extended_sram_defaults import BallSpin, SwingSpeed
 from golf.core.patches.qr_credentials import PLACEHOLDERS, placeholder_offset
 from golf.core.patches.scorecard_qr import SCORECARD_QR_PATCH
 from golf.core.patches.sram_defaults import MAGIC_CHECK_ADDRS, Club, magic_bytes
@@ -56,7 +56,7 @@ UNFINISHED_ORDER = [
     "signpost_random_banner",
     "scorecard_course_name",
     "menu_trim",
-    "new_save_options",
+    "extended_sram_defaults",
 ]
 
 OPTIONS = PlayerOptions(
@@ -230,7 +230,6 @@ def test_signed_in_finishing_changes_only_defaults_and_credentials(
 ):
     assert list(signed_in.regions) == [
         "sram_defaults",
-        "new_save_option_values",
         "qr_credentials",
     ]
     allowed = set().union(*(file_offsets(r) for r in signed_in.regions.values()))
@@ -253,7 +252,7 @@ def abi_1_unfinished(jp_manifest, catalog, store, vanilla) -> bytes:
     steps = [
         step
         for step in unfinished_steps(jp_manifest, catalog, store, vanilla)
-        if step.name != "new_save_options"
+        if step.name != "extended_sram_defaults"
     ]
     return PatchStack(steps).ips(vanilla)
 
@@ -299,15 +298,10 @@ def test_guest_finishing_changes_only_defaults_and_the_splice(
 ):
     assert list(guest.regions) == [
         "sram_defaults",
-        "new_save_option_values",
         "qr_disable",
     ]
     splice = HEADER + SCORECARD_QR_PATCH.splice_offset
-    allowed = (
-        file_offsets(guest.regions["sram_defaults"])
-        | file_offsets(guest.regions["new_save_option_values"])
-        | {splice, splice + 1}
-    )
+    allowed = file_offsets(guest.regions["sram_defaults"]) | {splice, splice + 1}
     assert changed(unfinished.rom, guest.rom) <= allowed
     assert guest.rom[splice : splice + 2] == vanilla[splice : splice + 2]
     assert ips.apply(vanilla, guest.ips) == guest.rom
@@ -331,7 +325,7 @@ def test_the_stages_overlap_only_at_the_placeholders(flavour, request, unfinishe
     )
     overlap = unfinished_bytes & finishing_bytes
     qr = prg_bytes(unfinished.regions["scorecard_qr"])
-    options = prg_bytes(unfinished.regions["new_save_options"])
+    options = prg_bytes(unfinished.regions["extended_sram_defaults"])
     assert overlap & qr, (
         "the QR finishing patch should rewrite bytes scorecard_qr wrote"
     )
@@ -348,12 +342,12 @@ def test_one_stack_of_both_stages_is_refused_at_the_first_placeholder(
     steps = unfinished_steps(jp_manifest, catalog, store, vanilla)
     steps += finishing_steps(OPTIONS, jp_manifest.course.sram_magic, credentials)
     with pytest.raises(
-        StackError, match="step 'new_save_option_values'.*'new_save_options'"
+        StackError, match="step 'sram_defaults'.*'extended_sram_defaults'"
     ):
         PatchStack(steps).build(vanilla)
-    without_options = [step for step in steps if step.name != "new_save_option_values"]
+    without_defaults = [step for step in steps if step.name != "sram_defaults"]
     with pytest.raises(StackError, match=f"step '{finisher}'.*scorecard_qr"):
-        PatchStack(without_options).build(vanilla)
+        PatchStack(without_defaults).build(vanilla)
 
 
 def test_finishing_refuses_a_bag_the_seed_forbids(jp_manifest, vanilla, unfinished):

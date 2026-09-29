@@ -172,7 +172,7 @@ randomizer can no longer reach:
   and `DefaultRosterNamesTable` (190 bytes, only for tournaments).
 
 The ten-byte `$FF` loop at `$AD46` becomes `JMP $B519`, the entry of PLAYER STATS. The
-28-byte routine there (`NewSaveOptions`, in `golf/core/patches/new_save_options.py`)
+28-byte routine there (`ExtendedSramDefaults`, in `golf/core/patches/extended_sram_defaults.py`)
 fills `$6F98-$6FAF` with `$FF`, copies the four-byte table at `$B531` (BGM, swing, putt,
 spin) over `$6F98-$6F9B`, and jumps back to the magic writes at `$AD50`. The patch
 requires `menu_trim`'s removal of PLAYER STATS (`PLAYER_STATS_REMOVED`). Item 1 confirms

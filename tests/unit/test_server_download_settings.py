@@ -4,7 +4,7 @@ import sqlite3
 
 import pytest
 
-from golf.core.patches.new_save_options import BallSpin, SwingSpeed
+from golf.core.patches.extended_sram_defaults import BallSpin, SwingSpeed
 from golf.core.patches.sram_defaults import Club
 from server.db import Database
 from server.download_settings import forget_settings, load_settings, save_settings

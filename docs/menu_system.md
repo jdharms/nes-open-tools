@@ -263,7 +263,7 @@ bank 12, and no instruction changes except one compare operand.
 
 Either way PLAYER STATS is gone, and nothing else reaches its code in bank 9
 (`$B519` on). `PLAYER_STATS_REMOVED` in the same module is a requirement other
-patches name when they reuse that space, as `new_save_options` does.
+patches name when they reuse that space, as `extended_sram_defaults` does.
 
 ```python
 from golf.core.patches import menu_trim_patch

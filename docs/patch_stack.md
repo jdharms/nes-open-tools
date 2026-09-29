@@ -99,7 +99,7 @@ The current ABI, 2, covers:
 
 - the vanilla SRAM-default locations and bytes that `sram_defaults` replaces, apart from
   the BGM loop edit;
-- the new-save options table `new_save_options` installs at bank 9 `$B531`: four bytes,
+- the new-save options table `extended_sram_defaults` installs at bank 9 `$B531`: four bytes,
   BGM, swing, putt and spin, at the vanilla `$FF $FF $FF $FF`;
 - the QR seed ID, player ID and MAC key placeholder locations, sizes, fill and encoding;
 - the installed QR patch identity that `qr_credentials` requires;
@@ -225,9 +225,8 @@ three requirements and the `course` step.
 | `qr_disable` | none; reverts the round-end splice for a guest ROM, expecting the splice `scorecard_qr` wrote | |
 | `course_theme` | `music` (`$02` US, `$03` Japan or `$04` UK); plays that US ROM theme on every course | |
 | `music_import` | `dump`, `track` (optional; one dump music ID, imported as `$03` and made every course's theme), `transpose_adjust` (default from the dump) | |
-| `sram_defaults` | `player_name` (A-Z, `.` and space, at most 10), `clubs` (up to 14 of `1W`-`4W`, `1I`-`9I`, `PW`, `SW`, `PT`; the putter is added), `bgm` (default true; false cannot follow `new_save_options`), `sram_magic` (default `0x3553`, "5S"; neither byte `$00` or `$FF`). Only a save being initialised gets them | |
-| `new_save_options` | none; a new save's BGM, swing, putt and spin come from a table at the vanilla values, in PLAYER STATS' code space | `menu_trim` |
-| `new_save_option_values` | `bgm` (default true), `swing` and `putt` (`off`, `slow`, `medium` or `fast`), `spin` (`off`, `top2`, `top1`, `normal`, `back1` or `back2`), each default `off`; fills the table, expecting the vanilla values | `new_save_options` |
+| `sram_defaults` | `player_name` (A-Z, `.` and space, at most 10), `clubs` (up to 14 of `1W`-`4W`, `1I`-`9I`, `PW`, `SW`, `PT`; the putter is added), `bgm` (default true), `sram_magic` (default `0x3553`, "5S"; neither byte `$00` or `$FF`). To use the extended table, supply all three of `swing` and `putt` (`off`, `slow`, `medium`, `fast`) and `spin` (`off`, `top2`, `top1`, `normal`, `back1`, `back2`). Without them, BGM off uses the vanilla loop edit and cannot follow `extended_sram_defaults`. Only a save being initialised gets these values | `extended_sram_defaults` when swing, putt and spin are supplied |
+| `extended_sram_defaults` | none; installs the SRAM defaults routine and table at vanilla values in PLAYER STATS' code space | `menu_trim` |
 | `putting_practice` | (experimental) | |
 
 `course_theme` and `music_import` with a `track` both rewrite `CourseBgmTable` at `$DA14`,
@@ -239,15 +238,15 @@ bank 12 `$AC5D`, so a stack with both fails: whichever comes second finds the ot
 where it expects vanilla ones.
 
 `qr_credentials` and `qr_disable` rewrite bytes `scorecard_qr` wrote, and
-`new_save_option_values` bytes `new_save_options` wrote, so none of them can share a stack
-with the patch it fills. They are finishing patches: build the unfinished ROM with
-`scorecard_qr` and `new_save_options`, then run a second stack with `base_sha1=None`
+`sram_defaults` with extended options rewrites table bytes `extended_sram_defaults`
+wrote. They are finishing patches: build the unfinished ROM with
+`scorecard_qr` and `extended_sram_defaults`, then run a second stack with `base_sha1=None`
 (`--any-base`) on that ROM. See the two-stage build in `randomizer_devplan.md`.
 
 ```bash
 golf-patch nes_open_us.nes recipe.json -o unfinished.nes
 golf-patch unfinished.nes --any-base -p qr_credentials:credentials=keys.json -o finished.nes
-golf-patch unfinished.nes --any-base -p qr_disable -p new_save_option_values:spin=back1 -o guest.nes
+golf-patch unfinished.nes --any-base -p qr_disable -p sram_defaults:swing=off,putt=off,spin=back1 -o guest.nes
 ```
 
 ## Testing

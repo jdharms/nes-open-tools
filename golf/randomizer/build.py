@@ -52,11 +52,10 @@ from golf.core.patches import (
     seeded_wind_patch,
     sram_defaults_patch,
 )
-from golf.core.patches.new_save_options import (
-    NEW_SAVE_OPTIONS_PATCH,
+from golf.core.patches.extended_sram_defaults import (
+    EXTENDED_SRAM_DEFAULTS_PATCH,
     BallSpin,
     SwingSpeed,
-    new_save_option_values_patch,
     option_values,
 )
 from golf.core.patches.signpost_random_banner import signpost_banner_patch
@@ -252,7 +251,7 @@ def unfinished_steps(
         menu_trim_patch(
             list(course.magic_words), choose_clubs=course.clubs == ClubRules()
         ),
-        NEW_SAVE_OPTIONS_PATCH,
+        EXTENDED_SRAM_DEFAULTS_PATCH,
     ]
     return steps
 
@@ -328,10 +327,13 @@ def finishing_steps(
     elif abi == 2:
         steps = [
             sram_defaults_patch(
-                options.player_name, sorted(options.clubs), True, sram_magic
-            ),
-            new_save_option_values_patch(
-                options.bgm, options.swing, options.putt, options.spin
+                options.player_name,
+                sorted(options.clubs),
+                options.bgm,
+                sram_magic,
+                swing=options.swing,
+                putt=options.putt,
+                spin=options.spin,
             ),
         ]
     else:
