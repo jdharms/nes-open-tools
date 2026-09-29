@@ -24,7 +24,7 @@ from golf.core.patches.sram_defaults import BAG_SIZE, Club, magic_bytes, parse_c
 from .catalog import JP_ROM, US_ROM, Catalog, CatalogError, HoleId, RomSource
 from .layout import COUNTS
 from .music import RANDOM, TRACKS, track
-from .transforms import TRANSFORMS
+from .transforms import TransformError, parse_transform
 from .words import MagicWordsError, check_magic_words
 
 SCHEMA = 2
@@ -261,9 +261,11 @@ class Slot:
                 f"{self.id}: wind_seed must be 0-65535, got {self.wind_seed!r}"
             )
         object.__setattr__(self, "transforms", tuple(self.transforms))
-        unknown = [name for name in self.transforms if name not in TRANSFORMS]
-        if unknown:
-            raise ManifestError(f"{self.id}: unknown transforms {unknown}")
+        for name in self.transforms:
+            try:
+                parse_transform(name)
+            except TransformError as problem:
+                raise ManifestError(f"{self.id}: {problem}") from None
 
     def to_json(self) -> dict:
         return {
