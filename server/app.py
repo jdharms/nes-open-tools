@@ -7,6 +7,7 @@ import time
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager, suppress
 from pathlib import Path
+from urllib.parse import urlencode
 
 from fastapi import FastAPI, HTTPException, Query, Request
 from fastapi.exception_handlers import http_exception_handler
@@ -45,6 +46,7 @@ from .auth import (
 from .builder import BuilderUnavailableError, SeedBuilder
 from .config import Config
 from .db import Database
+from .download_settings import forget_settings, load_settings, save_settings
 from .entries import entries_for_user, load_entry, upsert_entry
 from .forms import (
     DownloadState,
@@ -53,6 +55,7 @@ from .forms import (
     SavedSettings,
     check_rom_hashes,
     player_options_from_state,
+    saved_from_state,
     settings_from_state,
     to_save,
 )
@@ -84,6 +87,7 @@ from .views import (
     generate_options,
     round_view,
     seed_view,
+    settings_view,
     timestamp,
     voided_round_view,
 )
@@ -107,6 +111,9 @@ UNAVAILABLE = "unavailable"
 POOL_TOO_SMALL = "pool"
 #: a seed kept as a permalink but no longer distributed
 SEED_WITHDRAWN = "seed_withdrawn"
+#: /me shows one notice per value: one of these, or a download FormError reason
+SETTINGS_SAVED = "saved"
+SETTINGS_FORGOTTEN = "forgotten"
 
 #: the route of a request that matched nothing, which would otherwise be every 404 path
 UNMATCHED = "unmatched"
@@ -494,18 +501,37 @@ def create_app(
             raise not_found()
         return Response(row.manifest_json, media_type="application/json")
 
+    def saved_settings(request: Request) -> SavedSettings:
+        """A player's saved settings: the account's when signed in and saved, else the cookie's."""
+        user = current_user(request)
+        if user is not None:
+            account = load_settings(request.app.state.db, user.id)
+            if account is not None:
+                return account
+        return SavedSettings.from_cookie(request.cookies.get(DOWNLOAD_COOKIE))
+
     def starting_settings(request: Request, seed_id: str) -> SavedSettings:
         """What a seed's download form starts from: this seed's entry over saved settings.
 
-        The entry gives only name and clubs; the rest comes from the cookie.
+        The entry gives only name and clubs; the rest comes from the saved settings.
         """
-        saved = SavedSettings.from_cookie(request.cookies.get(DOWNLOAD_COOKIE))
+        saved = saved_settings(request)
         user = current_user(request)
         if user is not None:
             entry = load_entry(request.app.state.db, seed_id, user.id)
             if entry is not None:
                 saved = saved.with_entry(entry.player_name, entry.clubs)
         return saved
+
+    def set_download_cookie(response: Response, saved: SavedSettings) -> None:
+        response.set_cookie(
+            DOWNLOAD_COOKIE,
+            saved.to_cookie(),
+            max_age=DOWNLOAD_COOKIE_MAX_AGE,
+            httponly=True,
+            samesite="lax",
+            secure=config.base_url.startswith("https://"),
+        )
 
     @app.get("/h/{seed_id}", response_class=HTMLResponse)
     def seed_page(request: Request, seed_id: str):
@@ -598,18 +624,15 @@ def create_app(
                 "Content-Disposition": f'attachment; filename="{download_stem(row)}.ips"'
             },
         )
-        previous = SavedSettings.from_cookie(request.cookies.get(DOWNLOAD_COOKIE))
         saved = to_save(
-            options, manifest.course.clubs, manifest.finish_abi_version, previous
+            options,
+            manifest.course.clubs,
+            manifest.finish_abi_version,
+            saved_settings(request),
         )
-        response.set_cookie(
-            DOWNLOAD_COOKIE,
-            saved.to_cookie(),
-            max_age=DOWNLOAD_COOKIE_MAX_AGE,
-            httponly=True,
-            samesite="lax",
-            secure=config.base_url.startswith("https://"),
-        )
+        if user is not None:
+            save_settings(db, user.id, saved)
+        set_download_cookie(response, saved)
         return response
 
     @app.get("/s/{scan}", response_class=HTMLResponse)
@@ -676,6 +699,9 @@ def create_app(
                 raise not_found()
             return RedirectResponse("/auth/login?next=/me", status_code=303)
         db: Database = request.app.state.db
+        has_saved = (
+            load_settings(db, user.id) is not None or DOWNLOAD_COOKIE in request.cookies
+        )
         return templates.TemplateResponse(
             request,
             "me.html",
@@ -683,8 +709,48 @@ def create_app(
                 "page": "me",
                 "entries": entries_for_user(db, user.id),
                 "rounds": rounds_for_user(db, user.id),
+                "settings": settings_view(saved_settings(request), has_saved),
+                "result": request.query_params.get("result"),
             },
         )
+
+    def me_redirect(result: str) -> RedirectResponse:
+        return RedirectResponse(
+            f"/me?{urlencode({'result': result})}#download-settings", status_code=303
+        )
+
+    @app.post("/me/download-settings")
+    async def me_save_settings(request: Request):
+        user = current_user(request)
+        if user is None:
+            raise not_found()
+        state = DownloadState.from_form(await request.form())
+        try:
+            saved = saved_from_state(state, saved_settings(request))
+        except FormError as problem:
+            outcome(request, problem.reason)
+            return me_redirect(problem.reason)
+        save_settings(request.app.state.db, user.id, saved)
+        outcome(request, OK)
+        response = me_redirect(SETTINGS_SAVED)
+        set_download_cookie(response, saved)
+        return response
+
+    @app.post("/me/download-settings/forget")
+    def me_forget_settings(request: Request):
+        user = current_user(request)
+        if user is None:
+            raise not_found()
+        forget_settings(request.app.state.db, user.id)
+        outcome(request, OK)
+        response = me_redirect(SETTINGS_FORGOTTEN)
+        response.delete_cookie(
+            DOWNLOAD_COOKIE,
+            httponly=True,
+            samesite="lax",
+            secure=config.base_url.startswith("https://"),
+        )
+        return response
 
     def sign_in_failed(request: Request, reason: str, status_code: int):
         return templates.TemplateResponse(

@@ -26,6 +26,7 @@ from server.app import DOWNLOAD_COOKIE, SESSION_COOKIE, create_app
 from server.auth import DiscordClient, DiscordError, DiscordIdentity
 from server.builder import SeedBuilder
 from server.config import Config, ConfigError
+from server.download_settings import load_settings
 from server.forms import FormState, SavedSettings
 from server.migrations import MIGRATIONS
 from server.pages import PageCatalog
@@ -1912,3 +1913,148 @@ def test_a_signed_in_players_entry_names_the_seed_page_over_the_cookie(fake_buil
             test_client.get(f"/h/{generate_seed(test_client)}").text
         )
         assert re.search(r'name="player_name"\s+value="LUIGI"', fresh)
+
+
+# -- Saved settings on the account -----------------------------------------------------------
+
+
+def account_settings(client: TestClient, name: str = "alice") -> SavedSettings | None:
+    [row] = [u for u in users(client) if u["discord_id"] == f"dev:{name}"]
+    return load_settings(app_state(client).db, row["id"])
+
+
+def test_a_signed_in_download_saves_to_the_account_too(fake_builder):
+    with dev_client(fake_builder) as test_client:
+        seed_id = generate_seed(test_client)
+        test_client.get("/auth/login", params={"as": "alice"})
+        post_download(test_client, seed_id, name="luigi", extra={"swing": "fast"})
+        saved = account_settings(test_client)
+        assert saved is not None
+        assert (saved.player_name, saved.swing) == ("LUIGI", SwingSpeed.FAST)
+        assert saved_in(test_client) == saved
+
+
+def test_a_signed_in_player_starts_from_the_cookie_until_they_save(fake_builder):
+    with dev_client(fake_builder) as test_client:
+        post_download(test_client, generate_seed(test_client), name="guest")
+        test_client.get("/auth/login", params={"as": "alice"})
+        assert account_settings(test_client) is None
+        page = test_client.get(f"/h/{generate_seed(test_client)}").text
+        assert re.search(r'name="player_name"\s+value="GUEST"', page)
+
+
+def test_the_account_wins_over_this_browsers_cookie(fake_builder):
+    with dev_client(fake_builder) as test_client:
+        test_client.get("/auth/login", params={"as": "alice"})
+        post_download(test_client, generate_seed(test_client), name="alice")
+        test_client.cookies.set(
+            DOWNLOAD_COOKIE, SavedSettings(player_name="BOB").to_cookie()
+        )
+        page = test_client.get(f"/h/{generate_seed(test_client)}").text
+        assert re.search(r'name="player_name"\s+value="ALICE"', page)
+
+
+def test_the_account_keeps_its_bag_through_a_restricted_seed(fake_builder):
+    with dev_client(fake_builder) as test_client:
+        test_client.get("/auth/login", params={"as": "alice"})
+        post_download(test_client, generate_seed(test_client), clubs=("1W", "SW"))
+        strict = generate_seed(test_client, seed_form(banned={"SW"}))
+        post_download(test_client, strict, name="toad", clubs=("PW",))
+        saved = account_settings(test_client)
+        assert saved is not None
+        assert saved.player_name == "TOAD"
+        assert saved.clubs == {Club.W1, Club.SW, Club.PT}
+
+
+def me_form(**changes) -> dict:
+    data = {
+        "player_name": "yoshi",
+        "clubs": ["2W", "PW"],
+        "bgm": ["off"],
+        "swing": "medium",
+        "putt": "slow",
+        "spin": "top1",
+    }
+    return data | changes
+
+
+def test_me_shows_the_saved_settings_form(fake_builder):
+    with dev_client(fake_builder) as test_client:
+        test_client.get("/auth/login", params={"as": "alice"})
+        page = test_client.get("/me").text
+        section = page[page.index('<section id="download-settings">') :]
+        assert 'action="/me/download-settings"' in section
+        assert re.search(r'name="player_name"\s+value="MARIO"', section)
+        assert section.count('name="clubs"') == 15
+        assert "disabled" not in section
+        for field in ("swing", "putt", "spin"):
+            assert f'<select name="{field}">' in section
+        assert "/me/download-settings/forget" not in section
+
+
+def test_saving_on_me_stores_the_settings_and_redirects_back(fake_builder):
+    with dev_client(fake_builder) as test_client:
+        test_client.get("/auth/login", params={"as": "alice"})
+        response = test_client.post(
+            "/me/download-settings", data=me_form(), follow_redirects=False
+        )
+        assert response.status_code == 303
+        assert response.headers["location"] == "/me?result=saved#download-settings"
+        expected = SavedSettings(
+            player_name="YOSHI",
+            clubs=frozenset({Club.W2, Club.PW, Club.PT}),
+            bgm=False,
+            swing=SwingSpeed.MEDIUM,
+            putt=SwingSpeed.SLOW,
+            spin=BallSpin.TOP1,
+        )
+        assert account_settings(test_client) == expected
+        assert saved_in(test_client) == expected
+        page = test_client.get("/me").text
+        assert re.search(r'name="player_name"\s+value="YOSHI"', page)
+        assert "/me/download-settings/forget" in page
+
+
+@pytest.mark.parametrize(
+    "changes, result",
+    [
+        ({"player_name": "LU1GI"}, "invalid_name"),
+        (
+            {"clubs": [club.label for club in Club if club != Club.PT]},
+            "clubs_over_max",
+        ),
+        ({"spin": "sideways"}, "invalid"),
+    ],
+)
+def test_settings_me_cannot_save_are_refused_and_nothing_changes(
+    fake_builder, changes, result
+):
+    with dev_client(fake_builder) as test_client:
+        test_client.get("/auth/login", params={"as": "alice"})
+        response = test_client.post(
+            "/me/download-settings", data=me_form(**changes), follow_redirects=False
+        )
+        assert response.headers["location"] == f"/me?result={result}#download-settings"
+        assert account_settings(test_client) is None
+        assert DOWNLOAD_COOKIE not in response.headers.get("set-cookie", "")
+
+
+def test_forgetting_deletes_the_row_and_expires_the_cookie(fake_builder):
+    with dev_client(fake_builder) as test_client:
+        test_client.get("/auth/login", params={"as": "alice"})
+        test_client.post("/me/download-settings", data=me_form())
+        response = test_client.post(
+            "/me/download-settings/forget", follow_redirects=False
+        )
+        assert response.headers["location"] == "/me?result=forgotten#download-settings"
+        header = download_cookie(response)
+        assert "Max-Age=0" in header or "expires=Thu, 01 Jan 1970" in header
+        assert account_settings(test_client) is None
+        assert DOWNLOAD_COOKIE not in test_client.cookies
+        page = test_client.get(f"/h/{generate_seed(test_client)}").text
+        assert re.search(r'name="player_name"\s+value="MARIO"', page)
+
+
+def test_signed_out_the_settings_routes_are_not_found(client):
+    assert client.post("/me/download-settings", data=me_form()).status_code == 404
+    assert client.post("/me/download-settings/forget").status_code == 404

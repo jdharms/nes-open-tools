@@ -41,8 +41,11 @@ in this package.
   compact JSON in base64url, which every successful download sets through `to_save` for a
   year, signed in or not. It is HttpOnly and SameSite=lax, Secure on an HTTPS base URL
   like the session cookie, and untrusted: `SavedSettings.from_cookie` reads anything that
-  fails to decode as vanilla. The seed page starts its download form from it, with a
-  signed-in player's entry for that seed giving name and clubs over it.
+  fails to decode as vanilla. A signed-in player's settings are also saved on the account
+  (`server/download_settings.py`), which wins over the cookie once it exists. The seed
+  page starts its download form from those, with a signed-in player's entry for that seed
+  giving name and clubs over them. `/me` edits the account's settings and forgets them,
+  expiring this browser's cookie too.
 - `server/live.py`'s `LiveServer` serves an app on a free localhost port for tools and
   tests that drive a real browser.
 - A route a script fetches answers a refusal as JSON, `{"error": reason, "values": {...}}`,
@@ -86,6 +89,8 @@ in this package.
   finish-ABI versions for operations, and loading verifies that the copies agree.
 - `server/users.py` is the only code that writes `users`, and the only place player ids
   are drawn. `seeds.creator_id` holds a `users.id`.
+- `server/download_settings.py` is the only code that writes `download_settings`, one
+  `SavedSettings` record per user, read back as leniently as the cookie.
 - `server/entries.py` is the only code that writes `entries`, and the only place MAC keys
   are drawn. `Entry.keys` stays out of `repr`; keys never go in a page, a log or a manifest.
 - `server/timings.py` is the only code that writes `timings` and `timing_day`. A request's

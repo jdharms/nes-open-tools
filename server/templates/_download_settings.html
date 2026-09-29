@@ -1,0 +1,105 @@
+{# The download settings controls, shared by the seed page's download form and the saved
+   settings on /me. Values are named as server/forms.py's SPEED_CHOICES and SPIN_CHOICES. #}
+
+{% macro bgm_label(on) -%}
+  {%- if on -%}{{ t_plain("seed.download.bgm.on") }}{%- else -%}{{ t_plain("seed.download.bgm.off") }}{%- endif -%}
+{%- endmacro %}
+
+{% macro speed_label(value) -%}
+  {%- if value == "slow" -%}{{ t_plain("seed.download.speed.slow") }}
+  {%- elif value == "medium" -%}{{ t_plain("seed.download.speed.medium") }}
+  {%- elif value == "fast" -%}{{ t_plain("seed.download.speed.fast") }}
+  {%- else -%}{{ t_plain("seed.download.speed.off") }}
+  {%- endif -%}
+{%- endmacro %}
+
+{% macro spin_label(value) -%}
+  {%- if value == "top2" -%}{{ t_plain("seed.download.spin.top2") }}
+  {%- elif value == "top1" -%}{{ t_plain("seed.download.spin.top1") }}
+  {%- elif value == "normal" -%}{{ t_plain("seed.download.spin.normal") }}
+  {%- elif value == "back1" -%}{{ t_plain("seed.download.spin.back1") }}
+  {%- elif value == "back2" -%}{{ t_plain("seed.download.spin.back2") }}
+  {%- else -%}{{ t_plain("seed.download.spin.off") }}
+  {%- endif -%}
+{%- endmacro %}
+
+{% macro speed_options(selected) %}
+  {% for value in ("off", "slow", "medium", "fast") %}
+    <option value="{{ value }}"
+            {% if value == selected %} selected{% endif %}>{{ speed_label(value) }}</option>
+  {% endfor %}
+{% endmacro %}
+
+{% macro spin_options(selected) %}
+  {% for value in ("off", "top2", "top1", "normal", "back1", "back2") %}
+    <option value="{{ value }}"
+            {% if value == selected %} selected{% endif %}>{{ spin_label(value) }}</option>
+  {% endfor %}
+{% endmacro %}
+
+{% macro name_field(field_id, value, name_max) %}
+  <label for="{{ field_id }}">{{ t("seed.download.name_label") }}</label>
+  <input type="text"
+         id="{{ field_id }}"
+         name="player_name"
+         value="{{ value }}"
+         maxlength="{{ name_max }}"
+         autocomplete="off"
+         autocapitalize="characters"
+         spellcheck="false"
+         required>
+{% endmacro %}
+
+{# every club but the putter, as checkboxes; a banned club is struck out and disabled #}
+{% macro club_grid(labels, checked, banned=()) %}
+  <div class="club-grid">
+    {% for label in labels %}
+      <label>
+        {% if label in banned %}
+          <input type="checkbox" name="clubs" value="{{ label }}" disabled>
+          <s>{{ label }}</s>
+        {% else %}
+          <input type="checkbox"
+                 name="clubs"
+                 value="{{ label }}"
+                 {% if label in checked %}checked{% endif %}>
+          {{ label }}
+        {% endif %}
+      </label>
+    {% endfor %}
+  </div>
+{% endmacro %}
+
+{# music, and with option_defaults the swing, putt and spin defaults #}
+{% macro option_fieldset(state, option_defaults=true) %}
+  <fieldset>
+    <legend>{{ t("seed.download.options_legend") }}</legend>
+    {# a hidden off before the checkbox: no bgm field at all means an older page #}
+    <input type="hidden" name="bgm" value="off">
+    <label>
+      <input type="checkbox"
+             name="bgm"
+             value="on"
+             role="switch"
+             {% if state.bgm %}checked{% endif %}>
+      {{ t("seed.download.bgm_label") }}
+    </label>
+    {% if option_defaults %}
+      <div class="grid download-defaults">
+        <label>
+          {{ t("seed.download.swing_label") }}
+          <select name="swing">{{ speed_options(state.swing) }}</select>
+        </label>
+        <label>
+          {{ t("seed.download.putt_label") }}
+          <select name="putt">{{ speed_options(state.putt) }}</select>
+        </label>
+        <label>
+          {{ t("seed.download.spin_label") }}
+          <select name="spin">{{ spin_options(state.spin) }}</select>
+        </label>
+      </div>
+      <small>{{ t("seed.download.options_help") }}</small>
+    {% endif %}
+  </fieldset>
+{% endmacro %}

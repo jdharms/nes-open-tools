@@ -70,3 +70,47 @@ text = "(Under review)"
 [me.rounds.none]
 note = "shown instead of the rounds table when the player has submitted no rounds; a round is submitted by scanning the QR code shown after the scorecard with a phone"
 text = "After you've completed a round and submitted the scorecard, this will be a table listing all your completed rounds."
+
+[me.download_settings.heading]
+note = "h2 over the player's saved download settings"
+text = "Download Settings"
+
+[me.download_settings.lead]
+note = "line at the top of the saved settings; every seed's download form starts from these, fitted to that seed's club rules; a download saves what it used, except the bag from a seed with club rules; kept on the account and in this browser"
+text = "This form lets you set defaults for the settings that get filled in when downloading a seed."
+
+[me.download_settings.clubs_help]
+note = "small line under the club checkboxes; any bag of up to 14 clubs, putter included and always carried; a seed's rules may take clubs out"
+text = "Set your preferred bag of clubs here.  Seeds with club restrictions may remove clubs from your bag, and you might want to adjust for those seeds."
+
+[me.download_settings.save]
+note = "plain: submit button; saves these settings"
+text = "Save Settings"
+
+[me.download_settings.forget_help]
+note = "small line above the forget button; deletes the saved settings from the account and this browser, so seed pages start from the unmodified game's settings; another browser keeps its own copy until its next download"
+text = "You can use the \"Forget\" button to return all settings to their default values."
+
+[me.download_settings.forget]
+note = "plain: button; deletes the saved settings"
+text = "Forget Settings"
+
+[me.download_settings.result.saved]
+note = "notice after saving the settings"
+text = "Saved!"
+
+[me.download_settings.result.forgotten]
+note = "notice after forgetting the settings"
+text = "Download Settings returned to default values"
+
+[me.download_settings.result.invalid_name]
+note = "notice, not saved: the name can't be stored; empty, over 10 characters, or characters outside A-Z, '.' and space"
+text = "Settings not saved: check that the name is valid.  It can't be empty, over 10 characters, or contain any characters that aren't capital letters, spaces or periods."
+
+[me.download_settings.result.clubs_over_max]
+note = "notice, not saved: more than 14 clubs with the putter"
+text = "Settings not saved: Too many clubs selected. (Select at most 13 non-putter clubs.)"
+
+[me.download_settings.result.invalid]
+note = "notice, not saved: a value the form can't produce"
+text = "Settings not saved: Something went wrong, refresh and try again."

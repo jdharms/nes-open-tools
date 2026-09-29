@@ -65,7 +65,7 @@ Check club bag, this seed limits to {max} clubs including the putter, you have {
 
 [seed.download.name_label]
 note = "label for the player name input; A-Z, '.' and space, at most 10; what a new save starts with"
-text = "Default Player Name"
+text = "Player Name"
 
 [seed.download.clubs_legend]
 note = "legend over club checkboxes (1W, 3I, ...); the bag a new save starts with; putter never listed; banned clubs struck out and disabled"

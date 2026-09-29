@@ -431,6 +431,15 @@ def to_save(
     )
 
 
+def saved_from_state(state: DownloadState, previous: SavedSettings) -> SavedSettings:
+    """The settings /me saves from its form: any bag of up to 14 with the putter, every option.
+
+    Raises FormError as a download does.
+    """
+    options = player_options_from_state(state, ClubRules(), FINISH_ABI_VERSION)
+    return to_save(options, ClubRules(), FINISH_ABI_VERSION, previous)
+
+
 def check_rom_hashes(state: DownloadState, required: Iterable[str]) -> None:
     """Raise FormError naming every required ROM the submission has no vanilla hash for."""
     missing = [

@@ -55,6 +55,11 @@ storage can be cleared in the ROM Setup page, linked in this site's header.
 
 ROM files remain in your browser and are *never* uploaded to our server.
 
+A cookie is used to save download settings (player name, club bag, etc.)
+as a convenience to the player.  It contains only the data entered by
+the player in the Download panel, with no Discord or internal ID values.
+The free-text "Player Name" field is included in this cookie.
+
 ## Retention and deletion
 
 Information is kept as long as users have an active account with the site.
@@ -100,4 +105,4 @@ by an LLM/AI tool.
 
 ## Version information, Effective date
 
-This is version 1.0 of this page, published on September 20, 2026.
+This is version 1.1 of this page, published on September 29, 2026.

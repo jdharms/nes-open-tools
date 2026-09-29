@@ -11,9 +11,10 @@ from markupsafe import Markup
 
 from golf.core import jp_rom_utils, rom_utils
 from golf.core.patches.sram_defaults import BAG_SIZE, NAME_LENGTH
+from golf.randomizer.build import FINISH_ABI_VERSION
 from golf.randomizer.catalog import JP_ROM, US_ROM, Catalog, RomSource
 from golf.randomizer.curation import CurationSnapshot
-from golf.randomizer.manifest import SOURCES, required_roms
+from golf.randomizer.manifest import SOURCES, ClubRules, required_roms
 from golf.randomizer.music import TRACKS, Track
 from golf.randomizer.roms import VanillaRom, vanilla_rom
 
@@ -170,6 +171,26 @@ class DownloadView:
         return {
             rom.id: {"title": rom.title, "sha1": rom.sha1} for rom in self.required_roms
         }
+
+
+@dataclass(frozen=True)
+class SettingsView:
+    """The saved download settings on /me: the controls without a seed's rules."""
+
+    state: DownloadState
+    name_max: int
+    club_labels: tuple[str, ...]
+    #: whether there is anything to forget: an account row or this browser's cookie
+    saved: bool
+
+
+def settings_view(saved: SavedSettings, has_saved: bool) -> SettingsView:
+    return SettingsView(
+        state=fit(saved, ClubRules(), FINISH_ABI_VERSION).state,
+        name_max=NAME_LENGTH,
+        club_labels=tuple(club.label for club in RULE_CLUBS),
+        saved=has_saved,
+    )
 
 
 @dataclass(frozen=True)

@@ -134,6 +134,7 @@ cannot submit.
 | `seeds` | A 10-character base62 id for URLs and the same value as an integer, `qr_seed_id`, both unique; manifest JSON, generator, unfinished-build, finish-ABI and catalog versions, curation stamp, the immutable unfinished IPS blob, nullable creator, created_at and nullable withdrawn_at |
 | `seed_holes` | seed, position 1-18, catalog hole id, transforms, par, wind seed, pin index, wind direction anchor, wind speed anchor. Pure denormalization of the manifest for SQL stats; a migration can always backfill it |
 | `entries` | One per (seed, user), unique. The player's choices at their latest download (name, clubs), one MAC key per slot, created_at, updated_at |
+| `download_settings` | One per user: the player's saved download settings as a JSON `SavedSettings` record, and updated_at. Written by a signed-in download under the saving rule and by `/me`; deleted by "forget my settings" (`docs/planning/download_settings.md`) |
 | `rounds` | A scan the server accepted: a unique `public_id`, the base62 id of its `/r/<id>` permalink; entry, slot, raw payload, total strokes, total putts, received_at, flagged, with an admin-only flag note. Unique on (entry, slot), which is the first-submission rule |
 | `round_holes` | round, position, strokes, putts. Joins to `seed_holes` on (seed, position) |
 | `voided_rounds` | A round an admin voided: its `public_id`, entry, slot, the payload (unique, and holding every hole, so no hole rows), received_at, its flag and note, voided_at, an admin-only note. A scan of a voided payload is refused; restoring moves it back while its slot is empty |
@@ -227,11 +228,13 @@ qr_seed_id INTEGER NOT NULL UNIQUE CHECK (qr_seed_id BETWEEN 1 AND 8392993658683
 | `GET /generate`, `POST /generate` | Settings form: par target, source ROMs, music or random, and club rules in a collapsed section of their own, open when a returned form has them set. The mercy point and tag filters take their defaults. POST redirects to the seed page |
 | `GET /h/<id>` | Seed page: the magic words, hole list with source, par and yards, totals, music, settings, required ROMs, recorded rounds (collapsed until the viewer has recorded one of their own), and either the download form or a withdrawn notice |
 | `GET /h/<id>.json` | The manifest |
-| `POST /h/<id>/patch.ips` | Name, clubs, ROM hashes in; the finished IPS out. Signed in, upserts the entry and finishes with credentials; signed out, finishes as a guest. A withdrawn seed answers JSON 410 before creating an entry or finishing. The page's script intercepts the form submit, fetches this, patches the ROM from IndexedDB and triggers the download |
+| `POST /h/<id>/patch.ips` | Name, clubs, BGM, swing, putt and spin, and ROM hashes in; the finished IPS out, with the saved settings in the `golf_download` cookie and, signed in, on the account. Signed in, upserts the entry and finishes with credentials; signed out, finishes as a guest. A withdrawn seed answers JSON 410 before creating an entry or finishing. The page's script intercepts the form submit, fetches this, patches the ROM from IndexedDB and triggers the download |
 | `GET /s/<48 chars>` | QR submission: decode, verify MAC, record, then 303 to the round's permalink, with `?recorded` for the scan that recorded it. Uncached. A rejection has no round to point at, so it renders here |
 | `GET /r/<id>` | A round's permalink: its scorecard, or 410 and a page of its own once an admin has voided it. An ordinary cacheable page, linked from the seed page, `/me` and a scan |
 | `GET /auth/login`, `GET /auth/callback`, `POST /auth/logout` | Discord sign-in |
-| `GET /me` | The player's entries and rounds. Signed out, redirects to sign-in |
+| `GET /me` | The player's entries, rounds and saved download settings. Signed out, redirects to sign-in |
+| `POST /me/download-settings` | Saves the settings form to the account and this browser's `golf_download` cookie, and redirects back with `?result=`; a refused form saves nothing. Signed out, 404 |
+| `POST /me/download-settings/forget` | Deletes the account's saved settings, expires this browser's cookie and redirects back with `?result=`. Signed out, 404 |
 | `GET /admin/...` | Counts, seeds, rounds (flagged filter), users, voided rounds, admin activity, and each seed, round and user. Admins only |
 | `POST /admin/rounds/<id>/flag`, `.../unflag`, `.../void`, `.../restore` | Flag with a note, clear the flag, void with a note, restore into an empty slot. `<id>` is the round's `public_id` |
 | `POST /admin/seeds/<id>/withdraw`, `.../restore` | Refuse or restore downloads without changing the seed's manifest, unfinished IPS, entries or rounds; withdrawal takes an admin-only note |
