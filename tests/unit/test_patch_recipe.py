@@ -9,6 +9,7 @@ import pytest
 from golf.core import rom_utils
 from golf.core.patches import (
     PATCH_SPECS,
+    CompositePatch,
     QrCredentials,
     Recipe,
     RecipeError,
@@ -86,6 +87,7 @@ class TestRegistry:
         ).build_steps(b"")
         assert built.patch.name == "sram_defaults"
         assert built.patch.requires[0].name == "extended_sram_defaults"
+        assert isinstance(built.patch, CompositePatch)
         assert built.patch.patches[-1].patched == b"\x00\xff\x02\x03"
 
     def test_partial_extended_sram_defaults_recipe_is_refused(self):

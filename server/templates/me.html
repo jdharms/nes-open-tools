@@ -80,11 +80,14 @@
     {% elif result == "forgotten" %}
       <p><ins>{{ t("me.download_settings.result.forgotten") }}</ins></p>
     {% elif result == "invalid_name" %}
-      <p tabindex="-1" autofocus><del>{{ t("me.download_settings.result.invalid_name") }}</del></p>
+      <p tabindex="-1"
+         autofocus><del>{{ t("me.download_settings.result.invalid_name") }}</del></p>
     {% elif result == "clubs_over_max" %}
-      <p tabindex="-1" autofocus><del>{{ t("me.download_settings.result.clubs_over_max") }}</del></p>
+      <p tabindex="-1"
+         autofocus><del>{{ t("me.download_settings.result.clubs_over_max") }}</del></p>
     {% elif result == "invalid" %}
-      <p tabindex="-1" autofocus><del>{{ t("me.download_settings.result.invalid") }}</del></p>
+      <p tabindex="-1"
+         autofocus><del>{{ t("me.download_settings.result.invalid") }}</del></p>
     {% endif %}
     <article>
       <p>{{ t("me.download_settings.lead") }}</p>
