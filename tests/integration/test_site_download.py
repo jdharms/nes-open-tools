@@ -115,6 +115,19 @@ def test_the_downloaded_rom_is_the_finished_rom(
             caught.value.save_as(saved)
             page.wait_for_selector('article.download[data-state="done"]')
             suggested = caught.value.suggested_filename
+
+            # the next seed's form starts from what that download saved
+            page.goto(base + "/generate")
+            with page.expect_navigation():
+                page.click("#generate-form button[type=submit]")
+            remembered = {
+                "name": page.input_value("#download-name"),
+                "2W": page.is_checked('input[name="clubs"][value="2W"]'),
+                "bgm": page.is_checked('input[name="bgm"][value="on"]'),
+                "swing": page.input_value('select[name="swing"]'),
+                "putt": page.input_value('select[name="putt"]'),
+                "spin": page.input_value('select[name="spin"]'),
+            }
         finally:
             browser.close()
 
@@ -129,6 +142,14 @@ def test_the_downloaded_rom_is_the_finished_rom(
         "clubs": "13",
         "bgm": music_off,
         **options,
+    }
+    assert remembered == {
+        "name": "YOSHI",
+        "2W": False,
+        "bgm": False,
+        "swing": "fast",
+        "putt": "off",
+        "spin": "back1",
     }
     manifest = Manifest.from_json(json.loads(row["manifest"]))
     assert suggested == f"notgr_par{manifest.course.par}_{seed_id}.nes"

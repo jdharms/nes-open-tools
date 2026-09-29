@@ -45,14 +45,16 @@ from .auth import (
 from .builder import BuilderUnavailableError, SeedBuilder
 from .config import Config
 from .db import Database
-from .entries import entries_for_user, upsert_entry
+from .entries import entries_for_user, load_entry, upsert_entry
 from .forms import (
     DownloadState,
     FormError,
     FormState,
+    SavedSettings,
     check_rom_hashes,
     player_options_from_state,
     settings_from_state,
+    to_save,
 )
 from .logging import request_id
 from .pages import ContentPage, PageCatalog
@@ -119,6 +121,10 @@ RECORDED = "recorded"
 SESSION_COOKIE = "golf_session"
 #: seconds a sign-in lasts
 SESSION_MAX_AGE = 30 * 24 * 60 * 60
+#: a player's saved download settings (`SavedSettings.to_cookie`), set by each download
+DOWNLOAD_COOKIE = "golf_download"
+#: seconds the saved download settings last from each download
+DOWNLOAD_COOKIE_MAX_AGE = 365 * 24 * 60 * 60
 #: the name /auth/login?as= signs in as when it names none
 DEFAULT_DEV_NAME = "dev"
 #: sign_in_failed.html shows one notice per value
@@ -488,13 +494,31 @@ def create_app(
             raise not_found()
         return Response(row.manifest_json, media_type="application/json")
 
+    def starting_settings(request: Request, seed_id: str) -> SavedSettings:
+        """What a seed's download form starts from: this seed's entry over saved settings.
+
+        The entry gives only name and clubs; the rest comes from the cookie.
+        """
+        saved = SavedSettings.from_cookie(request.cookies.get(DOWNLOAD_COOKIE))
+        user = current_user(request)
+        if user is not None:
+            entry = load_entry(request.app.state.db, seed_id, user.id)
+            if entry is not None:
+                saved = saved.with_entry(entry.player_name, entry.clubs)
+        return saved
+
     @app.get("/h/{seed_id}", response_class=HTMLResponse)
     def seed_page(request: Request, seed_id: str):
         row = load_seed(request.app.state.db, seed_id)
         if row is None:
             raise not_found()
         seed_builder: SeedBuilder = request.app.state.builder
-        view = seed_view(row, seed_builder.catalog, seed_builder.curation)
+        view = seed_view(
+            row,
+            seed_builder.catalog,
+            seed_builder.curation,
+            starting_settings(request, seed_id),
+        )
         rounds = rounds_for_seed(request.app.state.db, seed_id)
         user = current_user(request)
         return templates.TemplateResponse(
@@ -567,13 +591,26 @@ def create_app(
             outcome(request, SEED_WITHDRAWN)
             return json_refusal(410, SEED_WITHDRAWN)
         outcome(request, OK)
-        return Response(
+        response = Response(
             patch,
             media_type="application/octet-stream",
             headers={
                 "Content-Disposition": f'attachment; filename="{download_stem(row)}.ips"'
             },
         )
+        previous = SavedSettings.from_cookie(request.cookies.get(DOWNLOAD_COOKIE))
+        saved = to_save(
+            options, manifest.course.clubs, manifest.finish_abi_version, previous
+        )
+        response.set_cookie(
+            DOWNLOAD_COOKIE,
+            saved.to_cookie(),
+            max_age=DOWNLOAD_COOKIE_MAX_AGE,
+            httponly=True,
+            samesite="lax",
+            secure=config.base_url.startswith("https://"),
+        )
+        return response
 
     @app.get("/s/{scan}", response_class=HTMLResponse)
     def scan(request: Request, scan: str):

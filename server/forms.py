@@ -18,8 +18,11 @@ The mercy point and excluded tags are not on the form: a seed from the site take
 `Settings` defaults.
 """
 
+import base64
+import binascii
+import json
 from collections.abc import Iterable
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 
 from golf.core.patches.new_save_options import BallSpin, SwingSpeed
 from golf.core.patches.sram_defaults import (
@@ -300,6 +303,34 @@ class SavedSettings:
             swing=_saved_choice(data.get("swing"), SwingSpeed, vanilla.swing),
             putt=_saved_choice(data.get("putt"), SwingSpeed, vanilla.putt),
             spin=_saved_choice(data.get("spin"), BallSpin, vanilla.spin),
+        )
+
+    @classmethod
+    def from_cookie(cls, value: str | None) -> "SavedSettings":
+        """A record from the `golf_download` cookie. Anything that fails to decode reads as vanilla."""
+        if not value:
+            return cls()
+        try:
+            text = base64.urlsafe_b64decode(value + "=" * (-len(value) % 4))
+            data = json.loads(text)
+        except (
+            binascii.Error,
+            ValueError,
+        ):  # UnicodeDecodeError and JSONDecodeError too
+            return cls()
+        return cls.from_json(data)
+
+    def to_cookie(self) -> str:
+        """The record as the `golf_download` cookie holds it: compact JSON, base64url, unpadded."""
+        text = json.dumps(self.to_json(), separators=(",", ":"))
+        return base64.urlsafe_b64encode(text.encode()).decode().rstrip("=")
+
+    def with_entry(self, player_name: str, clubs: Iterable[str]) -> "SavedSettings":
+        """These settings with an entry's name and bag, as the entry's seed page starts."""
+        return replace(
+            self,
+            player_name=_saved_name(player_name, self.player_name),
+            clubs=_saved_clubs(list(clubs), self.clubs),
         )
 
     def to_json(self) -> dict:

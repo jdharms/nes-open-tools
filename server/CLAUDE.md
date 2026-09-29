@@ -37,6 +37,12 @@ in this package.
   processor in `create_app`. The session cookie holds only `users.id`, plus the OAuth
   state and return path while a Discord sign-in is under way. `app.state.discord` is the
   client, or None when Discord is not configured.
+- The other cookie is `golf_download` (`DOWNLOAD_COOKIE`): a player's `SavedSettings`,
+  compact JSON in base64url, which every successful download sets through `to_save` for a
+  year, signed in or not. It is HttpOnly and SameSite=lax, Secure on an HTTPS base URL
+  like the session cookie, and untrusted: `SavedSettings.from_cookie` reads anything that
+  fails to decode as vanilla. The seed page starts its download form from it, with a
+  signed-in player's entry for that seed giving name and clubs over it.
 - `server/live.py`'s `LiveServer` serves an app on a free localhost port for tools and
   tests that drive a real browser.
 - A route a script fetches answers a refusal as JSON, `{"error": reason, "values": {...}}`,

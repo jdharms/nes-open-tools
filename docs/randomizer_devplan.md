@@ -88,7 +88,10 @@ Nothing requires sign-in. Discord OAuth2 with the `identify` scope, hand-rolled 
 httpx calls (`server/auth.py`): the code is exchanged for a token, the token reads
 `/users/@me`, and the token is thrown away. The session is a signed cookie through
 Starlette's session middleware, SameSite=lax, and holds only the user's `users.id`, plus
-the OAuth `state` and return path while a sign-in is under way. A development-only login
+the OAuth `state` and return path while a sign-in is under way. A second cookie,
+`golf_download`, holds a player's saved download settings, set by every successful
+download for a year, signed in or not; the seed page starts its download form from it
+(`docs/planning/download_settings.md`). A development-only login
 bypass, `GOLF_DEV_LOGIN`, keeps local work off Discord: `/auth/login?as=<name>` signs in as
 the user `dev:<name>`, and the site refuses to start with it on unless the base URL is
 localhost.

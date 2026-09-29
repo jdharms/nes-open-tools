@@ -484,3 +484,27 @@ def test_an_abi_one_seed_keeps_the_saved_swing_putt_and_spin():
     )
     assert saved.bgm is True
     assert saved.clubs == {Club.W2, Club.PW, Club.PT}
+
+
+def test_saved_settings_round_trip_through_the_cookie():
+    value = SAVED.to_cookie()
+    assert set(value) <= set(
+        "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_"
+    )
+    assert SavedSettings.from_cookie(value) == SAVED
+
+
+@pytest.mark.parametrize("value", [None, "", "garbage", "!!!", "e30", "bm90IGpzb24"])
+def test_a_cookie_that_does_not_decode_reads_as_vanilla(value):
+    assert SavedSettings.from_cookie(value) == SavedSettings()
+
+
+def test_an_entry_supplies_name_and_clubs_and_leaves_the_rest():
+    with_entry = SAVED.with_entry("TOAD", ("2W", "PW", "PT"))
+    assert with_entry.player_name == "TOAD"
+    assert with_entry.clubs == {Club.W2, Club.PW, Club.PT}
+    assert (with_entry.bgm, with_entry.swing, with_entry.spin) == (
+        SAVED.bgm,
+        SAVED.swing,
+        SAVED.spin,
+    )

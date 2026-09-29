@@ -22,11 +22,11 @@ from golf.randomizer.manifest import (
     Manifest,
 )
 from golf.randomizer.roms import VANILLA_ROMS, vanilla_rom
-from server.app import SESSION_COOKIE, create_app
+from server.app import DOWNLOAD_COOKIE, SESSION_COOKIE, create_app
 from server.auth import DiscordClient, DiscordError, DiscordIdentity
 from server.builder import SeedBuilder
 from server.config import Config, ConfigError
-from server.forms import FormState
+from server.forms import FormState, SavedSettings
 from server.migrations import MIGRATIONS
 from server.pages import PageCatalog
 from server.ratelimit import RateLimiter
@@ -1795,3 +1795,120 @@ def test_an_option_the_game_does_not_have_is_refused(client, field, value):
     response = post_download(client, seed_id, extra={field: value})
     assert response.status_code == 400
     assert response.json() == {"error": "invalid", "values": {"field": field}}
+
+
+# -- The saved settings cookie ---------------------------------------------------------------
+
+
+def download_cookie(response) -> str:
+    [header] = [
+        value
+        for value in response.headers.get_list("set-cookie")
+        if value.startswith(f"{DOWNLOAD_COOKIE}=")
+    ]
+    return header
+
+
+def saved_in(client: TestClient) -> SavedSettings:
+    return SavedSettings.from_cookie(client.cookies.get(DOWNLOAD_COOKIE))
+
+
+def test_a_download_saves_the_settings_in_a_long_lived_cookie(client):
+    seed_id = generate_seed(client)
+    extra = {"bgm": ["off"], "swing": "fast", "spin": "back1"}
+    response = post_download(client, seed_id, name="luigi", extra=extra)
+    header = download_cookie(response)
+    assert "HttpOnly" in header
+    assert "SameSite=lax" in header
+    assert f"Max-Age={365 * 24 * 60 * 60}" in header
+    assert "Path=/" in header
+    assert "Secure" not in header
+    assert saved_in(client) == SavedSettings(
+        player_name="LUIGI",
+        clubs=frozenset({Club.W1, Club.PW, Club.PT}),
+        bgm=False,
+        swing=SwingSpeed.FAST,
+        putt=SwingSpeed.OFF,
+        spin=BallSpin.BACK1,
+    )
+
+
+def test_the_cookie_is_secure_on_an_https_site(fake_builder):
+    config = Config(database=":memory:", base_url="https://golf.example")
+    with TestClient(create_app(config, builder=fake_builder)) as test_client:
+        response = post_download(test_client, generate_seed(test_client))
+    assert "Secure" in download_cookie(response)
+
+
+def test_a_refused_download_saves_nothing(client):
+    seed_id = generate_seed(client)
+    response = post_download(client, seed_id, name="LU1GI")
+    assert response.status_code == 400
+    assert DOWNLOAD_COOKIE not in response.headers.get("set-cookie", "")
+
+
+def test_a_later_seed_page_starts_from_the_saved_settings(client):
+    post_download(
+        client,
+        generate_seed(client),
+        name="luigi",
+        clubs=("1W", "3W", "PW"),
+        extra={"bgm": ["off"], "putt": "medium"},
+    )
+    article = download_article(client.get(f"/h/{generate_seed(client)}").text)
+    assert re.search(r'name="player_name"\s+value="LUIGI"', article)
+    assert re.findall(r'name="clubs"\s+value="(\w+)"\s+checked', article) == [
+        "1W",
+        "3W",
+        "PW",
+    ]
+    assert not re.search(r'name="bgm"\s+value="on"\s+role="switch"\s+checked', article)
+    assert re.search(r'<option value="medium"\s+selected>', article)
+
+
+def test_a_restricted_seed_keeps_the_saved_bag(client):
+    post_download(client, generate_seed(client), clubs=("1W", "3W", "SW"))
+    strict = generate_seed(client, seed_form(banned={"SW"}))
+    post_download(client, strict, name="toad", clubs=("1W", "PW"))
+    saved = saved_in(client)
+    assert saved.player_name == "TOAD"
+    assert saved.clubs == {Club.W1, Club.W3, Club.SW, Club.PT}
+
+
+@pytest.mark.parametrize("value", ["garbage", "!!!", "e30", "eyJ2IjoxfQ"])
+def test_a_cookie_that_does_not_decode_starts_the_form_from_vanilla(client, value):
+    client.cookies.set(DOWNLOAD_COOKIE, value)
+    article = download_article(client.get(f"/h/{generate_seed(client)}").text)
+    assert re.search(r'name="player_name"\s+value="MARIO"', article)
+    assert summary_values(article)["clubs"] == ["14", "14"]
+
+
+def test_a_garbage_cookie_is_replaced_by_the_next_download(client):
+    client.cookies.set(DOWNLOAD_COOKIE, "garbage")
+    response = post_download(client, generate_seed(client), name="luigi")
+    value = download_cookie(response).split(";")[0].split("=", 1)[1]
+    assert SavedSettings.from_cookie(value).player_name == "LUIGI"
+
+
+def test_a_signed_in_players_entry_names_the_seed_page_over_the_cookie(fake_builder):
+    with dev_client(fake_builder) as test_client:
+        seed_id = generate_seed(test_client)
+        test_client.get("/auth/login", params={"as": "alice"})
+        post_download(test_client, seed_id, name="yoshi", clubs=("2W", "PW"))
+        other = generate_seed(test_client)
+        post_download(
+            test_client, other, name="luigi", clubs=("1W",), extra={"swing": "slow"}
+        )
+
+        first = download_article(test_client.get(f"/h/{seed_id}").text)
+        assert re.search(r'name="player_name"\s+value="YOSHI"', first)
+        assert re.findall(r'name="clubs"\s+value="(\w+)"\s+checked', first) == [
+            "2W",
+            "PW",
+        ]
+        assert re.search(r'<option value="slow"\s+selected>', first)
+
+        fresh = download_article(
+            test_client.get(f"/h/{generate_seed(test_client)}").text
+        )
+        assert re.search(r'name="player_name"\s+value="LUIGI"', fresh)
