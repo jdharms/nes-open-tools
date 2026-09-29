@@ -1,5 +1,13 @@
 Now:
 
+Notes:
+Derived holes, something like:
+```json
+"nes_us/12-short": {
+  "source": {"base": "nes_us/12", "delta": "holes/derived/nes_us_12_short.json"},
+  "content_hash": "…", "par": 3, "distance": 190, "author": "jdharms"
+}
+```
 
 In-game/vanilla rom investigations:
 * Do bunker lips do anything?
