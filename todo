@@ -9,7 +9,6 @@ Randomizer site:
 * Configuration backups to pw manager
 * robots.txt
 * Configure rDNS (reverse DNS)?
-* #4 Expand SRAM defaults on randomizer site (currently missing Enable BGM and more)
 * Sentry
 * healthchecks.io integration for litestream
 * Rangefinder: Esc also clears
@@ -90,3 +89,4 @@ Done:
 * Music swap/shuffle
 * Does SuperShot! do anything? -- Yes, it gives essentially a 4 tick bonus to speed
 * #5 hide scores for unplayed seeds by default!!!!
+* #4 Expand SRAM defaults on randomizer site (currently missing Enable BGM and more)
