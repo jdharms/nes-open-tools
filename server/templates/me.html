@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% import "_download_settings.html" as controls %}
 {% block title %}{{ t_plain("me.page_title", name=user.display_name) }}{% endblock %}
 {% block content %}
   <hgroup>
@@ -71,4 +72,41 @@
     {% endif %}
   </section>
 
+  {% set state = settings.state %}
+  <section id="download-settings">
+    <h2>{{ t("me.download_settings.heading") }}</h2>
+    {% if result == "saved" %}
+      <p><ins>{{ t("me.download_settings.result.saved") }}</ins></p>
+    {% elif result == "forgotten" %}
+      <p><ins>{{ t("me.download_settings.result.forgotten") }}</ins></p>
+    {% elif result == "invalid_name" %}
+      <p tabindex="-1" autofocus><del>{{ t("me.download_settings.result.invalid_name") }}</del></p>
+    {% elif result == "clubs_over_max" %}
+      <p tabindex="-1" autofocus><del>{{ t("me.download_settings.result.clubs_over_max") }}</del></p>
+    {% elif result == "invalid" %}
+      <p tabindex="-1" autofocus><del>{{ t("me.download_settings.result.invalid") }}</del></p>
+    {% endif %}
+    <article>
+      <p>{{ t("me.download_settings.lead") }}</p>
+      <form method="post" action="/me/download-settings" class="settings-form">
+        {{ controls.name_field("settings-name", state.player_name, settings.name_max) }}
+        <fieldset>
+          <legend>{{ t("seed.download.clubs_legend") }}</legend>
+          {{ controls.club_grid(settings.club_labels, state.clubs) }}
+          <small>{{ t("me.download_settings.clubs_help") }}</small>
+        </fieldset>
+        {{ controls.option_fieldset(state) }}
+        <button type="submit">{{ t("me.download_settings.save") }}</button>
+      </form>
+      {% if settings.saved %}
+        <form method="post"
+              action="/me/download-settings/forget"
+              class="settings-forget">
+          <p><small>{{ t("me.download_settings.forget_help") }}</small></p>
+          <button type="submit"
+                  class="secondary outline">{{ t("me.download_settings.forget") }}</button>
+        </form>
+      {% endif %}
+    </article>
+  </section>
 {% endblock %}

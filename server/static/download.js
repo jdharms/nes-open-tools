@@ -17,6 +17,12 @@
 //   error        the server refused, or patching failed; the form can be submitted again
 //   unavailable  this browser has no ROM store
 //
+// The settings summary shows what the form holds now. The template marks each value in it
+// with data-summary, and summary() copies the controls' current values in, so the words
+// stay in the template: the selects' option text is the same string the summary uses, and
+// the BGM value carries both words as data-on and data-off. The settings' data-over-max,
+// which site.css reads to show the over-max marker, follows the club count.
+//
 // Strings are embedded in #download-strings; see romstore.js for t().
 "use strict";
 
@@ -216,9 +222,46 @@ function setupDownload(article) {
   return refresh();
 }
 
+// -- The summary ----------------------------------------------------------------------------
+
+function setupSummary(form) {
+  const settings = form.querySelector("details.download-settings");
+  if (!settings) return;
+  const name = form.querySelector("#download-name");
+  const clubs = [...form.querySelectorAll('input[name="clubs"]:not([disabled])')];
+  const bgm = form.querySelector('input[name="bgm"][type="checkbox"]');
+  const max = Number(settings.dataset.clubsMax);
+  const show = (field, text) => {
+    for (const value of settings.querySelectorAll(`[data-summary="${field}"]`)) {
+      value.textContent = text;
+    }
+  };
+
+  function update() {
+    show("name", name.value.toUpperCase());
+    // A locked bag lists no clubs, and its count never changes.
+    if (clubs.length) {
+      const count = clubs.filter((club) => club.checked).length + 1; // and the putter
+      show("clubs", count);
+      settings.dataset.overMax = String(count > max);
+    }
+    const music = settings.querySelector('[data-summary="bgm"]');
+    if (music && bgm)
+      music.textContent = bgm.checked ? music.dataset.on : music.dataset.off;
+    for (const field of ["swing", "putt", "spin"]) {
+      const select = form.querySelector(`select[name="${field}"]`);
+      if (select) show(field, select.selectedOptions[0].textContent.trim());
+    }
+  }
+
+  form.addEventListener("input", update);
+  form.addEventListener("change", update);
+}
+
 document.addEventListener("DOMContentLoaded", () => {
   const article = document.querySelector("article.download");
   if (!article) return;
+  setupSummary(article.querySelector("form"));
   if (!window.indexedDB) {
     setState(article, "unavailable", t("seed.download.status.unavailable"));
     return;

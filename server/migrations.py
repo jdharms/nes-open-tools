@@ -162,4 +162,13 @@ MIGRATIONS: list[str] = [
         PRIMARY KEY (day, route, method)
     );
     """,
+    # 4: a signed-in player's saved download settings (docs/planning/download_settings.md)
+    """
+    CREATE TABLE download_settings (
+        user_id INTEGER PRIMARY KEY REFERENCES users (id),
+        settings TEXT NOT NULL
+            CHECK (json_valid(settings) AND json_type(settings) = 'object'),
+        updated_at TEXT NOT NULL
+    );
+    """,
 ]

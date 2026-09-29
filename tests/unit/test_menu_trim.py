@@ -55,11 +55,13 @@ def test_header_words_are_uppercased_into_the_patch():
     assert line2.patched == b"RANDO "
 
 
-def test_every_sub_patch_is_length_preserving():
-    for patch in menu_trim_patches():
+@pytest.mark.parametrize("choose_clubs", [True, False])
+def test_every_sub_patch_is_length_preserving(choose_clubs):
+    for patch in menu_trim_patches(choose_clubs=choose_clubs):
         assert len(patch.patched) == len(patch.original), patch.name
 
 
-def test_sub_patch_names_are_unique():
-    names = [p.name for p in menu_trim_patches()]
+@pytest.mark.parametrize("choose_clubs", [True, False])
+def test_sub_patch_names_are_unique(choose_clubs):
+    names = [p.name for p in menu_trim_patches(choose_clubs=choose_clubs)]
     assert len(names) == len(set(names))

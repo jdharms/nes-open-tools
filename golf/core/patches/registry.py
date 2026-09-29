@@ -25,6 +25,11 @@ from .base import ROMPatch
 from .composite import CompositePatch
 from .course import CoursePatch
 from .course_theme import course_theme_patch
+from .extended_sram_defaults import (
+    EXTENDED_SRAM_DEFAULTS_PATCH,
+    BallSpin,
+    SwingSpeed,
+)
 from .green_shortcut import green_shortcut_patch
 from .green_slope_physics import (
     DEFAULT_FRICTION,
@@ -125,6 +130,8 @@ class GreenSlopePhysicsParams:
 class MenuTrimParams:
     #: three 4-6 character header words for menus $00-$02; default OPEN GOLF RANDO
     words: list[str] | None = None
+    #: false leaves CHOOSE CLUBS out of the club house, so the new-save bag stays
+    choose_clubs: bool = True
 
 
 @dataclass(frozen=True)
@@ -188,6 +195,10 @@ class SramDefaultsParams:
     bgm: bool = True
     #: the high byte is stored at $6001; neither byte may be $00 or $FF
     sram_magic: int = VANILLA_MAGIC
+    #: supply all three to use the extended SRAM defaults table
+    swing: str | None = None
+    putt: str | None = None
+    spin: str | None = None
 
 
 # --- Factories and reports ------------------------------------------------------
@@ -315,12 +326,41 @@ def _report_sram_defaults(params: SramDefaultsParams, patch) -> list[str]:
     name = VANILLA_NAME if params.player_name is None else params.player_name.upper()
     clubs = VANILLA_CLUBS if params.clubs is None else params.clubs
     magic = magic_bytes(params.sram_magic)
-    return [
+    lines = [
         f"player name: {name}",
         f"clubs: {' '.join(club_labels(club_bag_bytes(clubs)))}",
         f"bgm: {'on' if params.bgm else 'off'}",
         f"sram magic: ${magic[0]:02X} ${magic[1]:02X}",
     ]
+    if params.swing is not None:
+        lines.append(
+            f"defaults: swing {params.swing}, putt {params.putt}, spin {params.spin}"
+        )
+    return lines
+
+
+def _named[E: (SwingSpeed, BallSpin)](kind: type[E], name: str, field: str) -> E:
+    try:
+        return kind[name.upper()]
+    except KeyError:
+        choices = ", ".join(member.name.lower() for member in kind)
+        raise ValueError(f"{field} must be one of {choices}, got {name!r}") from None
+
+
+def _build_sram_defaults(ctx: BuildContext, params: SramDefaultsParams) -> ROMPatch:
+    return sram_defaults_patch(
+        params.player_name,
+        params.clubs,
+        params.bgm,
+        params.sram_magic,
+        swing=_named(SwingSpeed, params.swing, "swing")
+        if params.swing is not None
+        else None,
+        putt=_named(SwingSpeed, params.putt, "putt")
+        if params.putt is not None
+        else None,
+        spin=_named(BallSpin, params.spin, "spin") if params.spin is not None else None,
+    )
 
 
 def _fixed[R: ROMPatch](patch: R) -> Callable[[BuildContext, NoParams], R]:
@@ -365,7 +405,7 @@ PATCH_SPECS: dict[str, PatchSpec[Any, Any]] = {
             "menu_trim",
             "Trim the title, course select and club house menus, under a three-word header (docs/menu_system.md)",
             MenuTrimParams,
-            lambda ctx, params: menu_trim_patch(params.words),
+            lambda ctx, params: menu_trim_patch(params.words, params.choose_clubs),
         ),
         PatchSpec(
             "remove_course_banner",
@@ -434,12 +474,16 @@ PATCH_SPECS: dict[str, PatchSpec[Any, Any]] = {
         ),
         PatchSpec(
             "sram_defaults",
-            "Change a new save's player name, club bags, BGM option and SRAM magic",
+            "Change a new save's name, club bags, options and SRAM magic; swing, putt and spin require extended_sram_defaults",
             SramDefaultsParams,
-            lambda ctx, params: sram_defaults_patch(
-                params.player_name, params.clubs, params.bgm, params.sram_magic
-            ),
+            _build_sram_defaults,
             _report_sram_defaults,
+        ),
+        PatchSpec(
+            "extended_sram_defaults",
+            "Install the SRAM defaults routine and table for BGM, swing, putt and spin; needs menu_trim",
+            NoParams,
+            _fixed(EXTENDED_SRAM_DEFAULTS_PATCH),
         ),
         PatchSpec(
             "green_slope_physics",

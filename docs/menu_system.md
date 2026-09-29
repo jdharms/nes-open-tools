@@ -256,8 +256,14 @@ of a list leaves a visual gap unless the entries below it are moved up.
 `golf/core/patches/menu_trim.py` implements all of the above: it gives menus
 `$00`-`$02` a shared three-word header, cuts the main menu to STROKE PLAY + CLUB
 HOUSE, cuts course select to a single RANDOM COURSE option that picks course 0,
-and cuts the club house to five entries. Every `BytePatch` is length-preserving
-and inside bank 12, and no instruction changes except one compare operand.
+and cuts the club house to five entries, or four without CHOOSE CLUBS
+(`choose_clubs=False`, which a randomizer seed with club rules uses so the bag
+cannot change in the game). Every `BytePatch` is length-preserving and inside
+bank 12, and no instruction changes except one compare operand.
+
+Either way PLAYER STATS is gone, and nothing else reaches its code in bank 9
+(`$B519` on). `PLAYER_STATS_REMOVED` in the same module is a requirement other
+patches name when they reuse that space, as `extended_sram_defaults` does.
 
 ```python
 from golf.core.patches import menu_trim_patch

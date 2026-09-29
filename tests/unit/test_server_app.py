@@ -8,18 +8,26 @@ from urllib.parse import parse_qs, urlsplit
 import pytest
 from fastapi.testclient import TestClient
 
+from golf.core.patches.extended_sram_defaults import BallSpin, SwingSpeed
 from golf.core.patches.sram_defaults import Club
 from golf.qr.payload import URL_PREFIX, HoleRecord, RoundPayload
 from golf.randomizer.catalog import JP_ROM, US_ROM, Catalog, HoleStore
 from golf.randomizer.curation import CurationSnapshot
 from golf.randomizer.generate import GenerationError
-from golf.randomizer.manifest import DEFAULT_MERCY_POINT, Manifest
+from golf.randomizer.manifest import (
+    DEFAULT_MERCY_POINT,
+    LEGACY_BUILD_VERSION,
+    LEGACY_FINISH_ABI_VERSION,
+    LEGACY_SCHEMA,
+    Manifest,
+)
 from golf.randomizer.roms import VANILLA_ROMS, vanilla_rom
-from server.app import SESSION_COOKIE, create_app
+from server.app import DOWNLOAD_COOKIE, SESSION_COOKIE, create_app
 from server.auth import DiscordClient, DiscordError, DiscordIdentity
 from server.builder import SeedBuilder
 from server.config import Config, ConfigError
-from server.forms import FormState
+from server.download_settings import load_settings
+from server.forms import FormState, SavedSettings
 from server.migrations import MIGRATIONS
 from server.pages import PageCatalog
 from server.ratelimit import RateLimiter
@@ -595,11 +603,13 @@ def post_download(
     name: str = "luigi",
     clubs=("1W", "PW"),
     hashes=None,
+    extra=None,
 ):
     data = {
         "player_name": name,
         "clubs": list(clubs),
         **(ALL_HASHES if hashes is None else hashes),
+        **(extra or {}),
     }
     return client.post(f"/h/{seed_id}/patch.ips", data=data)
 
@@ -1644,3 +1654,423 @@ def test_a_rejected_scan_never_logs_the_entry_keys(fake_builder, caplog):
     for key in keys:
         assert key.hex() not in caplog.text
         assert str(key) not in caplog.text
+
+
+# -- Download settings ------------------------------------------------------------------------
+
+
+class LegacyBuilder(FakeBuilder):
+    """Stores seeds as the randomizer 1.0 site did: schema 1, finish ABI 1."""
+
+    def generate(self, settings):
+        manifest = super().generate(settings)
+        return replace(
+            manifest,
+            schema=LEGACY_SCHEMA,
+            build_version=LEGACY_BUILD_VERSION,
+            finish_abi_version=LEGACY_FINISH_ABI_VERSION,
+        )
+
+
+def download_article(page: str) -> str:
+    start = page.index('<article class="download"')
+    return page[start : page.index("</article>", start)]
+
+
+def settings_tag(article: str) -> str:
+    match = re.search(r'<details class="download-settings"[^>]*>', article)
+    assert match is not None
+    return match.group(0)
+
+
+def summary_values(article: str) -> dict[str, list[str]]:
+    """Each value the summary marks for download.js, by field, in the order they appear."""
+    summary = article[article.index("<summary>") : article.index("</summary>")]
+    values: dict[str, list[str]] = {}
+    for field, text in re.findall(
+        r'<span data-summary="(\w+)"[^>]*>(.*?)</span>', summary
+    ):
+        values.setdefault(field, []).append(text)
+    return values
+
+
+def selected_text(article: str, field: str) -> str:
+    """The text of a select's chosen option."""
+    start = article.index(f'<select name="{field}">')
+    select = article[start : article.index("</select>", start)]
+    match = re.search(r"<option[^>]*\sselected>(.*?)</option>", select, re.S)
+    assert match is not None
+    return match.group(1)
+
+
+def test_the_download_settings_start_collapsed_under_a_summary(client):
+    seed_id = generate_seed(client)
+    article = download_article(client.get(f"/h/{seed_id}").text)
+    tag = settings_tag(article)
+    assert " open" not in tag
+    assert 'data-over-max="false"' in tag
+    assert 'data-clubs-max="14"' in tag
+    values = summary_values(article)
+    assert values["name"] == ["MARIO"]
+    assert values["clubs"] == ["14", "14"]
+    for field in ("swing", "putt", "spin"):
+        assert values[field] == [selected_text(article, field)]
+    music = re.search(
+        r'data-summary="bgm"\s+data-on="([^"]*)"\s+data-off="([^"]*)">([^<]*)<', article
+    )
+    assert music is not None
+    assert music.group(3) == music.group(1)
+    assert 'class="download-removed"' not in article
+    assert '<mark class="download-over-max">' in article
+    assert '<input type="hidden" name="bgm" value="off">' in article
+    assert re.search(r'name="bgm"\s+value="on"\s+role="switch"\s+checked', article)
+    for field, count in (("swing", 4), ("putt", 4), ("spin", 6)):
+        start = article.index(f'<select name="{field}">')
+        select = article[start : article.index("</select>", start)]
+        assert select.count("<option") == count
+        assert re.search(r'<option value="off"\s+selected>', select)
+
+
+def test_a_bag_over_the_max_opens_the_settings_and_is_marked(client):
+    seed_id = generate_seed(client, seed_form(clubs_max="10"))
+    article = download_article(client.get(f"/h/{seed_id}").text)
+    tag = settings_tag(article)
+    assert " open" in tag
+    assert 'data-over-max="true"' in tag
+    assert 'data-clubs-max="10"' in tag
+    assert '<mark class="download-over-max">' in article
+
+
+def test_banned_clubs_are_marked_as_removed_from_the_starting_bag(client):
+    seed_id = generate_seed(client, seed_form(banned={"SW", "1W"}))
+    article = download_article(client.get(f"/h/{seed_id}").text)
+    assert 'class="download-removed"' in article
+    assert summary_values(article)["clubs"] == ["12", "12"]
+    assert " open" not in settings_tag(article)
+
+
+def test_an_abi_one_seed_offers_bgm_but_no_swing_putt_or_spin(
+    catalog, curation, tmp_path
+):
+    builder = LegacyBuilder(catalog, curation, HoleStore(), tmp_path / "unused.nes")
+    with app_client(builder=builder) as test_client:
+        seed_id = generate_seed(test_client)
+        article = download_article(test_client.get(f"/h/{seed_id}").text)
+        assert set(summary_values(article)) == {"name", "clubs", "bgm"}
+        assert 'name="bgm"' in article
+        for field in ("swing", "putt", "spin"):
+            assert f'name="{field}"' not in article
+
+        assert post_download(test_client, seed_id).status_code == 200
+        response = post_download(test_client, seed_id, extra={"spin": "back1"})
+        assert response.status_code == 400
+        assert response.json() == {"error": "invalid", "values": {"field": "spin"}}
+
+
+def test_a_download_carries_the_four_options(client, fake_builder):
+    seed_id = generate_seed(client)
+    extra = {"bgm": ["off"], "swing": "fast", "putt": "slow", "spin": "back2"}
+    assert post_download(client, seed_id, extra=extra).status_code == 200
+    _, _, options = fake_builder.finished
+    assert options.bgm is False
+    assert (options.swing, options.putt, options.spin) == (
+        SwingSpeed.FAST,
+        SwingSpeed.SLOW,
+        BallSpin.BACK2,
+    )
+
+
+def test_a_download_with_the_music_switch_on_keeps_music(client, fake_builder):
+    seed_id = generate_seed(client)
+    post_download(client, seed_id, extra={"bgm": ["off", "on"]})
+    assert fake_builder.finished[2].bgm is True
+    post_download(client, seed_id)
+    assert fake_builder.finished[2].bgm is True
+
+
+@pytest.mark.parametrize(
+    "field, value", [("swing", "warp"), ("putt", "back1"), ("spin", "fast")]
+)
+def test_an_option_the_game_does_not_have_is_refused(client, field, value):
+    seed_id = generate_seed(client)
+    response = post_download(client, seed_id, extra={field: value})
+    assert response.status_code == 400
+    assert response.json() == {"error": "invalid", "values": {"field": field}}
+
+
+# -- The saved settings cookie ---------------------------------------------------------------
+
+
+def download_cookie(response) -> str:
+    [header] = [
+        value
+        for value in response.headers.get_list("set-cookie")
+        if value.startswith(f"{DOWNLOAD_COOKIE}=")
+    ]
+    return header
+
+
+def saved_in(client: TestClient) -> SavedSettings:
+    return SavedSettings.from_cookie(client.cookies.get(DOWNLOAD_COOKIE))
+
+
+def test_a_download_saves_the_settings_in_a_long_lived_cookie(client):
+    seed_id = generate_seed(client)
+    extra = {"bgm": ["off"], "swing": "fast", "spin": "back1"}
+    response = post_download(client, seed_id, name="luigi", extra=extra)
+    header = download_cookie(response)
+    assert "HttpOnly" in header
+    assert "SameSite=lax" in header
+    assert f"Max-Age={365 * 24 * 60 * 60}" in header
+    assert "Path=/" in header
+    assert "Secure" not in header
+    assert saved_in(client) == SavedSettings(
+        player_name="LUIGI",
+        clubs=frozenset({Club.W1, Club.PW, Club.PT}),
+        bgm=False,
+        swing=SwingSpeed.FAST,
+        putt=SwingSpeed.OFF,
+        spin=BallSpin.BACK1,
+    )
+
+
+def test_the_cookie_is_secure_on_an_https_site(fake_builder):
+    config = Config(database=":memory:", base_url="https://golf.example")
+    with TestClient(create_app(config, builder=fake_builder)) as test_client:
+        response = post_download(test_client, generate_seed(test_client))
+    assert "Secure" in download_cookie(response)
+
+
+def test_a_refused_download_saves_nothing(client):
+    seed_id = generate_seed(client)
+    response = post_download(client, seed_id, name="LU1GI")
+    assert response.status_code == 400
+    assert DOWNLOAD_COOKIE not in response.headers.get("set-cookie", "")
+
+
+def test_a_later_seed_page_starts_from_the_saved_settings(client):
+    post_download(
+        client,
+        generate_seed(client),
+        name="luigi",
+        clubs=("1W", "3W", "PW"),
+        extra={"bgm": ["off"], "putt": "medium"},
+    )
+    article = download_article(client.get(f"/h/{generate_seed(client)}").text)
+    assert re.search(r'name="player_name"\s+value="LUIGI"', article)
+    assert re.findall(r'name="clubs"\s+value="(\w+)"\s+checked', article) == [
+        "1W",
+        "3W",
+        "PW",
+    ]
+    assert not re.search(r'name="bgm"\s+value="on"\s+role="switch"\s+checked', article)
+    assert re.search(r'<option value="medium"\s+selected>', article)
+
+
+def test_a_restricted_seed_keeps_the_saved_bag(client):
+    post_download(client, generate_seed(client), clubs=("1W", "3W", "SW"))
+    strict = generate_seed(client, seed_form(banned={"SW"}))
+    post_download(client, strict, name="toad", clubs=("1W", "PW"))
+    saved = saved_in(client)
+    assert saved.player_name == "TOAD"
+    assert saved.clubs == {Club.W1, Club.W3, Club.SW, Club.PT}
+
+
+@pytest.mark.parametrize("value", ["garbage", "!!!", "e30", "eyJ2IjoxfQ"])
+def test_a_cookie_that_does_not_decode_starts_the_form_from_vanilla(client, value):
+    client.cookies.set(DOWNLOAD_COOKIE, value)
+    article = download_article(client.get(f"/h/{generate_seed(client)}").text)
+    assert re.search(r'name="player_name"\s+value="MARIO"', article)
+    assert summary_values(article)["clubs"] == ["14", "14"]
+
+
+def test_a_garbage_cookie_is_replaced_by_the_next_download(client):
+    client.cookies.set(DOWNLOAD_COOKIE, "garbage")
+    response = post_download(client, generate_seed(client), name="luigi")
+    value = download_cookie(response).split(";")[0].split("=", 1)[1]
+    assert SavedSettings.from_cookie(value).player_name == "LUIGI"
+
+
+def test_a_signed_in_players_entry_names_the_seed_page_over_the_cookie(fake_builder):
+    with dev_client(fake_builder) as test_client:
+        seed_id = generate_seed(test_client)
+        test_client.get("/auth/login", params={"as": "alice"})
+        post_download(test_client, seed_id, name="yoshi", clubs=("2W", "PW"))
+        other = generate_seed(test_client)
+        post_download(
+            test_client, other, name="luigi", clubs=("1W",), extra={"swing": "slow"}
+        )
+
+        first = download_article(test_client.get(f"/h/{seed_id}").text)
+        assert re.search(r'name="player_name"\s+value="YOSHI"', first)
+        assert re.findall(r'name="clubs"\s+value="(\w+)"\s+checked', first) == [
+            "2W",
+            "PW",
+        ]
+        assert re.search(r'<option value="slow"\s+selected>', first)
+
+        fresh = download_article(
+            test_client.get(f"/h/{generate_seed(test_client)}").text
+        )
+        assert re.search(r'name="player_name"\s+value="LUIGI"', fresh)
+
+
+# -- Saved settings on the account -----------------------------------------------------------
+
+
+def account_settings(client: TestClient, name: str = "alice") -> SavedSettings | None:
+    [row] = [u for u in users(client) if u["discord_id"] == f"dev:{name}"]
+    return load_settings(app_state(client).db, row["id"])
+
+
+def test_a_signed_in_download_saves_to_the_account_too(fake_builder):
+    with dev_client(fake_builder) as test_client:
+        seed_id = generate_seed(test_client)
+        test_client.get("/auth/login", params={"as": "alice"})
+        post_download(test_client, seed_id, name="luigi", extra={"swing": "fast"})
+        saved = account_settings(test_client)
+        assert saved is not None
+        assert (saved.player_name, saved.swing) == ("LUIGI", SwingSpeed.FAST)
+        assert saved_in(test_client) == saved
+
+
+def test_a_signed_in_player_starts_from_the_cookie_until_they_save(fake_builder):
+    with dev_client(fake_builder) as test_client:
+        post_download(test_client, generate_seed(test_client), name="guest")
+        test_client.get("/auth/login", params={"as": "alice"})
+        assert account_settings(test_client) is None
+        page = test_client.get(f"/h/{generate_seed(test_client)}").text
+        assert re.search(r'name="player_name"\s+value="GUEST"', page)
+
+
+def test_the_account_wins_over_this_browsers_cookie(fake_builder):
+    with dev_client(fake_builder) as test_client:
+        test_client.get("/auth/login", params={"as": "alice"})
+        post_download(test_client, generate_seed(test_client), name="alice")
+        test_client.cookies.set(
+            DOWNLOAD_COOKIE, SavedSettings(player_name="BOB").to_cookie()
+        )
+        page = test_client.get(f"/h/{generate_seed(test_client)}").text
+        assert re.search(r'name="player_name"\s+value="ALICE"', page)
+
+
+def test_the_account_keeps_its_bag_through_a_restricted_seed(fake_builder):
+    with dev_client(fake_builder) as test_client:
+        test_client.get("/auth/login", params={"as": "alice"})
+        post_download(test_client, generate_seed(test_client), clubs=("1W", "SW"))
+        strict = generate_seed(test_client, seed_form(banned={"SW"}))
+        post_download(test_client, strict, name="toad", clubs=("PW",))
+        saved = account_settings(test_client)
+        assert saved is not None
+        assert saved.player_name == "TOAD"
+        assert saved.clubs == {Club.W1, Club.SW, Club.PT}
+
+
+def me_form(**changes) -> dict:
+    data = {
+        "player_name": "yoshi",
+        "clubs": ["2W", "PW"],
+        "bgm": ["off"],
+        "swing": "medium",
+        "putt": "slow",
+        "spin": "top1",
+    }
+    return data | changes
+
+
+def test_me_shows_the_saved_settings_form(fake_builder):
+    with dev_client(fake_builder) as test_client:
+        test_client.get("/auth/login", params={"as": "alice"})
+        page = test_client.get("/me").text
+        section = page[page.index('<section id="download-settings">') :]
+        assert 'action="/me/download-settings"' in section
+        assert re.search(r'name="player_name"\s+value="MARIO"', section)
+        assert section.count('name="clubs"') == 15
+        assert "disabled" not in section
+        for field in ("swing", "putt", "spin"):
+            assert f'<select name="{field}">' in section
+        assert "/me/download-settings/forget" not in section
+
+
+def test_saving_on_me_stores_the_settings_and_redirects_back(fake_builder):
+    with dev_client(fake_builder) as test_client:
+        test_client.get("/auth/login", params={"as": "alice"})
+        response = test_client.post(
+            "/me/download-settings", data=me_form(), follow_redirects=False
+        )
+        assert response.status_code == 303
+        assert response.headers["location"] == "/me?result=saved#download-settings"
+        expected = SavedSettings(
+            player_name="YOSHI",
+            clubs=frozenset({Club.W2, Club.PW, Club.PT}),
+            bgm=False,
+            swing=SwingSpeed.MEDIUM,
+            putt=SwingSpeed.SLOW,
+            spin=BallSpin.TOP1,
+        )
+        assert account_settings(test_client) == expected
+        assert saved_in(test_client) == expected
+        page = test_client.get("/me").text
+        assert re.search(r'name="player_name"\s+value="YOSHI"', page)
+        assert "/me/download-settings/forget" in page
+
+
+@pytest.mark.parametrize(
+    "changes, result",
+    [
+        ({"player_name": "LU1GI"}, "invalid_name"),
+        (
+            {"clubs": [club.label for club in Club if club != Club.PT]},
+            "clubs_over_max",
+        ),
+        ({"spin": "sideways"}, "invalid"),
+    ],
+)
+def test_settings_me_cannot_save_are_refused_and_nothing_changes(
+    fake_builder, changes, result
+):
+    with dev_client(fake_builder) as test_client:
+        test_client.get("/auth/login", params={"as": "alice"})
+        response = test_client.post(
+            "/me/download-settings", data=me_form(**changes), follow_redirects=False
+        )
+        assert response.status_code == 400
+        section = response.text[
+            response.text.index('<section id="download-settings">') :
+        ]
+        assert "<del>" in section
+        assert re.search(
+            rf'name="player_name"\s+value="{changes.get("player_name", "yoshi")}"',
+            section,
+            flags=re.IGNORECASE,
+        )
+        expected_clubs = changes.get("clubs", ["2W", "PW"])
+        assert (
+            re.findall(r'name="clubs"\s+value="(\w+)"\s+checked', section)
+            == expected_clubs
+        )
+        assert re.search(r'<option value="medium"\s+selected>', section)
+        assert re.search(r'<option value="slow"\s+selected>', section)
+        assert account_settings(test_client) is None
+        assert DOWNLOAD_COOKIE not in response.headers.get("set-cookie", "")
+
+
+def test_forgetting_deletes_the_row_and_expires_the_cookie(fake_builder):
+    with dev_client(fake_builder) as test_client:
+        test_client.get("/auth/login", params={"as": "alice"})
+        test_client.post("/me/download-settings", data=me_form())
+        response = test_client.post(
+            "/me/download-settings/forget", follow_redirects=False
+        )
+        assert response.headers["location"] == "/me?result=forgotten#download-settings"
+        header = download_cookie(response)
+        assert "Max-Age=0" in header or "expires=Thu, 01 Jan 1970" in header
+        assert account_settings(test_client) is None
+        assert DOWNLOAD_COOKIE not in test_client.cookies
+        page = test_client.get(f"/h/{generate_seed(test_client)}").text
+        assert re.search(r'name="player_name"\s+value="MARIO"', page)
+
+
+def test_signed_out_the_settings_routes_are_not_found(client):
+    assert client.post("/me/download-settings", data=me_form()).status_code == 404
+    assert client.post("/me/download-settings/forget").status_code == 404

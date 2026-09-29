@@ -11,13 +11,22 @@ from markupsafe import Markup
 
 from golf.core import jp_rom_utils, rom_utils
 from golf.core.patches.sram_defaults import BAG_SIZE, NAME_LENGTH
+from golf.randomizer.build import FINISH_ABI_VERSION
 from golf.randomizer.catalog import JP_ROM, US_ROM, Catalog, RomSource
 from golf.randomizer.curation import CurationSnapshot
-from golf.randomizer.manifest import SOURCES, required_roms
+from golf.randomizer.manifest import SOURCES, ClubRules, required_roms
 from golf.randomizer.music import TRACKS, Track
 from golf.randomizer.roms import VanillaRom, vanilla_rom
 
-from .forms import MUSIC_CHOICES, PARS, RULE_CLUBS, DownloadState
+from .forms import (
+    MUSIC_CHOICES,
+    PARS,
+    RULE_CLUBS,
+    DownloadState,
+    SavedSettings,
+    fit,
+    writes_option_defaults,
+)
 from .rounds import Round, VoidedRound
 from .seeds import SeedRow
 
@@ -123,22 +132,38 @@ def download_stem(row: SeedRow) -> str:
 
 @dataclass(frozen=True)
 class DownloadView:
-    """The seed page's download form."""
+    """The seed page's download form, started from the player's saved settings."""
 
     #: where the form posts, and the finished IPS comes from
     ips_url: str
     #: the name the patched ROM downloads as
     filename: str
-    default_name: str
+    #: what the form starts with: saved settings fitted to this seed
+    state: DownloadState
     name_max: int
     #: every club the form can list: the putter is always carried and never listed
     club_labels: tuple[str, ...]
-    default_clubs: frozenset[str]
     banned: frozenset[str]
     clubs_max: int
     #: None when the seed has no required bag, and the form lists clubs
     required_bag: tuple[str, ...] | None
     required_roms: tuple[VanillaRom, ...]
+    #: saved clubs this seed bans, taken out of the starting bag
+    removed: tuple[str, ...]
+    #: whether the starting bag is over this seed's max
+    over_max: bool
+    #: whether this seed's ROM can take swing, putt and spin defaults (finish ABI 2 on)
+    option_defaults: bool
+
+    @property
+    def open(self) -> bool:
+        """Whether the settings start shown: the form would be refused as it stands."""
+        return self.over_max
+
+    @property
+    def bag_count(self) -> int:
+        """The starting bag's size, putter included."""
+        return len(self.state.clubs) + 1
 
     @property
     def rom_details(self) -> dict[str, dict[str, str]]:
@@ -146,6 +171,26 @@ class DownloadView:
         return {
             rom.id: {"title": rom.title, "sha1": rom.sha1} for rom in self.required_roms
         }
+
+
+@dataclass(frozen=True)
+class SettingsView:
+    """The saved download settings on /me: the controls without a seed's rules."""
+
+    state: DownloadState
+    name_max: int
+    club_labels: tuple[str, ...]
+    #: whether there is anything to forget: an account row or this browser's cookie
+    saved: bool
+
+
+def settings_view(saved: SavedSettings, has_saved: bool) -> SettingsView:
+    return SettingsView(
+        state=fit(saved, ClubRules(), FINISH_ABI_VERSION).state,
+        name_max=NAME_LENGTH,
+        club_labels=tuple(club.label for club in RULE_CLUBS),
+        saved=has_saved,
+    )
 
 
 @dataclass(frozen=True)
@@ -191,7 +236,13 @@ def _hole_view(
     )
 
 
-def seed_view(row: SeedRow, catalog: Catalog, curation: CurationSnapshot) -> SeedView:
+def seed_view(
+    row: SeedRow,
+    catalog: Catalog,
+    curation: CurationSnapshot,
+    saved: SavedSettings | None = None,
+) -> SeedView:
+    """What the seed page shows. The download form starts from `saved`, vanilla by default."""
     manifest = row.manifest
     course = manifest.course
     settings = manifest.settings
@@ -207,17 +258,23 @@ def seed_view(row: SeedRow, catalog: Catalog, curation: CurationSnapshot) -> See
         if rules.required_bag is None
         else tuple(club.label for club in sorted(rules.required_bag))
     )
+    abi = manifest.finish_abi_version
+    fitted = fit(SavedSettings() if saved is None else saved, rules, abi)
     download = DownloadView(
         ips_url=f"/h/{row.id}/patch.ips",
         filename=download_stem(row) + ".nes",
-        default_name=DownloadState.default(rules).player_name,
+        state=fitted.state,
         name_max=NAME_LENGTH,
         club_labels=tuple(club.label for club in RULE_CLUBS),
-        default_clubs=frozenset(DownloadState.default(rules).clubs),
         banned=frozenset(club.label for club in rules.banned),
         clubs_max=rules.max,
         required_bag=required_bag,
         required_roms=required,
+        removed=tuple(
+            club.label for club in RULE_CLUBS if club.label in fitted.removed
+        ),
+        over_max=fitted.over_max,
+        option_defaults=writes_option_defaults(abi),
     )
     return SeedView(
         id=row.id,
