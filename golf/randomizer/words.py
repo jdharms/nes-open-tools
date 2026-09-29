@@ -5,6 +5,12 @@ The same three words head the title menus (`menu_trim`) and, joined by spaces, r
 scorecard title (`scorecard_course_name`), and the seed page shows them. They identify a
 seed at a glance, not uniquely. Every word in the bank must fit both: 4 to 6 characters
 from the characters both fonts can draw.
+
+Words are otherwise distinct, with one deliberate exception: TRIPLE_WORD may appear in
+all three slots at once, as an easter egg. Each slot is drawn independently and
+uniformly, so that outcome is no more likely than any other specific combination of
+three words - it is just one combination among many, and rare because of that, not
+because of a hand-tuned rarity constant. No other word may repeat.
 """
 
 import random
@@ -22,8 +28,18 @@ from golf.core.patches.scorecard_course_name import TITLE_FONT_CHARS, title_text
 
 WORD_BANK = Path(__file__).resolve().parent / "data" / "word_bank.txt"
 WORD_COUNT = 3
+#: the only word allowed to fill all three slots at once
+TRIPLE_WORD = "BALLS"
 
 _DRAWABLE = frozenset(RENDERABLE_CHARS) & frozenset(TITLE_FONT_CHARS)
+
+
+def _valid_combo(words: Sequence[str]) -> bool:
+    """All three distinct, or all three TRIPLE_WORD. Any other repeat is invalid."""
+    distinct = set(words)
+    if len(distinct) == WORD_COUNT:
+        return True
+    return distinct == {TRIPLE_WORD}
 
 
 class MagicWordsError(ValueError):
@@ -52,11 +68,14 @@ def scorecard_title(words: Sequence[str]) -> str:
 
 
 def check_magic_words(words: Sequence[str]) -> tuple[str, ...]:
-    """Three distinct drawable words, uppercased, that fit both the menu and the scorecard."""
+    """Three drawable words, uppercased, that fit both the menu and the scorecard.
+
+    Distinct, except for the one legal triple: TRIPLE_WORD in all three slots.
+    """
     checked = tuple(check_word(word) for word in words)
     if len(checked) != WORD_COUNT:
         raise MagicWordsError(f"expected {WORD_COUNT} words, got {len(checked)}")
-    if len(set(checked)) != len(checked):
+    if not _valid_combo(checked):
         raise MagicWordsError(f"words repeat: {list(checked)}")
     try:
         normalize_words(checked)
@@ -90,7 +109,14 @@ def load_word_bank(path: Path = WORD_BANK) -> tuple[str, ...]:
 def draw_magic_words(
     rng: random.Random, bank: Sequence[str] | None = None
 ) -> tuple[str, ...]:
-    """Three distinct words, in drawn order."""
-    return tuple(
-        rng.sample(list(load_word_bank() if bank is None else bank), WORD_COUNT)
-    )
+    """Three words, in drawn order: almost always distinct, rarely all TRIPLE_WORD.
+
+    Each slot is drawn independently and uniformly from the bank, so the triple is
+    exactly as likely as any other specific combination of three words - not a
+    separate rare roll. Any other repeat is redrawn.
+    """
+    words = list(load_word_bank() if bank is None else bank)
+    while True:
+        drawn = tuple(rng.choice(words) for _ in range(WORD_COUNT))
+        if _valid_combo(drawn):
+            return drawn
