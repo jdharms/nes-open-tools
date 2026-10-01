@@ -35,16 +35,16 @@ def distinct_nes_entries() -> list[int]:
     return [v for v in range(64) if canonical_nes(v) == v]
 
 
-class ColourFamily(NamedTuple):
-    """A named group of NES colours that read as one colour, e.g. "green"."""
+class ColorFamily(NamedTuple):
+    """A named group of NES colors that read as one color, e.g. "green"."""
 
     name: str
-    colours: tuple[int, ...]
+    colors: tuple[int, ...]
 
 
-def family_colours(families: Sequence[ColourFamily]) -> tuple[int, ...]:
-    """Every colour in `families`, the families concatenated in order."""
-    return tuple(colour for family in families for colour in family.colours)
+def family_colors(families: Sequence[ColorFamily]) -> tuple[int, ...]:
+    """Every color in `families`, the families concatenated in order."""
+    return tuple(color for family in families for color in family.colors)
 
 
 NES_SYSTEM_PALETTE: list[RGBColor] = [

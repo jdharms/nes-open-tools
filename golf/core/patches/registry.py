@@ -55,7 +55,7 @@ from .scorecard_qr import (
 )
 from .seeded_wind import derive_hole_seeds, predict_hole, seeded_wind_patch
 from .signpost_banner import remove_course_banner_patches
-from .signpost_colour import signpost_colour_patch
+from .signpost_color import signpost_color_patch
 from .signpost_random_banner import signpost_banner_patch
 from .sram_defaults import (
     VANILLA_CLUBS,
@@ -147,9 +147,9 @@ class SignpostBannerParams:
 
 
 @dataclass(frozen=True)
-class SignpostColourParams:
-    #: one of signpost_colour.SIGNPOST_COLOURS
-    colour: int
+class SignpostColorParams:
+    #: one of signpost_color.SIGNPOST_COLORS
+    color: int
 
 
 @dataclass(frozen=True)
@@ -195,8 +195,8 @@ class MusicImportParams:
 
 @dataclass(frozen=True)
 class PeachDressParams:
-    #: one of peach_dress.DRESS_COLOURS
-    colour: int
+    #: one of peach_dress.DRESS_COLORS
+    color: int
 
 
 @dataclass(frozen=True)
@@ -435,10 +435,10 @@ PATCH_SPECS: dict[str, PatchSpec[Any, Any]] = {
             _report_signpost,
         ),
         PatchSpec(
-            "signpost_colour",
-            "Recolour the pre-hole signpost banner to a curated NES colour (docs/prehole_signpost.md)",
-            SignpostColourParams,
-            lambda ctx, params: signpost_colour_patch(params.colour),
+            "signpost_color",
+            "Recolor the pre-hole signpost banner to a curated NES color (docs/prehole_signpost.md)",
+            SignpostColorParams,
+            lambda ctx, params: signpost_color_patch(params.color),
         ),
         PatchSpec(
             "mercy_tap_in",
@@ -521,9 +521,9 @@ PATCH_SPECS: dict[str, PatchSpec[Any, Any]] = {
         ),
         PatchSpec(
             "peach_dress",
-            "Recolour Peach's dress in the putting view to a curated NES colour",
+            "Recolor Peach's dress in the putting view to a curated NES color",
             PeachDressParams,
-            lambda ctx, params: peach_dress_patch(params.colour),
+            lambda ctx, params: peach_dress_patch(params.color),
         ),
         PatchSpec(
             "putting_practice",

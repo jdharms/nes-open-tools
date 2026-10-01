@@ -1,11 +1,11 @@
-"""Integration tests: Peach's dress colour against the real vanilla ROM."""
+"""Integration tests: Peach's dress color against the real vanilla ROM."""
 
 from pathlib import Path
 
 import pytest
 
 from golf.core.patches import peach_dress_patch
-from golf.core.patches.peach_dress import DRESS_COLOUR_ADDR, PALETTE_BANK
+from golf.core.patches.peach_dress import DRESS_COLOR_ADDR, PALETTE_BANK
 from golf.core.rom_reader import RomReader
 from golf.core.rom_writer import RomWriter
 
@@ -20,13 +20,13 @@ pytestmark = pytest.mark.skipif(
 )
 
 
-def test_dress_is_sprite_palette_0_colour_1_of_the_green_detail_palette():
+def test_dress_is_sprite_palette_0_color_1_of_the_green_detail_palette():
     rom = RomReader(ROM_PATH)
     load = rom.read_switched(PALETTE_LOAD_ADDR, PALETTE_BANK, 5)
     assert load == bytes([0x20, 0x0A, 0xD8, 0xFE, 0x95])  # JSR $D80A / .dw $95FE
     palette = rom.read_switched(GREEN_DETAIL_PALETTE_ADDR, PALETTE_BANK, 32)
     assert palette[16:20] == bytes([0x0F, 0x25, 0x36, 0x28])
-    assert DRESS_COLOUR_ADDR == GREEN_DETAIL_PALETTE_ADDR + 16 + 1
+    assert DRESS_COLOR_ADDR == GREEN_DETAIL_PALETTE_ADDR + 16 + 1
 
 
 def test_apply_and_reload(tmp_path):
@@ -37,4 +37,4 @@ def test_apply_and_reload(tmp_path):
     patch.apply(writer)
     writer.save()
 
-    assert RomReader(str(out)).read_switched(DRESS_COLOUR_ADDR, PALETTE_BANK) == b"\x2a"
+    assert RomReader(str(out)).read_switched(DRESS_COLOR_ADDR, PALETTE_BANK) == b"\x2a"

@@ -70,8 +70,8 @@ $ACF1-$AD0C                      ; HoleMatchStatus != 0: silence music, queue Mu
 The background half of the `$ADC4` palette is `0F 37 21 17 | 0F 30 21 15 | 0F 1C 31 2A |
 0F 1C 31 21`. The banner is subpalette 1: `$30` letters, `$21` sky and `$15` brick, so the
 brick is the one byte at `$ADCB`, and the contest write at `$AC4B` is the same entry turned
-blue. The wooden HOLE, PAR and yards signs are subpalette 0. The `signpost_colour` patch
-(`golf/core/patches/signpost_colour.py`) sets the brick to one of a curated set.
+blue. The wooden HOLE, PAR and yards signs are subpalette 0. The `signpost_color` patch
+(`golf/core/patches/signpost_color.py`) sets the brick to one of a curated set.
 
 ### Banner selection
 
@@ -151,7 +151,7 @@ Two different things are going on here, and they answer "is it a pattern?" diffe
 ![Annotated banner](../renders/prehole_signpost/banner_annotated_japan.png)
 
 (`renders/prehole_signpost/annotate_banner.py` - green border = confirmed background
-filler, greyish = structural frame/shadow, red = unique wordmark/letter art. The red
+filler, grayish = structural frame/shadow, red = unique wordmark/letter art. The red
 region visibly contains letter strokes; the green tiles are visibly plain brick.)
 
 So: there's no clever repeat to reverse-engineer for "blank canvas" purposes. `$5F`
@@ -294,22 +294,22 @@ golf-signpost-import after.aseprite --banner us \
 ```
 
 The export convention is the NES screen at an integer zoom, indexed, using the same
-palette the golfer exporter offers (index 0 transparent, 1-55 every NES colour once;
+palette the golfer exporter offers (index 0 transparent, 1-55 every NES color once;
 `golf/core/palettes.py` `distinct_nes_entries`). Three properties of that convention
 decide whether a file can be read back at all:
 
 - **One NES pixel is one aligned `zoom x zoom` block.** A stroke drawn thinner than
   that, or starting half a block over, has no hardware pixel to live in. Those are
   collected and reported rather than averaged away; `--grid` renders them for the artist
-  with the real pixel boundaries drawn on. Where a block genuinely holds two colours the
+  with the real pixel boundaries drawn on. Where a block genuinely holds two colors the
   importer takes the lower palette index, which on the signpost's palette biases toward
   the letters' black outline rather than the magenta brick behind it.
-- **`$20` and `$30` are the same white.** The colour lookup is keyed by RGB, not by NES
+- **`$20` and `$30` are the same white.** The color lookup is keyed by RGB, not by NES
   palette value, so an artist reaching for either swatch means the same pixel.
-- **Three colours per cell, chosen by the attribute table, not by the artist.** The
+- **Three colors per cell, chosen by the attribute table, not by the artist.** The
   banner's rows sit under attribute `$55` (subpalette 1: `$30`/`$21`/`$15` on `$0F`)
   except its last row, which falls in the `$05` block's lower half and uses subpalette 0.
-  A pixel outside its cell's three colours is an error naming the cell and the pixel.
+  A pixel outside its cell's three colors is an error naming the cell and the pixel.
 
 A cell whose art is unchanged keeps the byte the ROM already had, rather than being
 re-resolved through the pattern table - two slots can hold identical art, and an
