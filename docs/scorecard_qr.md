@@ -13,19 +13,25 @@ that region is permanently available.
 
 ## The payload
 
-36 bytes, fixed length.
+39 bytes, fixed length, in protocol version 2 (ADR 0010).
 
 | Bytes | Size | Field |
 |---|---|---|
-| 0 | 1 | Protocol version (currently `$01`) |
+| 0 | 1 | Protocol version (`$02`) |
 | 1-8 | 8 | Seed ID |
 | 9-12 | 4 | Player ID |
 | 13 | 1 | Flags |
 | 14-31 | 18 | Hole records, holes 1-18 |
-| 32-35 | 4 | HalfSipHash-2-4-32 over bytes 0-31 |
+| 32-34 | 3 | Round stats: fairways hit and penalty strokes |
+| 35-38 | 4 | HalfSipHash-2-4-32 over bytes 0-34 |
 
 Seed ID, player ID and the MAC key are written per download by the `qr_credentials`
-patch. The hole records are read out of RAM at round end.
+patch. The hole records are read out of RAM at round end, and the round stats out of the
+SRAM the `round_stats` patch keeps them in (see Round stats below).
+
+**Protocol version 1** is the same without the round stats: 36 bytes, the MAC over bytes
+0-31 at 32-35. ROMs built before build version 5 send it, and the server accepts it for
+good. `golf.qr.payload` decodes both, with a version 1 round's stats as `None`.
 
 ### Hole record
 
@@ -42,6 +48,26 @@ the known weak point in this encoding: vanilla counts to 50 per hole, and the me
 tap-in patch (which caps at 10) is not applied by default, so a blow-up hole can exceed
 16 and be recorded as 16. See Open Questions.
 
+### Round stats
+
+Three bytes, the 24 bits little-endian from byte 32:
+
+```
+bits  0-17   fairway hit, holes 1-18 (bit 0 = hole 1)
+bits 18-23   penalty strokes over the round, held at 63
+```
+
+So hole 1 is bit 0 of byte 32, hole 9 is bit 0 of byte 33, holes 17 and 18 are bits 0-1
+of byte 34, and the penalties are byte 34's top six bits. The ROM keeps them in exactly
+this order, so the payload builder copies them without packing.
+
+A hole's bit is set when the tee shot of a par 4 or longer comes to rest on the fairway
+or the green. A par 3's is never set. A whiff on the tee counts a stroke without moving
+the ball, so the hole is no longer eligible. A tee shot that goes in never comes to rest
+and leaves its bit clear; the server stores one stroke on a par 4 or longer as a hit.
+
+A penalty stroke is one the game adds for water or out of bounds.
+
 ### Flags
 
 | Bits | Meaning |
@@ -51,13 +77,15 @@ tap-in patch (which caps at 10) is not applied by default, so a blow-up hole can
 
 ### MAC
 
-`HalfSipHash-2-4` with 32-bit output, over bytes 0-31, with an 8-byte key unique per
-(seed, player). The key is generated at patch time, stored server-side keyed to the
-seed and player, and never appears in the manifest.
+`HalfSipHash-2-4` with 32-bit output, over bytes 0-34 (0-31 in version 1), with an
+8-byte key unique per (seed, player). The key is generated at patch time, stored
+server-side keyed to the seed and player, and never appears in the manifest.
 
-The MAC'd region is 32 bytes — exactly 8 32-bit words, so the 6502 implementation needs
-no partial-word tail handling. This is a reason to keep the MAC'd length a multiple of 4
-if the payload layout ever changes.
+The MAC'd region is 35 bytes: 8 whole 32-bit words and a 3-byte tail. No payload length
+that is a multiple of 3 and fits the QR leaves a whole number of words, so a tail is
+unavoidable. On cart it costs nothing: the spec's final block is the tail bytes with the
+message length in the top byte, and with the length stored at byte 35 before hashing, the
+final block is a ninth word read in place. The MAC then overwrites that byte.
 
 HalfSipHash is specified for both 4-byte and 8-byte output; the reference implementation
 takes an `outlen` of 4 or 8 and the project publishes official test vectors for both
@@ -68,11 +96,12 @@ finalization rounds.
 ## The URL
 
 ```
-https://nesopengolf.com/s/<48 base64url characters>
+https://nesopengolf.com/s/<52 base64url characters>
 ```
 
-26 characters of prefix plus 48 characters of unpadded base64url — 36 bytes is a
-multiple of 3, so there is no `=` padding — for a **74-character URL**.
+26 characters of prefix plus 52 characters of unpadded base64url — 39 bytes is a
+multiple of 3, so there is no `=` padding — for a **78-character URL**. A version 1
+payload is 48 characters, a 74-character URL; `/s/` tells the versions apart by length.
 
 Keeping the payload length a multiple of 3 is a hard design rule: it keeps base64
 pad-free and byte-aligned, which keeps the QR character count constant.
@@ -80,9 +109,8 @@ pad-free and byte-aligned, which keeps the QR character count constant.
 ## QR parameters
 
 **Version 5, error correction level M, byte mode.** Capacity is 84 characters, so the
-74-character URL leaves 10 characters of headroom — enough to grow the payload to 39
-bytes (52 chars, 78-char URL) or 42 bytes (56 chars, 82-char URL) without changing any
-QR geometry. 42 bytes is the ceiling.
+78-character URL leaves 6 characters of headroom — enough to grow the payload to 42
+bytes (56 chars, 82-char URL) without changing any QR geometry. 42 bytes is the ceiling.
 
 | Property | Value |
 |---|---|
@@ -109,14 +137,14 @@ The mode indicator is 4 bits and the byte-mode character count is 8 bits for ver
 1-9, so the 12-bit header puts every payload character on a nibble boundary. Building
 the data code words is a nibble-shift loop, not a general bit packer.
 
-With a fixed 74-character URL the whole stream shape is a compile-time constant:
+With a fixed 78-character URL the whole stream shape is a compile-time constant:
 
 ```
-codeword 0      $44                                      ; 0100 mode, $4 = high nibble of 74
-codeword 1      $A0 | (url[0] >> 4)                      ; $A = low nibble of 74
-codeword n      ((url[n-2] & $0F) << 4) | (url[n-1] >> 4) ; for n = 2..74
-codeword 75     (url[73] & $0F) << 4                     ; 4-bit terminator in the low nibble
-codewords 76-85 $EC $11 $EC $11 ...                      ; 10 pad codewords
+codeword 0      $44                                      ; 0100 mode, $4 = high nibble of 78
+codeword 1      $E0 | (url[0] >> 4)                      ; $E = low nibble of 78
+codeword n      ((url[n-2] & $0F) << 4) | (url[n-1] >> 4) ; for n = 2..78
+codeword 79     (url[77] & $0F) << 4                     ; 4-bit terminator in the low nibble
+codewords 80-85 $EC $11 $EC $11 ...                      ; 6 pad codewords
 ```
 
 **Code words 0 through 27 are constant** and live in ROM as a 28-byte table. The first
@@ -294,6 +322,7 @@ Confirmed by disassembly (`scorecard.md` has the scorecard's own reading of them
 | Per-hole putts | `$017C + player * 18 + hole` | binary |
 | Holes played | `GameProgress` `$95` | `$12` at the hook |
 | Player count | `PlayerCount` `$9A` | |
+| Round stats | `$6C0E + player * 3` | SRAM, kept by `round_stats`, already in wire order |
 
 `LD_8392_CommitHoleScores` (bank 13 `$8392`) writes both arrays at each hole's end,
 indexed by `GameProgress` plus a per-player stride from `$83CC` (strokes) and `$83CA`
@@ -343,8 +372,8 @@ Addresses are fixed in `golf/qr/port/layout.py`:
 | Module matrix, 38 x 38 | `$7000` | 1,444 |
 | HalfSipHash state, key and scratch | `$75B0` | 32 |
 | General scratch | `$75D0` | 16 |
-| Payload | `$75E0` | 36 |
-| URL | `$7610` | 74 |
+| Payload | `$75E0` | 39 |
+| URL | `$7610` | 78 |
 | Data code words | `$7660` | 86 |
 | EC code words | `$76C0` | 48 |
 | Interleaved code words | `$76F0` | 134 |
@@ -377,9 +406,9 @@ Measured, not estimated: table sizes come from `golf-qr-tables`, code sizes from
 | base64url alphabet | 64 |
 | Constant code word head | 28 |
 | **Tables subtotal** | **2,329** |
-| Payload builder | 155 |
+| Payload builder | 177 |
 | base64url encoder and URL assembly | 136 |
-| HalfSipHash-2-4-32 | 361 |
+| HalfSipHash-2-4-32 | 349 |
 | Data code word builder | 82 |
 | Reed-Solomon encoder | 136 |
 | Interleaver | 45 |
@@ -387,14 +416,14 @@ Measured, not estimated: table sizes come from `golf-qr-tables`, code sizes from
 | Placement walker | 201 |
 | Nametable builder | 154 |
 | Entry point, URL prefix, patch-time constants | 82 |
-| Display layer: screen, captions, dismissal | 446 |
-| **Code subtotal** | **1,849** |
-| **Tables plus code** | **4,178** |
+| Display layer: screen, captions, dismissal | 457 |
+| **Code subtotal** | **1,865** |
+| **Tables plus code** | **4,194** |
 
 At the origins the port currently assembles against — `$8400` for the tables, `$8E00`
-for the code — the image spans 4,409 bytes including the page-alignment gap between the
-two, leaving **4,252 bytes of the 8,661-byte region** spare for the patch integration and
-anything that comes after. `golf-qr-port` prints all of this.
+for the code — the image spans 4,425 bytes including the page-alignment gap between the
+two, leaving 4,236 bytes of the 8,661-byte region. `round_stats`' routines take 191 of
+them at `$A400`. `golf-qr-port` prints the QR image's share.
 
 ### Table export
 
@@ -454,21 +483,22 @@ source from `golf.qr.payload`, so the domain exists in exactly one place.
 | Entry point | What it does |
 |---|---|
 | `QrBuildCode` | the whole pipeline for the player slot in A |
-| `QrBuildPayload` | 36 bytes from the game's score arrays, MAC included |
+| `QrBuildPayload` | 39 bytes from the game's score arrays and round stats, MAC included |
 | `QrHashMac` | HalfSipHash-2-4-32 over the payload body |
-| `QrBuildUrl` | prefix plus 48 base64url characters |
+| `QrBuildUrl` | prefix plus 52 base64url characters |
 | `QrBuildCodewords` | the 86 data code words, off the constant head |
 | `QrReedSolomon` | 24 EC code words per block, LFSR form |
 | `QrInterleaveCodewords` | the 134-byte interleave |
 | `QrCopyMatrix` / `QrWalkMatrix` | static matrix to RAM, then the placement walk |
 | `QrBuildNametable` | the 19x19 nametable |
 
-Two specializations worth recording, both from the payload being a fixed 36 bytes:
+Two specializations worth recording, both from the payload being a fixed 39 bytes:
 
-- **HalfSipHash has no tail path.** The MAC'd body is 32 bytes — exactly 8 whole words —
-  so the spec's final block is the message length in the top byte and nothing else:
-  the constant `$20000000`. Together with `outlen = 4` skipping the `$EE`/`$DD` tweaks
-  and the second finalization, the whole routine is 361 bytes.
+- **HalfSipHash has no separate tail path.** The MAC'd body is 35 bytes, 8 whole words
+  and 3 left over, and the spec's final block is those 3 bytes with the length, `$23`, in
+  the top byte. Storing `$23` at byte 35 first makes the final block a ninth word read in
+  place, which the MAC then overwrites. Together with `outlen = 4` skipping the
+  `$EE`/`$DD` tweaks and the second finalization, the whole routine is 349 bytes.
 - **Rotations go the short way round.** The round schedule wants rotate-left by 5, 16,
   8, 7 and 13. Each is a whole-byte rotation plus at most three single-bit ones —
   `rotl 5` is `rotl 8` then `rotr 1` three times — instead of up to thirteen shift-and-
@@ -505,22 +535,23 @@ the palette, sets `PpuCtrl_Cache` `$10` to `$90` (NMI on, background patterns at
 
 A randomized ROM is built in two stages (`randomizer_devplan.md`): an unfinished ROM once
 per seed, and a finished ROM per download. The QR screen is split the same way, into three
-patches:
+patches, on top of `round_stats`, which counts what the payload's round stats carry:
 
 | Patch | Stage | Writes |
 |---|---|---|
+| `round_stats` (`golf/core/patches/round_stats.py`) | unfinished | routines, trampolines and six splices; see Round stats below |
 | `scorecard_qr` (`golf/core/patches/scorecard_qr.py`) | unfinished | the image, the trampoline and the splice |
 | `qr_credentials` (`golf/core/patches/qr_credentials.py`) | finishing, signed in | the seed ID, player IDs and MAC keys |
 | `qr_disable` (`golf/core/patches/scorecard_qr.py`) | finishing, guest | the splice, back to the vanilla wait |
 
 ```bash
 golf-qr-credentials -o keys.json
-golf-patch modified.nes --any-base -p scorecard_qr -o unfinished.nes
+golf-patch modified.nes --any-base -p round_stats -p scorecard_qr -o unfinished.nes
 golf-patch unfinished.nes --any-base -p qr_credentials:credentials=keys.json -o finished.nes
 golf-patch unfinished.nes --any-base -p qr_disable -o guest.nes
 ```
 
-`scorecard_qr` makes three writes: the 4,420-byte image (tables and routine) into bank 2
+`scorecard_qr` makes three writes: the 4,425-byte image (tables and routine) into bank 2
 from `$8400`; the ten-byte trampoline into the fixed bank's dead greens pointer slots at
 `$DCBD`; and the two-byte splice at `$852E` that repoints the post-round wait at it.
 
@@ -532,7 +563,7 @@ write is four kilobytes of vanilla course data and carrying a copy to compare ag
 would be absurd. What it verifies instead is the hook: the six-byte far call to
 `DrawScorecardScreen` at `$8523`, the vanilla `JSR $85BA` operand, and that the
 trampoline's ten bytes still hold the vanilla greens pointers. It also requires
-`COURSE_MIRRORS_PATCH` to be applied first. That is a precise enough anchor to
+`COURSE_MIRRORS_PATCH` and `ROUND_STATS_PATCH` to be applied first. That is a precise enough anchor to
 catch a wrong ROM or a rearranged routine. A future "reclaim" patch that fills the freed
 region with `$FF` would let this one assert on the region too.
 
@@ -545,6 +576,16 @@ unfinished image, it refuses a ROM already finished with other credentials, and 
 twice with the same credentials writes nothing. `golf-qr-credentials` writes the credentials
 as JSON and the patch reads them from that file; the keys are secret and nothing else
 prints them.
+
+**The finishing contract** (ADR 0009). The finishing patches run on unfinished ROMs stored
+by earlier build versions, so everything they rely on is pinned, not read from today's
+port: the placeholders at `$8E5F`, `$8E67` and `$8E6F` (`PLACEHOLDER_ADDRESSES`), their
+lengths and `$00` fill, the splice at `$852E`, and the trampoline's shape less its far
+call's target. `qr_credentials`' requirement check, `ScorecardQrPatch.is_applied`, skips
+those two bytes, so the routine behind the trampoline may move between build versions;
+the placeholders may not, and building the patch fails if the port moves one. Moving any
+of them is a finish ABI bump. `tests/unit/test_qr_patch.py` and the ABI golden in
+`tests/unit/test_build.py` pin them as literals.
 
 `qr_disable` is one byte patch that expects the splice `scorecard_qr` wrote and restores
 `JSR $85BA`, so a guest ROM ends the round on the scorecard. The image and trampoline stay,
@@ -598,6 +639,7 @@ round (`GolfGameMode` `$0100` = `$00`), and before holing out on the current hol
 | `$95` `GameProgress` | `$11` (seventeen holes played) |
 | `$0134`-`$0144` | per-hole strokes for holes 1-17, e.g. `$04` |
 | `$017C`-`$018C` | per-hole putts for holes 1-17, e.g. `$02` |
+| `$6C0E`-`$6C10` | player 1's round stats (optional): e.g. `$FF $FF $0D` for every fairway on holes 1-17 and 3 penalty strokes |
 
 Then hole out. `LD_8392_CommitHoleScores` writes the current hole at index `GameProgress`
 — so hole 18 lands at `$0145`/`$018D` — the counters increment to `$12`, `LD_84C5` sees
@@ -605,18 +647,27 @@ the round is over, and the scorecard appears. Press A or B and the QR screen fol
 
 The strokes array is `$FF`-filled at round setup, so any hole left unwritten clamps to 16
 strokes in the payload rather than reading as a zero. For the second player, the same
-arrays at `$0158` (strokes) and `$018E` (putts), with `PlayerCount` `$9A` = 1.
+arrays at `$0158` (strokes) and `$018E` (putts), with `PlayerCount` `$9A` = 1, and round
+stats at `$6C11`-`$6C13`. Whatever the eighteenth hole adds to the round stats lands on
+top of what was written.
 
 ## Server contract
 
-- `GET /s/<48 chars>` decodes the payload, recomputes the MAC with the key stored for
+- `GET /s/<52 chars>` (protocol version 2) or `GET /s/<48 chars>` (version 1) decodes the
+  payload, recomputes the MAC with the key stored for
   the entry that (seed, player) resolves to and the payload's slot, and records the round
   (`server/submissions.py`, which hands it to `server/rounds.py`). It answers 303 to the
   round's own permalink, `/r/<id>`, which is where the round is shown and what a player
   shares. A rejection has no round to point at, so it renders at `/s/` itself, and nothing
   of it is stored.
 - A seed ID or player ID of all zeros is the placeholder fill of an unfinished ROM and is
-  rejected.
+  rejected. So is a version byte the text's length does not imply.
+- A version 2 round stores each hole's fairway (`round_holes.fairway_hit`) and the
+  penalty strokes (`rounds.penalty_strokes`); a version 1 round stores NULL for both,
+  never a miss or a zero. The stored fairway is the ROM's bit, or one stroke on a par 4 or
+  longer: the ROM sends no bit for a tee shot that goes in, and stats count it as a hit.
+  The payload kept beside it holds the bit as sent. The round page shows no fairways or
+  penalties for a version 1 round.
 - **First submission per (entry, slot) is authoritative.** A later scan that verifies
   records nothing and redirects to the round already recorded. An admin can void a round, which
   frees the slot for a different round; a scan of the voided payload itself is rejected as
@@ -641,7 +692,7 @@ only on the finished matrix.
 | Module | Contents |
 |---|---|
 | `halfsiphash.py` | HalfSipHash-2-4, both output lengths |
-| `payload.py` | the 36-byte payload, hole records, base64url, URL assembly, MAC verify |
+| `payload.py` | the payload in both protocol versions, hole records, round stats, base64url, URL assembly, MAC verify |
 | `galois.py` | GF(256) tables, generator polynomial, Reed-Solomon |
 | `encoder.py` | version 5-M encoder: code words, EC, interleave, static matrix, walk, mask, penalty |
 | `nes.py` | the 16 CHR tiles, the 19x19 nametable, screen placement, and the reverse path |
@@ -721,11 +772,91 @@ goes up.
 6. **Patch integration** — *done*, the `scorecard_qr` patch and its finishing patches
    `qr_credentials` and `qr_disable`. See Installing it above.
 7. **Server endpoint** — *done*, `server/submissions.py`, `server/rounds.py`,
-   `GET /s/<48 chars>` and the `/r/<id>` permalink it redirects to; see Server contract
+   `GET /s/<chars>` and the `/r/<id>` permalink it redirects to; see Server contract
    above.
+8. **Round stats** — *done*: the `round_stats` patch, protocol version 2 and the server's
+   storage and round page, confirmed on an emulator. See Round stats below.
 
 Phases 1-5 touch no ROM: the port is assembled and tested entirely in the repo, and
 nothing is spliced into a cartridge until phase 6.
+
+## Round stats
+
+The game counts neither fairways nor penalty strokes. The `round_stats` patch
+(`golf/core/patches/round_stats.py`, build version 5) counts both during play, for 18-hole
+stroke play only (`GolfGameMode` 0, and never in training or a replay), and keeps them in
+SRAM in the payload's wire order.
+
+### Hooks
+
+All in bank 13's per-shot flow, found by disassembly:
+
+| Site | Vanilla | Becomes |
+|---|---|---|
+| `$80CE` | `STA $04FD` / `STA $04FE`, round setup | a far call that does both and zeroes the live stats |
+| `$832B` | `JMP LD_85E9`, after every shot that did not hole out | `JMP` to a trampoline that checks the fairway, then `JMP $85E9` |
+| `$8641` | `JSR IncrementStrokeCount`, the water penalty (`BallLie` 4) | `JSR` to the penalty trampoline |
+| `$866F` | `JSR IncrementStrokeCount`, the out-of-bounds penalty (`BallLie` 5) | the same |
+
+**The fairway check** runs with `BallLie` final and the shot's stroke already counted
+(`IncrementStrokeCount` runs when the swing commits, at `$AC77`). It sets bit
+`GameProgress` of the current player's stats when `CurrentHoleStrokes` is 1, `Par`
+(`$0109`) is at least 4, and `BallLie` is 0 (fairway) or 6 (green). A water or
+out-of-bounds tee shot misses: its penalty is added later, at `$8641`/`$866F`. A whiff
+(`LD_AC44`) counts its stroke and leaves the ball on the tee, so the next shot is stroke
+2. A hole-out takes `$832E` instead and never reaches the check.
+
+**The penalty trampoline** notes `CurrentHoleStrokes`, calls the real
+`IncrementStrokeCount`, and counts a penalty only if the stroke count went up, so the
+game's own refusals apply: the CPU flag in `$D5`, `MaybeForceStrokeCountMask`, the
+50-stroke cap. A vanilla quirk worth knowing: `IncrementStrokeCount` also adds a putt when
+`MaybeIsPuttingFlag` is set, so a putt into the water already counts as a putt and a
+stroke.
+
+### Save and continue
+
+The game saves the round after every shot (`$867D JSR LDA17` → `LD94C` → bank 9 `$AE31`),
+into a 50-byte header per save slot at `$61CA + 50 * slot` with no room to spare. CONTINUE
+restores it at round setup (`$80FC` → `LD95B` → bank 9 `$AEEC`), after the reset at
+`$80CE`. Counters held only in RAM would be lost on a continue; counters written straight
+to battery RAM would drift from the strokes whenever a shot is replayed after a power cut.
+
+So the far-call targets inside `LD94C` (`$D94F`) and `LD95B` (`$D95E`) point at bank 2
+wrappers instead. Each makes the vanilla call, then copies the six live bytes to or from a
+snapshot for the save slot (`LD962` gives it). Only slots 0 (one player) and 1 (two
+players) are snapshotted: stroke play on course 1, all a `menu_trim`med ROM can reach. On
+a ROM without `menu_trim`, a round on another course still counts, but a continue there
+restores no stats.
+
+### SRAM
+
+`$6C0E`-`$6C1F`, the one gap in the vanilla save layout: after the last save slot's
+per-hole scores (`$6BFC` + 18) and before the first tournament region (`$6C20`). Nothing
+references it statically. Outside the QR scratch RAM (`$6F9C`+), which matters because
+player 2's code is built after player 1's matrix has been written.
+
+| Address | Bytes | Use |
+|---|---|---|
+| `$6C0E` | 3 | player 1's live stats |
+| `$6C11` | 3 | player 2's live stats |
+| `$6C14` | 6 | save slot 0's snapshot of the live bytes |
+| `$6C1A` | 6 | save slot 1's snapshot |
+
+### Space
+
+Routines in bank 2 at `$A400`, 191 bytes, after the QR image. Two trampolines, 33 bytes, at
+`$DCC7` in the fixed bank, right after the QR trampoline in the same dead greens pointer
+slots, so the patch requires `COURSE_MIRRORS_PATCH`. It writes nothing practice swing,
+mercy tap-in, seeded wind or green shortcut write.
+
+### Tested
+
+`tests/unit/test_round_stats.py` runs the routines and trampolines, as assembled, under
+py65 with the game routines they reach stubbed at their real addresses: every lie, par
+and stroke count for the fairway check, each hole's bit, both players, the penalty cap and
+its refusals, the mode gates, and save, reset and continue.
+`tests/integration/test_round_stats_rom.py` checks every splice's original against the
+vanilla ROM. Confirmed on an emulator; see below.
 
 ## ROM investigation
 
@@ -755,6 +886,32 @@ far call lands, and the screen the display layer draws is scannable off a real d
 The one thing still unobserved is whether anything the scorecard's input wait tail-calls
 (`$D83C`) leaves the PPU in a state the QR screen has to undo beyond its own `$CDB3` /
 `$CDBE` pair — and the scan above is evidence that it does not.
+
+### Round stats, confirmed on an emulator
+
+A build version 5 ROM, finished signed in from a local site, played a two-player round
+faked to its last hole as in "Testing a build without playing eighteen holes" (jdharms,
+2026-10-01), with `GameProgress` written before the first tee shot. Player 1 drove onto
+the fairway and `$6C10` became `$02`; player 2 drove into a hazard and `$6C13` became
+`$04`. Mid-hole the round was saved and quit, the emulator power-cycled, and CONTINUE
+brought both bytes back. A write breakpoint on `$6C0E`-`$6C1F`, conditioned on a PC
+outside the routines at `$A400`-`$A4BE`, never fired. The two codes read:
+
+```
+https://nesopengolf.com/s/AgN4vmFCmQGaVM9-PQAyMjIyMjIyMjIyMjIyMjIyMkIAAAJShgsl
+https://nesopengolf.com/s/AgN4vmFCmQGaVM9-PQEyMjIyMjIyMjIyMjIyMjIyMlIAAARuW8Hq
+```
+
+Both are version 2 and verify with only their own slot's key. Slot 0 carries a fairway on
+hole 18 and no penalties, slot 1 no fairways and one penalty, its sixth stroke on hole 18.
+
+After a later two-player save, `$6C0E`-`$6C1F` read `00 00 02 00 00 04`, then six
+zeros, then `00 00 02 00 00 04`. Slot 1's snapshot matched the live bytes and slot 0's was
+untouched, so `LD962` gives two-player stroke play save slot 1, as its static reading
+says.
+
+That confirms the fairway and penalty hooks, that two-player stroke play saves to slot 1
+and comes back on CONTINUE, and that nothing else writes the gap.
 
 ## Open Questions
 

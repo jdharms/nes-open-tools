@@ -15,7 +15,14 @@ import pytest
 
 from golf.qr import encoder, nes, sample, submission, tables
 from golf.qr.decode import DECODERS
-from golf.qr.payload import HoleRecord, RoundPayload, verify
+from golf.qr.payload import (
+    PAYLOAD_LEN,
+    URL_LEN,
+    HoleRecord,
+    RoundPayload,
+    pack_stats,
+    verify,
+)
 from golf.qr.port import build, layout, rom_bytes
 from golf.qr.port.sim import Machine
 from golf.qr.render import render_screen
@@ -48,6 +55,7 @@ def staged(program, round_payload: RoundPayload, key: bytes, slot: int = 0) -> M
         [(hole.strokes, hole.putts) for hole in round_payload.holes],
         player=slot,
         player_count=1 if slot else 0,
+        stats=round_payload.stats(),
     )
     return machine
 
@@ -82,7 +90,7 @@ def test_payload_and_mac_match_the_oracle(program, rounds) -> None:
     for round_payload, key in rounds:
         machine = staged(program, round_payload, key)
         machine.call("QrBuildPayload", a=0)
-        built = machine.read(layout.PAYLOAD, 36)
+        built = machine.read(layout.PAYLOAD, PAYLOAD_LEN)
         assert built == round_payload.to_bytes(key)
         assert verify(built, key)
 
@@ -92,7 +100,7 @@ def test_url_matches_the_oracle(program, rounds) -> None:
         machine = staged(program, round_payload, key)
         machine.call("QrBuildPayload", a=0)
         machine.call("QrBuildUrl")
-        url = machine.read(layout.URL, 74).decode("ascii")
+        url = machine.read(layout.URL, URL_LEN).decode("ascii")
         assert url == round_payload.to_url(key)
 
 
@@ -175,10 +183,12 @@ def test_player_slot_one_uses_its_own_id_key_and_scores(program, rounds) -> None
         player_id=round_payload.player_id,
         holes=round_payload.holes,
         player_slot=1,
+        fairways=round_payload.fairways,
+        penalty_strokes=round_payload.penalty_strokes,
     )
     machine = staged(program, slot_one, key, slot=1)
     machine.call("QrBuildPayload", a=1)
-    assert machine.read(layout.PAYLOAD, 36) == slot_one.to_bytes(key)
+    assert machine.read(layout.PAYLOAD, PAYLOAD_LEN) == slot_one.to_bytes(key)
 
 
 def test_the_two_slots_produce_different_codes(program, rounds) -> None:
@@ -190,13 +200,15 @@ def test_the_two_slots_produce_different_codes(program, rounds) -> None:
     machine.write(program.symbol("QrMacKey"), bytes(range(16)))
     first = [(4, 2)] * 18
     second = [(5, 1)] * 18
-    machine.set_round(first, player=0, player_count=1)
-    machine.set_round(second, player=1, player_count=1)
+    stats_one = pack_stats((True,) * 9 + (False,) * 9, 2)
+    stats_two = pack_stats((False,) * 9 + (True,) * 9, 7)
+    machine.set_round(first, player=0, player_count=1, stats=stats_one)
+    machine.set_round(second, player=1, player_count=1, stats=stats_two)
 
     machine.call("QrBuildPayload", a=0)
-    payload_one = machine.read(layout.PAYLOAD, 36)
+    payload_one = machine.read(layout.PAYLOAD, PAYLOAD_LEN)
     machine.call("QrBuildPayload", a=1)
-    payload_two = machine.read(layout.PAYLOAD, 36)
+    payload_two = machine.read(layout.PAYLOAD, PAYLOAD_LEN)
 
     assert payload_one[9:13] == b"\x01\x02\x03\x04"
     assert payload_two[9:13] == b"\x05\x06\x07\x08"
@@ -204,6 +216,8 @@ def test_the_two_slots_produce_different_codes(program, rounds) -> None:
     assert payload_two[13] == 1
     assert payload_one[14:32] == bytes([0x32]) * 18  # strokes 4, putts 2
     assert payload_two[14:32] == bytes([0x41]) * 18  # strokes 5, putts 1
+    assert payload_one[32:35] == stats_one
+    assert payload_two[32:35] == stats_two
     assert verify(payload_one, bytes(range(8)))
     assert verify(payload_two, bytes(range(8, 16)))
 
@@ -238,6 +252,15 @@ def test_hole_records_clamp_the_way_the_oracle_does(
         assert HoleRecord(strokes, min(putts, strokes)).pack() == expected
 
 
+def test_the_round_stats_are_copied_as_kept(program) -> None:
+    """The bytes `round_stats` keeps are already in wire order."""
+    machine = Machine(program)
+    machine.write(program.symbol("QrMacKey"), bytes(16))
+    machine.set_round([(4, 2)] * 18, stats=bytes([0xA5, 0x5A, 0xFF]))
+    machine.call("QrBuildPayload", a=0)
+    assert machine.read(layout.PAYLOAD + 32, 3) == bytes([0xA5, 0x5A, 0xFF])
+
+
 def test_a_clamped_round_still_matches_the_oracle(program) -> None:
     """A disastrous round is where the ROM and the oracle could disagree."""
     holes = tuple(HoleRecord(strokes=20, putts=9) for _ in range(18))
@@ -247,7 +270,7 @@ def test_a_clamped_round_still_matches_the_oracle(program) -> None:
     key = bytes(range(100, 108))
     machine = staged(program, round_payload, key)
     machine.call("QrBuildPayload", a=0)
-    assert machine.read(layout.PAYLOAD, 36) == round_payload.to_bytes(key)
+    assert machine.read(layout.PAYLOAD, PAYLOAD_LEN) == round_payload.to_bytes(key)
 
 
 # --------------------------------------------------------------------------

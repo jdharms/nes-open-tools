@@ -2,14 +2,19 @@
 {% import "_scorecard.html" as scorecard %}
 {% block title %}{{ t_plain("round.page_title", words=round.magic_words|join(" ")) }}{% endblock %}
 {% block content %}
-  {# one nine as a table of its own; the back nine's also carries the round's totals #}
+  {# one nine as a table of its own; the back nine's also carries the round's totals. A
+     round from a ROM that records fairways (protocol version 2) has a fairway column. #}
   {% macro nine_table(nine, total_label, totals=none) %}
-    <table class="nine striped">
+    {% set fairways = round.stats_recorded %}
+    <table class="nine striped{% if fairways %} with-fairways{% endif %}">
       <colgroup>
         <col class="hole">
         <col class="par">
         <col class="strokes">
         <col class="putts">
+        {% if fairways %}
+          <col class="fairway">
+        {% endif %}
       </colgroup>
       <thead>
         <tr>
@@ -17,6 +22,9 @@
           <th scope="col" class="num">{{ t("round.holes.par") }}</th>
           <th scope="col" class="num strokes">{{ t("round.holes.strokes") }}</th>
           <th scope="col" class="num">{{ t("round.holes.putts") }}</th>
+          {% if fairways %}
+            <th scope="col" class="fairway">{{ t("round.holes.fairway") }}</th>
+          {% endif %}
         </tr>
       </thead>
       <tbody>
@@ -26,6 +34,15 @@
             <td class="num">{{ hole.par }}</td>
             <td class="num strokes{{ scorecard.to_par(hole.strokes, hole.par) }}">{{ scorecard.score_mark(hole.strokes, hole.par) }}</td>
             <td class="num">{{ hole.putts }}</td>
+            {% if fairways %}
+              <td class="fairway" data-fairway="{{ hole.fairway }}">
+                {%- if hole.fairway == "hit" -%}
+                  {{ t("round.holes.fairway_hit") }}
+                {%- elif hole.fairway == "miss" -%}
+                  {{ t("round.holes.fairway_missed") }}
+                {%- endif -%}
+              </td>
+            {% endif %}
           </tr>
         {% endfor %}
       </tbody>
@@ -35,6 +52,13 @@
           <td class="num">{{ nine.par }}</td>
           <td class="num strokes{{ scorecard.to_par(nine.strokes, nine.par) }}">{{ nine.strokes }}</td>
           <td class="num">{{ nine.putts }}</td>
+          {% if fairways %}
+            <td class="fairway"
+                data-fairways-hit="{{ nine.fairways_hit }}"
+                data-fairways-possible="{{ nine.fairways_possible }}">
+              {{- t("round.holes.fairways_count", hit=nine.fairways_hit, possible=nine.fairways_possible) -}}
+            </td>
+          {% endif %}
         </tr>
         {% if totals %}
           <tr>
@@ -42,6 +66,13 @@
             <td class="num">{{ totals.total_par }}</td>
             <td class="num strokes{{ scorecard.to_par(totals.total_strokes, totals.total_par) }}">{{ totals.total_strokes }}</td>
             <td class="num">{{ totals.total_putts }}</td>
+            {% if fairways %}
+              <td class="fairway"
+                  data-fairways-hit="{{ totals.fairways_hit }}"
+                  data-fairways-possible="{{ totals.fairways_possible }}">
+                {{- t("round.holes.fairways_count", hit=totals.fairways_hit, possible=totals.fairways_possible) -}}
+              </td>
+            {% endif %}
           </tr>
         {% endif %}
       </tfoot>
@@ -62,6 +93,12 @@
     {{ nine_table(round.front, t("round.holes.front_total")) }}
     {{ nine_table(round.back, t("round.holes.back_total"), round) }}
   </div>
+  {% if round.stats_recorded %}
+    <p class="penalty-strokes"
+       data-penalty-strokes="{{ round.penalty_strokes }}">
+      {{- t("round.penalty_strokes", count=round.penalty_strokes) -}}
+    </p>
+  {% endif %}
   {% if round.recorded %}
     {# arrived from the scan that recorded this round: confirm it once, then leave the address
    bar on the bare permalink, so a reload or a copied link is the plain scorecard #}

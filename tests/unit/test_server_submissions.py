@@ -74,6 +74,12 @@ class Player:
     def scan(self, slot: int = 0, **changes) -> str:
         return base64url_encode(self.payload(slot, **changes))
 
+    def scan_with_version_byte(self, version: int, sent_as: int = 2) -> str:
+        """A payload built as version `sent_as`, its first byte then rewritten."""
+        data = bytearray(self.payload(protocol_version=sent_as))
+        data[0] = version
+        return base64url_encode(bytes(data))
+
 
 @pytest.fixture
 def seed_id(db, manifest):
@@ -103,11 +109,51 @@ def test_a_verified_scan_records_the_round(db, seed_id, alice):
     assert (recorded.total_strokes, recorded.total_putts) == (4 * 17 + 6, 2 * 17 + 3)
     assert recorded.received_at == "2026-09-17T12:00:00Z"
     assert not recorded.flagged
-    assert recorded.holes[0] == RoundHole(1, 4, 2)
-    assert recorded.holes[-1] == RoundHole(18, 6, 3)
+    assert recorded.holes[0] == RoundHole(1, 4, 2, fairway_hit=False)
+    assert recorded.holes[-1] == RoundHole(18, 6, 3, fairway_hit=False)
     assert len(recorded.holes) == 18
+    assert recorded.penalty_strokes == 0
     [row] = round_rows(db)
     assert row["payload"] == alice.payload()
+
+
+def test_a_scan_records_fairways_and_penalties(db, alice):
+    fairways = tuple(hole % 3 == 0 for hole in range(18))
+    recorded = submit_scan(db, alice.scan(fairways=fairways, penalty_strokes=4)).round
+    assert tuple(hole.fairway_hit for hole in recorded.holes) == fairways
+    assert recorded.penalty_strokes == 4
+
+
+def test_a_hole_in_one_on_a_par_four_or_five_is_stored_as_a_fairway(
+    db, manifest, alice
+):
+    """
+    The ROM sends no bit for a tee shot that goes in. Stats read the stored value, so a
+    one-stroke par 4 or 5 is stored as a hit; a par 3 is never one. The stored payload
+    keeps the bit as sent.
+    """
+    pars = [slot.par for slot in manifest.course.holes]
+    assert {3, 4} <= set(pars)
+    holes = tuple(HoleRecord(1, 0) for _ in range(18))
+    recorded = submit_scan(db, alice.scan(holes=holes)).round
+    assert [hole.fairway_hit for hole in recorded.holes] == [par >= 4 for par in pars]
+    [row] = round_rows(db)
+    assert RoundPayload.from_bytes(row["payload"])[0].fairways == (False,) * 18
+
+
+def test_a_version_one_scan_records_no_fairways_or_penalties(db, alice):
+    """ROMs built before protocol version 2 still send version 1, accepted for good."""
+    text = alice.scan(protocol_version=1)
+    assert len(text) == 48
+    result = submit_scan(db, text, now="2026-09-17T12:00:00Z")
+    assert result.new
+    recorded = result.round
+    assert (recorded.total_strokes, recorded.total_putts) == (4 * 17 + 6, 2 * 17 + 3)
+    assert {hole.fairway_hit for hole in recorded.holes} == {None}
+    assert recorded.penalty_strokes is None
+    [row] = round_rows(db)
+    assert row["penalty_strokes"] is None
+    assert len(row["payload"]) == 36
 
 
 def test_scanning_the_same_round_again_finds_it_recorded(db, alice):
@@ -162,8 +208,6 @@ def test_text_that_is_not_a_payload_is_malformed(db, alice, text):
 @pytest.mark.parametrize(
     "changes",
     [
-        {"protocol_version": 2},
-        {"protocol_version": 0},
         {"reserved_flags": 1},
         {"slot": 2},
         {"slot": 3},
@@ -174,6 +218,19 @@ def test_a_signed_payload_this_protocol_does_not_send_is_malformed(db, alice, ch
     key = alice.entry.keys[0]
     with pytest.raises(ScanError) as rejected:
         submit_scan(db, alice.scan(slot=0, key=key, player_slot=slot, **changes))
+    assert rejected.value.reason == MALFORMED
+
+
+@pytest.mark.parametrize(
+    ("version", "sent_as"),
+    [(0, 2), (1, 2), (3, 2), (2, 1), (0, 1)],
+)
+def test_a_version_byte_its_length_does_not_imply_is_malformed(
+    db, alice, version, sent_as
+):
+    """Each version has its own length, so a 52-character scan is version 2 or nothing."""
+    with pytest.raises(ScanError) as rejected:
+        submit_scan(db, alice.scan_with_version_byte(version, sent_as))
     assert rejected.value.reason == MALFORMED
 
 
@@ -250,7 +307,7 @@ def test_a_rejection_logs_its_exact_cause(db, manifest, seed_id, alice, caplog):
     cases = {
         "A" * 47: "malformed: length",
         "!" * 48: "malformed: alphabet",
-        alice.scan(protocol_version=2): "malformed: protocol version",
+        alice.scan_with_version_byte(1): "malformed: protocol version",
         alice.scan(reserved_flags=1): "malformed: reserved flags",
         alice.scan(player_slot=2, key=alice.entry.keys[0]): "malformed: slot",
         alice.scan(seed_id=bytes(8)): "unfinished: zero seed id",

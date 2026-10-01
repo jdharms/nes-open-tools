@@ -371,6 +371,28 @@ table.nine col.strokes {
   width: 34%;
 }
 
+/* A round that records fairways has a fifth column; the widths make room for it. */
+table.nine.with-fairways col.hole,
+table.nine.with-fairways col.putts {
+  width: 18%;
+}
+
+table.nine.with-fairways col.par {
+  width: 14%;
+}
+
+table.nine.with-fairways col.strokes {
+  width: 28%;
+}
+
+table.nine.with-fairways col.fairway {
+  width: 22%;
+}
+
+table.nine .fairway {
+  text-align: center;
+}
+
 /* Strokes against par: over par red, under par green, level par left as it is. Also sets
    --score-color, a custom property (unlike currentColor, unaffected by the digit's own
    color below) that the scorecard decorators borrow their ring color from. The admin round

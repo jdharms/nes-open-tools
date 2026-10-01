@@ -301,12 +301,33 @@ def seed_view(
     )
 
 
+#: What a hole's fairway cell shows, as its `data-fairway` value
+FAIRWAY_HIT = "hit"
+FAIRWAY_MISSED = "miss"
+#: a par 3, which has no fairway to hit
+FAIRWAY_NONE = "na"
+
+
+def fairway_result(fairway_hit: bool | None, par: int) -> str | None:
+    """
+    A hole's fairway as the round page shows it, from what `server/rounds.py` stored, or
+    None for a round that did not record fairways (protocol version 1).
+    """
+    if fairway_hit is None:
+        return None
+    if par < 4:
+        return FAIRWAY_NONE
+    return FAIRWAY_HIT if fairway_hit else FAIRWAY_MISSED
+
+
 @dataclass(frozen=True)
 class RoundHoleView:
     number: int
     par: int
     strokes: int
     putts: int
+    #: FAIRWAY_HIT, FAIRWAY_MISSED or FAIRWAY_NONE; None when the round did not record it
+    fairway: str | None = None
 
 
 @dataclass(frozen=True)
@@ -326,6 +347,14 @@ class NineView:
     @property
     def putts(self) -> int:
         return sum(hole.putts for hole in self.holes)
+
+    @property
+    def fairways_hit(self) -> int:
+        return sum(hole.fairway == FAIRWAY_HIT for hole in self.holes)
+
+    @property
+    def fairways_possible(self) -> int:
+        return sum(hole.fairway in (FAIRWAY_HIT, FAIRWAY_MISSED) for hole in self.holes)
 
 
 @dataclass(frozen=True)
@@ -347,6 +376,21 @@ class RoundView:
     total_par: int
     total_strokes: int
     total_putts: int
+    #: water and out-of-bounds strokes; None when the round did not record them, which is
+    #: also when its holes carry no fairways (protocol version 1)
+    penalty_strokes: int | None = None
+
+    @property
+    def stats_recorded(self) -> bool:
+        return self.penalty_strokes is not None
+
+    @property
+    def fairways_hit(self) -> int:
+        return self.front.fairways_hit + self.back.fairways_hit
+
+    @property
+    def fairways_possible(self) -> int:
+        return self.front.fairways_possible + self.back.fairways_possible
 
 
 def round_view(
@@ -355,7 +399,13 @@ def round_view(
     """A recorded round as its permalink shows it; `recorded` marks the redirect from its scan."""
     course = row.manifest.course
     holes = tuple(
-        RoundHoleView(hole.position, slot.par, hole.strokes, hole.putts)
+        RoundHoleView(
+            hole.position,
+            slot.par,
+            hole.strokes,
+            hole.putts,
+            fairway_result(hole.fairway_hit, slot.par),
+        )
         for hole, slot in zip(scorecard.holes, course.holes, strict=True)
     )
     return RoundView(
@@ -371,6 +421,7 @@ def round_view(
         total_par=course.par,
         total_strokes=scorecard.total_strokes,
         total_putts=scorecard.total_putts,
+        penalty_strokes=scorecard.penalty_strokes,
     )
 
 

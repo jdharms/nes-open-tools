@@ -1259,8 +1259,13 @@ def scan_path(
     slot: int = 0,
     strokes: int = 4,
     key=None,
+    putts: int = 2,
+    **changes,
 ) -> str:
-    """The path a ROM's QR code opens: username's entry in the seed, every hole `strokes` with 2 putts."""
+    """
+    The path a ROM's QR code opens: username's entry in the seed, every hole `strokes` with
+    `putts` putts. `changes` go to the `RoundPayload`: a protocol version, fairways, penalties.
+    """
     with app_state(client).db.transaction() as conn:
         row = conn.execute(
             """
@@ -1273,8 +1278,9 @@ def scan_path(
     round_payload = RoundPayload(
         seed_id=row["qr_seed_id"].to_bytes(8, "big"),
         player_id=row["player_id"].to_bytes(4, "big"),
-        holes=(HoleRecord(strokes, 2),) * 18,
+        holes=(HoleRecord(strokes, putts),) * 18,
         player_slot=slot,
+        **changes,
     )
     signing_key = (
         key
@@ -1396,6 +1402,63 @@ def test_strokes_are_marked_against_par(fake_builder):
     # column's class
     assert page.count('<td class="num">72</td>') == 1
     assert page.count('<td class="num strokes">72</td>') == 1
+
+
+def fairway_cells(page: str) -> list[str]:
+    return re.findall(r'<td class="fairway" data-fairway="(\w+)">', page)
+
+
+def test_a_round_shows_each_holes_fairway_and_the_penalties(fake_builder):
+    with dev_client(fake_builder) as test_client:
+        seed_id = entered_seed(test_client, "alice")
+        pars = [hole.par for hole in fake_builder.built.course.holes]
+        # the ROM sets a bit on every par 4 and 5 but the first two, and never on a par 3
+        long_holes = [i for i, par in enumerate(pars) if par >= 4]
+        hits = tuple(i in long_holes[2:] for i in range(18))
+        page = test_client.get(
+            scan_path(test_client, seed_id, "alice", fairways=hits, penalty_strokes=3)
+        ).text
+    expected = [
+        "na" if par < 4 else "hit" if hits[i] else "miss" for i, par in enumerate(pars)
+    ]
+    assert fairway_cells(page) == expected
+    possible = len(long_holes)
+    counts = re.findall(
+        r'data-fairways-hit="(\d+)"\s+data-fairways-possible="(\d+)"', page
+    )
+    # Out, In, then the round; the two misses are both on the front nine's first holes
+    front = sum(par >= 4 for par in pars[:9])
+    assert front >= 2
+    assert [tuple(map(int, count)) for count in counts] == [
+        (front - 2, front),
+        (possible - front, possible - front),
+        (possible - 2, possible),
+    ]
+    assert re.search(r'data-penalty-strokes="3"', page)
+    assert 'class="nine striped with-fairways"' in page
+
+
+def test_a_tee_shot_that_goes_in_counts_as_a_fairway(fake_builder):
+    """It never comes to rest, so the ROM sends no bit for it; the site counts it."""
+    with dev_client(fake_builder) as test_client:
+        seed_id = entered_seed(test_client, "alice")
+        pars = [hole.par for hole in fake_builder.built.course.holes]
+        page = test_client.get(
+            scan_path(test_client, seed_id, "alice", strokes=1, putts=0)
+        ).text
+    assert fairway_cells(page) == ["na" if par < 4 else "hit" for par in pars]
+
+
+def test_a_version_one_round_shows_no_fairways_or_penalties(fake_builder):
+    """Recorded before ROMs counted them: nothing shown, rather than misses and a zero."""
+    with dev_client(fake_builder) as test_client:
+        seed_id = entered_seed(test_client, "alice")
+        path = scan_path(test_client, seed_id, "alice", protocol_version=1)
+        assert len(path.removeprefix("/s/")) == 48
+        page = test_client.get(path).text
+    assert 'class="nine striped"' in page
+    assert "data-fairway" not in page
+    assert "data-penalty-strokes" not in page
 
 
 def test_far_under_par_gets_a_second_or_third_ring(fake_builder):

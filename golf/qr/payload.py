@@ -1,26 +1,32 @@
 """
-The 36-byte scorecard submission payload and its URL encoding.
+The scorecard submission payload and its URL encoding.
 
-Layout (see `docs/scorecard_qr.md`):
+Layout of protocol version 2, the one the ROM builds (see `docs/scorecard_qr.md`):
 
     byte  0      protocol version
     bytes 1-8    seed ID
     bytes 9-12   player ID
     byte  13     flags (bits 0-1 player slot, 2-7 reserved)
     bytes 14-31  hole records, one per hole, holes 1-18
-    bytes 32-35  HalfSipHash-2-4-32 over bytes 0-31
+    bytes 32-34  round stats: fairway bits for holes 1-18, LSB first from byte
+                 32, then penalty strokes in bits 2-7 of byte 34
+    bytes 35-38  HalfSipHash-2-4-32 over bytes 0-34
+
+Version 1 is the same without the round stats: 36 bytes, the MAC over bytes
+0-31. Released ROMs carry it, so it decodes for good, with the stats as `None`.
 
 A hole record packs `strokes - 1` in the high nibble and `putts` in the low
 nibble, so strokes are representable 1-16 and putts 0-15. Both clamp; whether
 clamping happened is exposed rather than swallowed, since a clamped stroke
-count makes the round total wrong.
+count makes the round total wrong. Penalty strokes clamp at 63 the same way.
 """
 
 from dataclasses import dataclass
 
 from golf.qr.halfsiphash import halfsiphash
 
-PROTOCOL_VERSION = 1
+#: The version the ROM builds. Every version in `PAYLOAD_LENS` still decodes.
+PROTOCOL_VERSION = 2
 
 URL_PREFIX = "https://nesopengolf.com/s/"
 
@@ -30,13 +36,25 @@ KEY_LEN = 8
 HOLE_COUNT = 18
 
 MAC_LEN = 4
-BODY_LEN = 32
-PAYLOAD_LEN = BODY_LEN + MAC_LEN
+#: Bytes 32-34 of a version 2 payload.
+STATS_LEN = 3
+MAX_PENALTY_STROKES = 63
 
-#: Length of the base64url text, and of the whole URL. Both are constants the
-#: 6502 port bakes in, so they are asserted rather than computed on cart.
-BASE64_LEN = 48
+#: Payload length per supported protocol version. Each is a multiple of 3, so
+#: base64url never pads and the URL length is fixed per version.
+PAYLOAD_LENS = {1: 36, 2: 39}
+
+#: The current version's lengths: constants the 6502 port bakes in, so they are
+#: asserted rather than computed on cart.
+PAYLOAD_LEN = PAYLOAD_LENS[PROTOCOL_VERSION]
+BODY_LEN = PAYLOAD_LEN - MAC_LEN
+BASE64_LEN = PAYLOAD_LEN // 3 * 4
 URL_LEN = len(URL_PREFIX) + BASE64_LEN
+
+#: base64url text length -> the protocol version that produces it.
+VERSION_BY_BASE64_LEN = {
+    length // 3 * 4: version for version, length in PAYLOAD_LENS.items()
+}
 
 #: How the hole-record byte is split. 4 gives strokes 1-16 and putts 0-15; 5
 #: would give strokes 1-32 and putts 0-7. This is the only place the split is
@@ -66,6 +84,42 @@ def unpack_hole(value: int, stroke_bits: int = STROKE_BITS) -> tuple[int, int]:
     """Inverse of `pack_hole`, as (strokes, putts)."""
     putt_bits = 8 - stroke_bits
     return ((value >> putt_bits) + 1, value & ((1 << putt_bits) - 1))
+
+
+def pack_stats(fairways: tuple[bool, ...], penalty_strokes: int) -> bytes:
+    """
+    The three round-stat bytes: fairway bits for holes 1-18, least significant
+    bit first from the first byte, then penalty strokes, clamped to 63, in the
+    top six bits of the third.
+    """
+    if len(fairways) != HOLE_COUNT:
+        raise ValueError(f"expected {HOLE_COUNT} fairway flags, got {len(fairways)}")
+    bits = sum(1 << hole for hole, hit in enumerate(fairways) if hit)
+    bits |= min(penalty_strokes, MAX_PENALTY_STROKES) << HOLE_COUNT
+    return bits.to_bytes(STATS_LEN, "little")
+
+
+def unpack_stats(data: bytes) -> tuple[tuple[bool, ...], int]:
+    """Inverse of `pack_stats`, as (fairways, penalty strokes)."""
+    if len(data) != STATS_LEN:
+        raise ValueError(f"round stats are {STATS_LEN} bytes, got {len(data)}")
+    bits = int.from_bytes(data, "little")
+    fairways = tuple(bool(bits >> hole & 1) for hole in range(HOLE_COUNT))
+    return fairways, bits >> HOLE_COUNT
+
+
+def _check_length(data: bytes) -> int:
+    """A payload's protocol version, once its length is known to match it."""
+    if not data or data[0] not in PAYLOAD_LENS:
+        version = data[0] if data else None
+        raise ValueError(f"unsupported protocol version {version}")
+    version = data[0]
+    if len(data) != PAYLOAD_LENS[version]:
+        raise ValueError(
+            f"a version {version} payload is {PAYLOAD_LENS[version]} bytes, "
+            f"got {len(data)}"
+        )
+    return version
 
 
 def base64url_encode(data: bytes) -> str:
@@ -159,9 +213,17 @@ class RoundPayload:
     holes: tuple[HoleRecord, ...]
     player_slot: int = 0
     protocol_version: int = PROTOCOL_VERSION
-    #: Bits 2-7 of the flags byte. Always zero in protocol version 1, but
-    #: carried so a parsed payload re-serializes to the exact bytes received.
+    #: Bits 2-7 of the flags byte. Always zero so far, but carried so a parsed
+    #: payload re-serializes to the exact bytes received.
     reserved_flags: int = 0
+    #: Fairway hit per hole, holes 1-18. Version 2 on; `None` for a version 1
+    #: payload, which did not record it. Left out of a version 2 payload, it
+    #: means no fairways hit.
+    fairways: tuple[bool, ...] | None = None
+    #: Water and out-of-bounds penalty strokes over the round, as the ROM counts
+    #: them (it clamps at 63). Version 2 on; `None` for version 1, and 0 when
+    #: left out of a version 2 payload.
+    penalty_strokes: int | None = None
 
     def __post_init__(self) -> None:
         if len(self.seed_id) != SEED_ID_LEN:
@@ -180,9 +242,25 @@ class RoundPayload:
             raise ValueError(
                 f"reserved_flags must fit 6 bits, got {self.reserved_flags}"
             )
-        if not 0 <= self.protocol_version <= 0xFF:
+        if self.protocol_version not in PAYLOAD_LENS:
+            raise ValueError(f"unsupported protocol version {self.protocol_version}")
+        if self.protocol_version == 1:
+            if self.fairways is not None or self.penalty_strokes is not None:
+                raise ValueError("a version 1 payload carries no round stats")
+            return
+        if self.fairways is None:
+            object.__setattr__(self, "fairways", (False,) * HOLE_COUNT)
+        if self.penalty_strokes is None:
+            object.__setattr__(self, "penalty_strokes", 0)
+        assert self.fairways is not None and self.penalty_strokes is not None
+        if len(self.fairways) != HOLE_COUNT:
             raise ValueError(
-                f"protocol_version must be a byte, got {self.protocol_version}"
+                f"expected {HOLE_COUNT} fairway flags, got {len(self.fairways)}"
+            )
+        object.__setattr__(self, "fairways", tuple(bool(f) for f in self.fairways))
+        if self.penalty_strokes < 0:
+            raise ValueError(
+                f"penalty strokes cannot be negative, got {self.penalty_strokes}"
             )
 
     @property
@@ -199,6 +277,14 @@ class RoundPayload:
         )
 
     @property
+    def penalty_strokes_clamped(self) -> bool:
+        return (self.penalty_strokes or 0) > MAX_PENALTY_STROKES
+
+    @property
+    def payload_len(self) -> int:
+        return PAYLOAD_LENS[self.protocol_version]
+
+    @property
     def total_strokes(self) -> int:
         return sum(hole.strokes for hole in self.holes)
 
@@ -206,15 +292,22 @@ class RoundPayload:
     def total_putts(self) -> int:
         return sum(hole.putts for hole in self.holes)
 
+    def stats(self) -> bytes:
+        """Bytes 32-34 of a version 2 payload: fairway bits, then penalties."""
+        assert self.fairways is not None and self.penalty_strokes is not None
+        return pack_stats(self.fairways, self.penalty_strokes)
+
     def body(self) -> bytes:
-        """Bytes 0-31: everything the MAC covers."""
+        """Everything the MAC covers: all but the last four bytes."""
         out = bytearray()
         out.append(self.protocol_version)
         out += self.seed_id
         out += self.player_id
         out.append(self.flags)
         out += bytes(hole.pack() for hole in self.holes)
-        assert len(out) == BODY_LEN, len(out)
+        if self.protocol_version >= 2:
+            out += self.stats()
+        assert len(out) == self.payload_len - MAC_LEN, len(out)
         return bytes(out)
 
     def mac(self, key: bytes) -> bytes:
@@ -224,13 +317,11 @@ class RoundPayload:
 
     def to_bytes(self, key: bytes) -> bytes:
         out = self.body() + self.mac(key)
-        assert len(out) == PAYLOAD_LEN, len(out)
+        assert len(out) == self.payload_len, len(out)
         return out
 
     def to_url(self, key: bytes) -> str:
-        url = URL_PREFIX + base64url_encode(self.to_bytes(key))
-        assert len(url) == URL_LEN, len(url)
-        return url
+        return URL_PREFIX + base64url_encode(self.to_bytes(key))
 
     @classmethod
     def from_bytes(cls, data: bytes) -> tuple["RoundPayload", bytes]:
@@ -238,17 +329,21 @@ class RoundPayload:
         Parse a payload. Returns the round and the MAC as sent; the caller
         recomputes the MAC to verify it.
         """
-        if len(data) != PAYLOAD_LEN:
-            raise ValueError(f"payload must be {PAYLOAD_LEN} bytes, got {len(data)}")
+        version = _check_length(data)
+        fairways, penalty_strokes = None, None
+        if version >= 2:
+            fairways, penalty_strokes = unpack_stats(data[32:35])
         payload = cls(
-            protocol_version=data[0],
+            protocol_version=version,
             seed_id=data[1:9],
             player_id=data[9:13],
             player_slot=data[13] & 0x03,
             reserved_flags=(data[13] >> 2) & 0x3F,
             holes=tuple(_unpack_hole(b) for b in data[14:32]),
+            fairways=fairways,
+            penalty_strokes=penalty_strokes,
         )
-        return payload, data[32:36]
+        return payload, data[-MAC_LEN:]
 
     @classmethod
     def from_url(cls, url: str) -> tuple["RoundPayload", bytes]:
@@ -265,12 +360,11 @@ def verify(data: bytes, key: bytes) -> bool:
     a parsed payload: anything the parser would normalize away — reserved flag
     bits, a future protocol version's fields — has to stay covered by the MAC.
     """
-    if len(data) != PAYLOAD_LEN:
-        raise ValueError(f"payload must be {PAYLOAD_LEN} bytes, got {len(data)}")
+    _check_length(data)
     if len(key) != KEY_LEN:
         raise ValueError(f"key must be {KEY_LEN} bytes, got {len(key)}")
-    expected = halfsiphash(data[:BODY_LEN], key, outlen=MAC_LEN)
+    expected = halfsiphash(data[:-MAC_LEN], key, outlen=MAC_LEN)
     diff = 0
-    for a, b in zip(data[BODY_LEN:], expected, strict=True):
+    for a, b in zip(data[-MAC_LEN:], expected, strict=True):
         diff |= a ^ b
     return diff == 0

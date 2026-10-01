@@ -48,7 +48,7 @@ def test_payload_in_a_submission_verifies() -> None:
     item = submission.build(sample.random_round(rng), key)
     assert verify(item.payload, key)
     parsed, _ = RoundPayload.from_url(item.url)
-    assert parsed.body() == item.payload[:32]
+    assert parsed.body() == item.payload[:-4]
 
 
 def test_from_url_matches_build(submissions) -> None:

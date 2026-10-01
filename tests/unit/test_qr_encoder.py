@@ -131,7 +131,7 @@ def test_reed_solomon_output_length() -> None:
 # --------------------------------------------------------------------------
 
 
-@pytest.mark.parametrize("length", [0, 1, 10, 40, 73, 74, 80, 83, 84])
+@pytest.mark.parametrize("length", [0, 1, 10, 40, 73, 74, 78, 80, 83, 84])
 def test_nibble_shift_matches_a_general_bit_packer(length: int) -> None:
     text = bytes(range(length))
     assert encoder.data_codewords(text) == encoder._data_codewords_bitwise(text)
@@ -141,14 +141,14 @@ def test_data_codewords_header_is_the_documented_constant() -> None:
     """The ROM bakes in code word 0 and the low nibble of the count."""
     codewords = encoder.data_codewords(b"x" * URL_LEN)
     assert codewords[0] == 0x44
-    assert codewords[1] >> 4 == 0x0A
+    assert codewords[1] >> 4 == 0x0E
 
 
 def test_data_codewords_pad_tail(urls: list[str]) -> None:
     codewords = encoder.data_codewords(urls[0].encode())
-    # 12 header bits + 74 bytes + 4-bit terminator is 76 whole code words.
+    # 12 header bits + 78 bytes + 4-bit terminator is 80 whole code words.
     assert len(codewords) == encoder.DATA_CODEWORDS
-    assert codewords[76:] == bytes((0xEC, 0x11) * 5)
+    assert codewords[80:] == bytes((0xEC, 0x11) * 3)
 
 
 def test_url_prefix_makes_the_stream_head_constant(urls: list[str]) -> None:

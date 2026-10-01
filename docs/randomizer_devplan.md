@@ -36,8 +36,9 @@ needed:
 
 - **Unfinished.** Run once at generation time: the base patches, the course, seeded
   wind, music, mercy tap-in, the green detail view and scorecard shortcuts, the magic
-  words on the menus and scorecard, signpost, and the
-  scorecard QR image with its credential placeholders unfilled. The manifest also carries
+  words on the menus and scorecard, signpost, the round stats the QR code sends (fairways
+  hit and penalty strokes), and the scorecard QR image with its credential placeholders
+  unfilled. The manifest also carries
   the seed's SRAM magic, which only finishing writes. The result is stored as an IPS blob
   on the seed row. The server rejects QR code submissions with all-zero seed IDs, so an
   unfinished ROM cannot cause downstream problems.
@@ -135,8 +136,8 @@ cannot submit.
 | `seed_holes` | seed, position 1-18, catalog hole id, transforms, par, wind seed, pin index, wind direction anchor, wind speed anchor. Pure denormalization of the manifest for SQL stats; a migration can always backfill it |
 | `entries` | One per (seed, user), unique. The player's choices at their latest download (name, clubs), one MAC key per slot, created_at, updated_at |
 | `download_settings` | One per user: the player's saved download settings as a JSON `SavedSettings` record, and updated_at. Written by a signed-in download under the saving rule and by `/me`; deleted by "forget my settings" (`docs/planning/download_settings.md`) |
-| `rounds` | A scan the server accepted: a unique `public_id`, the base62 id of its `/r/<id>` permalink; entry, slot, raw payload, total strokes, total putts, received_at, flagged, with an admin-only flag note. Unique on (entry, slot), which is the first-submission rule |
-| `round_holes` | round, position, strokes, putts. Joins to `seed_holes` on (seed, position) |
+| `rounds` | A scan the server accepted: a unique `public_id`, the base62 id of its `/r/<id>` permalink; entry, slot, raw payload (36 bytes for QR protocol version 1, 39 for version 2), total strokes, total putts, penalty strokes (NULL for a version 1 round, which did not record them), received_at, flagged, with an admin-only flag note. Unique on (entry, slot), which is the first-submission rule |
+| `round_holes` | round, position, strokes, putts, and whether the tee shot found the fairway: the ROM's bit, or a hole in one on a par 4 or longer (NULL for a version 1 round). Joins to `seed_holes` on (seed, position) |
 | `voided_rounds` | A round an admin voided: its `public_id`, entry, slot, the payload (unique, and holding every hole, so no hole rows), received_at, its flag and note, voided_at, an admin-only note. A scan of a voided payload is refused; restoring moves it back while its slot is empty |
 | `timings` | One row per request: created_at, request ID (indexed for lookup from `X-Request-Id`), the matched route template, method, status, total milliseconds, an outcome naming what a status cannot tell apart, and a JSON detail holding the phases inside the request. Written in batches by `server/timings.py`, kept 30 days |
 | `timing_day` | The daily rollup of `timings`, per day, route and method: count, errors and the p50, p90, p99 and maximum of that day. Kept for good. Each row's percentiles are exact for its own day and are never re-aggregated into a longer window |
@@ -229,7 +230,7 @@ qr_seed_id INTEGER NOT NULL UNIQUE CHECK (qr_seed_id BETWEEN 1 AND 8392993658683
 | `GET /h/<id>` | Seed page: the magic words, hole list with source, par and yards, totals, music, settings, required ROMs, recorded rounds (collapsed until the viewer has recorded one of their own), and either the download form or a withdrawn notice |
 | `GET /h/<id>.json` | The manifest |
 | `POST /h/<id>/patch.ips` | Name, clubs, BGM, swing, putt and spin, and ROM hashes in; the finished IPS out, with the saved settings in the `golf_download` cookie and, signed in, on the account. Signed in, upserts the entry and finishes with credentials; signed out, finishes as a guest. A withdrawn seed answers JSON 410 before creating an entry or finishing. The page's script intercepts the form submit, fetches this, patches the ROM from IndexedDB and triggers the download |
-| `GET /s/<48 chars>` | QR submission: decode, verify MAC, record, then 303 to the round's permalink, with `?recorded` for the scan that recorded it. Uncached. A rejection has no round to point at, so it renders here |
+| `GET /s/<52 or 48 chars>` | QR submission, protocol version 2 or 1: decode, verify MAC, record, then 303 to the round's permalink, with `?recorded` for the scan that recorded it. Uncached. A rejection has no round to point at, so it renders here |
 | `GET /r/<id>` | A round's permalink: its scorecard, or 410 and a page of its own once an admin has voided it. An ordinary cacheable page, linked from the seed page, `/me` and a scan |
 | `GET /auth/login`, `GET /auth/callback`, `POST /auth/logout` | Discord sign-in |
 | `GET /me` | The player's entries, rounds and saved download settings. Signed out, redirects to sign-in |

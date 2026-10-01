@@ -12,16 +12,19 @@ from golf.core import rom_utils
 from golf.core.patches import (
     COURSE_MIRRORS_PATCH,
     QR_DISABLE_PATCH,
+    ROUND_STATS_PATCH,
     SCORECARD_QR_PATCH,
     PatchError,
     ScorecardQrPatch,
 )
-from golf.core.patches.qr_credentials import PLACEHOLDERS
+from golf.core.patches.qr_credentials import PLACEHOLDERS, placeholder_offset
 from golf.core.patches.scorecard_qr import (
     EXECUTE_FAR_CALL,
+    PLACEHOLDER_ADDRESSES,
     QR_BANK,
     SCORECARD_WAIT,
     TRAMPOLINE_CPU_ADDR,
+    TRAMPOLINE_ENTRY_BYTES,
     TRAMPOLINE_LIMIT,
     build_trampoline,
 )
@@ -99,8 +102,9 @@ def test_the_trampoline_fits_the_dead_greens_pointer_slots(patch) -> None:
     assert TRAMPOLINE_CPU_ADDR + len(patch.trampoline) <= TRAMPOLINE_LIMIT
 
 
-def test_requires_course_mirrors(patch) -> None:
-    assert list(patch.requires) == [COURSE_MIRRORS_PATCH]
+def test_requires_course_mirrors_and_round_stats(patch) -> None:
+    """The payload copies the fairway and penalty bytes round_stats keeps."""
+    assert list(patch.requires) == [COURSE_MIRRORS_PATCH, ROUND_STATS_PATCH]
 
 
 def test_the_splice_repoints_the_wait_at_the_trampoline(patch) -> None:
@@ -140,3 +144,85 @@ def test_disable_reverts_exactly_the_splice(patch) -> None:
     assert QR_DISABLE_PATCH.prg_offset == patch.splice_offset
     assert QR_DISABLE_PATCH.original == patch.splice_bytes
     assert QR_DISABLE_PATCH.patched == patch.vanilla_splice_bytes
+
+
+# --------------------------------------------------------------------------
+# The finishing contract (ADR 0009)
+#
+# Everything the finishing patches rely on, as literals. Stored unfinished ROMs
+# from every build version under finish ABI 2 have these bytes here, so a change
+# to any of them is a finish ABI bump, not a build version bump.
+# --------------------------------------------------------------------------
+
+
+def test_the_placeholders_are_pinned() -> None:
+    assert PLACEHOLDER_ADDRESSES == {
+        "QrSeedId": 0x8E5F,
+        "QrPlayerId": 0x8E67,
+        "QrMacKey": 0x8E6F,
+    }
+    assert [(symbol, length) for _, symbol, length in PLACEHOLDERS] == [
+        ("QrSeedId", 8),
+        ("QrPlayerId", 8),
+        ("QrMacKey", 16),
+    ]
+    assert port.PATCH_FILL == 0x00
+
+
+def test_the_port_puts_the_placeholders_at_their_pinned_addresses() -> None:
+    program = port.build()
+    for symbol, address in PLACEHOLDER_ADDRESSES.items():
+        assert program.symbol(symbol) == address, symbol
+
+
+def test_finishing_writes_at_the_pinned_addresses() -> None:
+    for _, symbol, _ in PLACEHOLDERS:
+        assert placeholder_offset(symbol) == 2 * 0x4000 + (
+            PLACEHOLDER_ADDRESSES[symbol] - 0x8000
+        )
+
+
+def test_a_port_that_moves_a_placeholder_is_refused(monkeypatch) -> None:
+    monkeypatch.setitem(PLACEHOLDER_ADDRESSES, "QrMacKey", 0x8E70)
+    with pytest.raises(PatchError, match="QrMacKey"):
+        ScorecardQrPatch()
+
+
+def test_the_splice_and_trampoline_shape_are_pinned(patch) -> None:
+    assert patch.splice_offset == 0x3452E
+    assert patch.splice_bytes == bytes([0xBD, 0xDC])
+    assert patch.trampoline_offset == 0x3DCBD
+    shape = bytes(patch.trampoline[:7]) + bytes(patch.trampoline[9:])
+    assert shape == bytes([0x20, 0xBA, 0x85, 0x20, 0x72, 0xD3, 0x02, 0x60])
+    assert list(TRAMPOLINE_ENTRY_BYTES) == [7, 8]
+
+
+class _Rom:
+    """Just enough of a RomWriter for `is_applied`."""
+
+    def __init__(self, contents: dict[int, bytes]) -> None:
+        self.contents = contents
+
+    def read_prg(self, offset: int, length: int) -> bytes:
+        return self.contents[offset][:length]
+
+
+def test_applied_does_not_depend_on_where_the_entry_point_is(patch) -> None:
+    """A ROM from an earlier build version, whose routine sat elsewhere."""
+    moved = build_trampoline(patch.entry + 0x123)
+    rom = _Rom(
+        {patch.splice_offset: patch.splice_bytes, patch.trampoline_offset: moved}
+    )
+    assert patch.is_applied(rom)
+
+
+def test_applied_still_checks_the_trampoline_shape(patch) -> None:
+    broken = bytearray(patch.trampoline)
+    broken[6] = 0x03  # far call into the wrong bank
+    rom = _Rom(
+        {
+            patch.splice_offset: patch.splice_bytes,
+            patch.trampoline_offset: bytes(broken),
+        }
+    )
+    assert not patch.is_applied(rom)

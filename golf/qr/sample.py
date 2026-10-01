@@ -49,4 +49,7 @@ def random_round(
             random_hole(rng, par, disaster=rng.random() < disaster_chance)
             for par in DEFAULT_PARS
         ),
+        # the ROM only ever sets a fairway bit on a par 4 or longer
+        fairways=tuple(par >= 4 and rng.random() < 0.55 for par in DEFAULT_PARS),
+        penalty_strokes=rng.choice((0, 0, 0, 0, 1, 1, 2, 3)),
     )

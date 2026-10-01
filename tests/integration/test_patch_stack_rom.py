@@ -11,6 +11,7 @@ from golf.core.patches import (
     COURSE_MIRRORS_PATCH,
     MULTI_BANK_CODE_PATCH,
     QR_DISABLE_PATCH,
+    ROUND_STATS_PATCH,
     SCORECARD_QR_PATCH,
     WRAM_EXPANSION_PATCH,
     CompositePatch,
@@ -70,6 +71,7 @@ def full_steps(course) -> list[ROMPatch]:
         CompositePatch("mercy_tap_in", "mercy tap-in at 10", mercy_tap_in_patches(10)),
         seeded_wind_patch("stack"),
         practice_swing_patch(),
+        ROUND_STATS_PATCH,
         SCORECARD_QR_PATCH,
         sram_defaults_patch(
             "RANDO", ["1W", "3W", "5I", "PW", "SW"], bgm=False, sram_magic=0x5244

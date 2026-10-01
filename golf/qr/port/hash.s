@@ -1,9 +1,11 @@
-; HalfSipHash-2-4 with 32-bit output, over the payload's 32-byte body.
+; HalfSipHash-2-4 with 32-bit output, over the payload's 35-byte body.
 ;
-; The message is always exactly 8 whole 32-bit words, so there is no tail-byte
-; path: the spec's final block is the length in the top byte, which for 32
-; bytes is the constant $20000000. outlen is always 4, so the $EE/$DD tweaks
-; and the second set of finalization rounds do not exist here either.
+; The message is always 8 whole 32-bit words and a 3-byte tail. The spec's
+; final block is the tail bytes with the message length in the top byte, so
+; with the length stored just past the body, at QrPayload + 35, the final block
+; is simply a ninth word read in place: there is no separate tail path. The MAC
+; then overwrites that byte. outlen is always 4, so the $EE/$DD tweaks and the
+; second set of finalization rounds do not exist here either.
 ;
 ; State is four little-endian 32-bit words at QrHashState. The helpers take a
 ; destination word offset in X and a source word offset in Y; every one of them
@@ -16,7 +18,7 @@ V2 = 8
 V3 = 12
 
 QrHashCount  = QrHashTemp + 0       ; byte counter inside add/xor
-QrHashOffset = QrHashTemp + 1       ; message offset, 0..28 step 4
+QrHashOffset = QrHashTemp + 1       ; message offset, 0..32 step 4
 QrHashRounds = QrHashTemp + 2       ; finalization round counter
 
 ; --------------------------------------------------------------------------
@@ -146,11 +148,13 @@ QrHashSipRound:
 ; --------------------------------------------------------------------------
 ; The MAC
 ;
-; In:  32 bytes of body at QrPayload, 8-byte key at QrHashKey.
-; Out: 4 bytes of MAC at QrPayload + 32.
+; In:  35 bytes of body at QrPayload, 8-byte key at QrHashKey.
+; Out: 4 bytes of MAC at QrPayload + 35.
 ; --------------------------------------------------------------------------
 
 QrHashMac:
+        lda #QrBodyLen                  ; the final block's top byte
+        sta QrPayload + QrBodyLen
         ; v0 = k0, v1 = k1
         ldx #0
 @key:
@@ -201,19 +205,8 @@ QrHashMac:
         clc
         adc #4
         sta QrHashOffset
-        cmp #32
+        cmp #QrBodyLen + 1              ; eight words, then the final block
         bne @block
-
-        ; The final block is the message length in the top byte: 32 bytes is
-        ; $20000000, so only byte 3 of v3 and then of v0 is touched.
-        lda QrHashState + V3 + 3
-        eor #$20
-        sta QrHashState + V3 + 3
-        jsr QrHashSipRound
-        jsr QrHashSipRound
-        lda QrHashState + V0 + 3
-        eor #$20
-        sta QrHashState + V0 + 3
 
         lda QrHashState + V2            ; v2 ^= $FF (outlen 4)
         eor #$FF
@@ -230,7 +223,7 @@ QrHashMac:
 @out:
         lda QrHashState + V1,x
         eor QrHashState + V3,x
-        sta QrPayload + 32,x
+        sta QrPayload + QrBodyLen,x
         inx
         cpx #4
         bne @out

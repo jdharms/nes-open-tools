@@ -275,8 +275,12 @@ class Machine:
         player: int = 0,
         game_mode: int = 0,
         player_count: int = 0,
+        stats: bytes = bytes(3),
     ) -> None:
-        """Stage a finished round in game RAM the way the game leaves it."""
+        """
+        Stage a finished round in game RAM the way the game leaves it, with
+        `stats` as the three round-stat bytes `round_stats` keeps for the player.
+        """
         self.poke(layout.GAME_PROGRESS, len(holes))
         self.poke(layout.PLAYER_COUNT, player_count)
         self.poke(layout.GOLF_GAME_MODE, game_mode)
@@ -285,6 +289,7 @@ class Machine:
         for index, (stroke, putt) in enumerate(holes):
             self.poke(strokes + index, stroke)
             self.poke(putts + index, putt)
+        self.write(layout.ROUND_STATS + player * layout.ROUND_STATS_STRIDE, stats)
 
     def hold(self, buttons: int, controller: int = 0) -> None:
         """Hold a button mask on one controller, as the NMI would leave it."""

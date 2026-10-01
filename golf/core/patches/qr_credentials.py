@@ -33,7 +33,12 @@ from golf.qr import payload, port
 
 from .byte_patch import BytePatch
 from .composite import CompositePatch
-from .scorecard_qr import QR_BANK, SCORECARD_QR_PATCH, _prg_offset
+from .scorecard_qr import (
+    PLACEHOLDER_ADDRESSES,
+    QR_BANK,
+    SCORECARD_QR_PATCH,
+    _prg_offset,
+)
 
 
 @dataclass(frozen=True)
@@ -123,8 +128,11 @@ PLACEHOLDERS = (
 
 
 def placeholder_offset(symbol: str) -> int:
-    """A placeholder's PRG offset in bank 2."""
-    return _prg_offset(port.build().symbol(symbol), QR_BANK)
+    """
+    A placeholder's PRG offset in bank 2, from its pinned address rather than
+    today's port: the ROM being finished may be from an earlier build version.
+    """
+    return _prg_offset(PLACEHOLDER_ADDRESSES[symbol], QR_BANK)
 
 
 def qr_credentials_patch(credentials: QrCredentials) -> CompositePatch[BytePatch]:

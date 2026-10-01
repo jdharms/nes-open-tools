@@ -44,6 +44,7 @@ from .peach_dress import peach_dress_patch
 from .practice_swing import DEFAULT_HOLD_FRAMES, practice_swing_patch
 from .putting_practice import putting_practice_patches
 from .qr_credentials import load_credentials, qr_credentials_patch
+from .round_stats import ROUND_STATS_PATCH
 from .scorecard_course_name import DEFAULT_NAME as DEFAULT_COURSE_NAME
 from .scorecard_course_name import scorecard_course_name_patch
 from .scorecard_qr import (
@@ -464,6 +465,12 @@ PATCH_SPECS: dict[str, PatchSpec[Any, Any]] = {
             "Show one course name on the scorecard for every course slot (docs/scorecard.md)",
             ScorecardCourseNameParams,
             lambda ctx, params: scorecard_course_name_patch(params.name, params.title),
+        ),
+        PatchSpec(
+            "round_stats",
+            "Count fairways hit and penalty strokes for the scorecard QR (docs/scorecard_qr.md)",
+            NoParams,
+            _fixed(ROUND_STATS_PATCH),
         ),
         PatchSpec(
             "scorecard_qr",
