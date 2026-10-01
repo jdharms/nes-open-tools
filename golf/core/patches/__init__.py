@@ -42,6 +42,11 @@ from .music_import import (
     MusicImportPatch,
     music_import_patch,
 )
+from .peach_dress import (
+    DRESS_COLOR_FAMILIES,
+    DRESS_COLORS,
+    peach_dress_patch,
+)
 from .practice_swing import (
     DEFAULT_HOLD_FRAMES,
     PRACTICE_SWING_OFFSET,
@@ -79,6 +84,11 @@ from .seeded_wind import (
     seeded_wind_patches,
 )
 from .signpost_banner import remove_course_banner_patches
+from .signpost_color import (
+    SIGNPOST_COLOR_FAMILIES,
+    SIGNPOST_COLORS,
+    signpost_color_patch,
+)
 from .signpost_random_banner import random_banner_patches
 from .sram_defaults import Club, sram_defaults_patch, sram_defaults_patches
 from .stack import PatchStack, StackBuild, StackError
@@ -140,6 +150,12 @@ __all__ = [
     "MusicImportPatch",
     "music_import_patch",
     "COURSE_TRACKS",
+    "peach_dress_patch",
+    "DRESS_COLOR_FAMILIES",
+    "DRESS_COLORS",
+    "signpost_color_patch",
+    "SIGNPOST_COLOR_FAMILIES",
+    "SIGNPOST_COLORS",
     "Club",
     "sram_defaults_patch",
     "sram_defaults_patches",

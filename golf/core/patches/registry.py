@@ -40,6 +40,7 @@ from .menu_trim import menu_trim_patch
 from .mercy_tap_in import mercy_tap_in_patches
 from .multi_bank import COURSE_MIRRORS_PATCH, MULTI_BANK_CODE_PATCH
 from .music_import import music_import_patch
+from .peach_dress import peach_dress_patch
 from .practice_swing import DEFAULT_HOLD_FRAMES, practice_swing_patch
 from .putting_practice import putting_practice_patches
 from .qr_credentials import load_credentials, qr_credentials_patch
@@ -54,6 +55,7 @@ from .scorecard_qr import (
 )
 from .seeded_wind import derive_hole_seeds, predict_hole, seeded_wind_patch
 from .signpost_banner import remove_course_banner_patches
+from .signpost_color import signpost_color_patch
 from .signpost_random_banner import signpost_banner_patch
 from .sram_defaults import (
     VANILLA_CLUBS,
@@ -145,6 +147,12 @@ class SignpostBannerParams:
 
 
 @dataclass(frozen=True)
+class SignpostColorParams:
+    #: one of signpost_color.SIGNPOST_COLORS
+    color: int
+
+
+@dataclass(frozen=True)
 class MercyTapInParams:
     mercy_point: int
     #: defaults to mercy_point + 1
@@ -183,6 +191,12 @@ class MusicImportParams:
     track: int | None = None
     #: defaults to the dump's recorded tuning difference
     transpose_adjust: int | None = None
+
+
+@dataclass(frozen=True)
+class PeachDressParams:
+    #: one of peach_dress.DRESS_COLORS
+    color: int
 
 
 @dataclass(frozen=True)
@@ -421,6 +435,12 @@ PATCH_SPECS: dict[str, PatchSpec[Any, Any]] = {
             _report_signpost,
         ),
         PatchSpec(
+            "signpost_color",
+            "Recolor the pre-hole signpost banner to a curated NES color (docs/prehole_signpost.md)",
+            SignpostColorParams,
+            lambda ctx, params: signpost_color_patch(params.color),
+        ),
+        PatchSpec(
             "mercy_tap_in",
             "End a hole with a tap-in once a player reaches a stroke count",
             MercyTapInParams,
@@ -498,6 +518,12 @@ PATCH_SPECS: dict[str, PatchSpec[Any, Any]] = {
             "B then Select opens the green detail view, B then Start the scorecard (docs/green_shortcut.md)",
             NoParams,
             lambda ctx, params: green_shortcut_patch(),
+        ),
+        PatchSpec(
+            "peach_dress",
+            "Recolor Peach's dress in the putting view to a curated NES color",
+            PeachDressParams,
+            lambda ctx, params: peach_dress_patch(params.color),
         ),
         PatchSpec(
             "putting_practice",
