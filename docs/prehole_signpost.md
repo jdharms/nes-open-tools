@@ -67,6 +67,12 @@ $ACC7-$ACF1                      ; distance, 3 BCD digits
 $ACF1-$AD0C                      ; HoleMatchStatus != 0: silence music, queue MusicRequest $11/$12
 ```
 
+The background half of the `$ADC4` palette is `0F 37 21 17 | 0F 30 21 15 | 0F 1C 31 2A |
+0F 1C 31 21`. The banner is subpalette 1: `$30` letters, `$21` sky and `$15` brick, so the
+brick is the one byte at `$ADCB`, and the contest write at `$AC4B` is the same entry turned
+blue. The wooden HOLE, PAR and yards signs are subpalette 0. The `signpost_colour` patch
+(`golf/core/patches/signpost_colour.py`) sets the brick to one of a curated set.
+
 ### Banner selection
 
 `$AD86` is a table of five 6-byte `WriteNametableTiles` descriptors (dest, header,

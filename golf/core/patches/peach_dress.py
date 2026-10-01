@@ -18,6 +18,7 @@ wants each family equally likely picks a family first, then a colour within it.
 """
 
 from golf.core import rom_utils
+from golf.core.palettes import ColourFamily, family_colours
 
 from .byte_patch import BytePatch
 
@@ -25,22 +26,22 @@ PALETTE_BANK = 13
 DRESS_COLOUR_ADDR = 0x960F  # GreenDetailPaletteData + $11: sprite palette 0, colour 1
 VANILLA_DRESS_COLOUR = 0x25
 
-#: the curated dress colours, keyed by the colour each family reads as
-DRESS_COLOUR_FAMILIES: dict[str, tuple[int, ...]] = {
-    "green": (0x0B, 0x19, 0x29, 0x2A, 0x2B, 0x39, 0x3B),
-    "blue": (0x01, 0x11, 0x12, 0x21, 0x22, 0x31, 0x32),
-    "purple": (0x03, 0x04, 0x13, 0x14, 0x23, 0x33),
-    "pink": (0x05, 0x15, 0x24, 0x25, 0x35),
-    "orange": (0x07, 0x17, 0x27, 0x37),
-    "teal": (0x0C, 0x1C, 0x2C, 0x3C),
-    "grey": (0x00, 0x2D, 0x3D, 0x30),
-    "red": (0x06, 0x16, 0x26),
-    "yellow": (0x08, 0x18, 0x38),
-}
-
-DRESS_COLOURS = frozenset(
-    colour for family in DRESS_COLOUR_FAMILIES.values() for colour in family
+#: the curated colours, grouped by the colour each family reads as; pick a family
+#: with random.choice, then a colour from its `colours`
+DRESS_COLOUR_FAMILIES: tuple[ColourFamily, ...] = (
+    ColourFamily("green", (0x0B, 0x19, 0x29, 0x2A, 0x2B, 0x39, 0x3B)),
+    ColourFamily("blue", (0x01, 0x11, 0x12, 0x21, 0x22, 0x31, 0x32)),
+    ColourFamily("purple", (0x03, 0x04, 0x13, 0x14, 0x23, 0x33)),
+    ColourFamily("pink", (0x05, 0x15, 0x24, 0x25, 0x35)),
+    ColourFamily("orange", (0x07, 0x17, 0x27, 0x37)),
+    ColourFamily("teal", (0x0C, 0x1C, 0x2C, 0x3C)),
+    ColourFamily("grey", (0x00, 0x2D, 0x3D, 0x30)),
+    ColourFamily("red", (0x06, 0x16, 0x26)),
+    ColourFamily("yellow", (0x08, 0x18, 0x38)),
 )
+
+#: every curated colour, the families concatenated in order
+DRESS_COLOURS = family_colours(DRESS_COLOUR_FAMILIES)
 
 
 def peach_dress_patch(colour: int) -> BytePatch:

@@ -217,6 +217,7 @@ three requirements and the `course` step.
 | `scorecard_course_name` | `name` (default `RANDOM`; A-Z, 0-9 and space, at most 13), `title` (optional, replaces `18H STROKE PLAY`; at most 26) | `course_mirrors` |
 | `remove_course_banner` | | |
 | `signpost_random_banner` | `art`, `banner` (default `us`), `hole` (default 1) | |
+| `signpost_colour` | `colour` (one of the curated NES colours in `SIGNPOST_COLOUR_FAMILIES`, `golf/core/patches/signpost_colour.py`); recolours the banner's brick, except on contest holes, which the game turns blue | |
 | `mercy_tap_in` | `mercy_point`, `mercy_result` (default `mercy_point` + 1) | |
 | `seeded_wind` | `seed` | `course_mirrors` |
 | `practice_swing` | `hold_frames` (default `0x78`) | |

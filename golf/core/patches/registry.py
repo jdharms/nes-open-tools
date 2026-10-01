@@ -55,6 +55,7 @@ from .scorecard_qr import (
 )
 from .seeded_wind import derive_hole_seeds, predict_hole, seeded_wind_patch
 from .signpost_banner import remove_course_banner_patches
+from .signpost_colour import signpost_colour_patch
 from .signpost_random_banner import signpost_banner_patch
 from .sram_defaults import (
     VANILLA_CLUBS,
@@ -143,6 +144,12 @@ class SignpostBannerParams:
     banner: str = "us"
     #: the hole the export shows
     hole: int = 1
+
+
+@dataclass(frozen=True)
+class SignpostColourParams:
+    #: one of signpost_colour.SIGNPOST_COLOURS
+    colour: int
 
 
 @dataclass(frozen=True)
@@ -426,6 +433,12 @@ PATCH_SPECS: dict[str, PatchSpec[Any, Any]] = {
             SignpostBannerParams,
             _build_signpost,
             _report_signpost,
+        ),
+        PatchSpec(
+            "signpost_colour",
+            "Recolour the pre-hole signpost banner to a curated NES colour (docs/prehole_signpost.md)",
+            SignpostColourParams,
+            lambda ctx, params: signpost_colour_patch(params.colour),
         ),
         PatchSpec(
             "mercy_tap_in",

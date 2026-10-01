@@ -84,6 +84,11 @@ from .seeded_wind import (
     seeded_wind_patches,
 )
 from .signpost_banner import remove_course_banner_patches
+from .signpost_colour import (
+    SIGNPOST_COLOUR_FAMILIES,
+    SIGNPOST_COLOURS,
+    signpost_colour_patch,
+)
 from .signpost_random_banner import random_banner_patches
 from .sram_defaults import Club, sram_defaults_patch, sram_defaults_patches
 from .stack import PatchStack, StackBuild, StackError
@@ -148,6 +153,9 @@ __all__ = [
     "peach_dress_patch",
     "DRESS_COLOUR_FAMILIES",
     "DRESS_COLOURS",
+    "signpost_colour_patch",
+    "SIGNPOST_COLOUR_FAMILIES",
+    "SIGNPOST_COLOURS",
     "Club",
     "sram_defaults_patch",
     "sram_defaults_patches",

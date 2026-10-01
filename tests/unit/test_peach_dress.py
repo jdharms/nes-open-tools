@@ -1,5 +1,6 @@
 """Peach's dress colour patch: the curated colours and the byte it writes."""
 
+import random
 from pathlib import Path
 
 import pytest
@@ -18,15 +19,32 @@ HAIR, SKIN = 0x28, 0x36
 
 
 class TestColours:
+    def test_flat_list_is_the_families_concatenated(self):
+        assert (
+            tuple(
+                colour for family in DRESS_COLOUR_FAMILIES for colour in family.colours
+            )
+            == DRESS_COLOURS
+        )
+
     def test_no_colour_is_in_two_families(self):
-        total = sum(len(family) for family in DRESS_COLOUR_FAMILIES.values())
-        assert total == len(DRESS_COLOURS) == 43
+        assert len(set(DRESS_COLOURS)) == len(DRESS_COLOURS) == 43
+
+    def test_family_names_are_unique(self):
+        names = [family.name for family in DRESS_COLOUR_FAMILIES]
+        assert len(set(names)) == len(names)
 
     def test_vanilla_is_curated(self):
-        assert VANILLA_DRESS_COLOUR in DRESS_COLOUR_FAMILIES["pink"]
+        (pink,) = [f for f in DRESS_COLOUR_FAMILIES if f.name == "pink"]
+        assert VANILLA_DRESS_COLOUR in pink.colours
 
     def test_no_black_hair_or_skin(self):
-        assert not DRESS_COLOURS & (NES_BLACK_ENTRIES | {HAIR, SKIN})
+        assert not set(DRESS_COLOURS) & (NES_BLACK_ENTRIES | {HAIR, SKIN})
+
+    def test_random_choice_works_on_both_exports(self):
+        rng = random.Random(0)
+        assert rng.choice(rng.choice(DRESS_COLOUR_FAMILIES).colours) in DRESS_COLOURS
+        assert rng.choice(DRESS_COLOURS) in DRESS_COLOURS
 
     def test_every_colour_is_an_nes_colour(self):
         assert all(0 <= colour <= 0x3F for colour in DRESS_COLOURS)

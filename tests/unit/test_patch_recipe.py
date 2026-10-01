@@ -45,6 +45,7 @@ class TestRegistry:
             "menu_trim": {"words": "ABCD EFGH IJKL"},
             "mercy_tap_in": {"mercy_point": 9},
             "peach_dress": {"colour": 0x16},
+            "signpost_colour": {"colour": 0x12},
             "seeded_wind": {"seed": "x"},
             "qr_credentials": {"credentials": str(credentials_file)},
             "music_import": {"dump": "data/music/music_jp_courses.json"},
