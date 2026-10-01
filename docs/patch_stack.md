@@ -227,6 +227,7 @@ three requirements and the `course` step.
 | `music_import` | `dump`, `track` (optional; one dump music ID, imported as `$03` and made every course's theme), `transpose_adjust` (default from the dump) | |
 | `sram_defaults` | `player_name` (A-Z, `.` and space, at most 10), `clubs` (up to 14 of `1W`-`4W`, `1I`-`9I`, `PW`, `SW`, `PT`; the putter is added), `bgm` (default true), `sram_magic` (default `0x3553`, "5S"; neither byte `$00` or `$FF`). To use the extended table, supply all three of `swing` and `putt` (`off`, `slow`, `medium`, `fast`) and `spin` (`off`, `top2`, `top1`, `normal`, `back1`, `back2`). Without them, BGM off uses the vanilla loop edit and cannot follow `extended_sram_defaults`. Only a save being initialised gets these values | `extended_sram_defaults` when swing, putt and spin are supplied |
 | `extended_sram_defaults` | none; installs the SRAM defaults routine and table at vanilla values in PLAYER STATS' code space | `menu_trim` |
+| `peach_dress` | `colour` (one of the curated NES colours in `DRESS_COLOUR_FAMILIES`, `golf/core/patches/peach_dress.py`); recolours Peach's dress in the putting view | |
 | `putting_practice` | (experimental) | |
 
 `course_theme` and `music_import` with a `track` both rewrite `CourseBgmTable` at `$DA14`,

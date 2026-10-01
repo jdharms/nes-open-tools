@@ -40,6 +40,7 @@ from .menu_trim import menu_trim_patch
 from .mercy_tap_in import mercy_tap_in_patches
 from .multi_bank import COURSE_MIRRORS_PATCH, MULTI_BANK_CODE_PATCH
 from .music_import import music_import_patch
+from .peach_dress import peach_dress_patch
 from .practice_swing import DEFAULT_HOLD_FRAMES, practice_swing_patch
 from .putting_practice import putting_practice_patches
 from .qr_credentials import load_credentials, qr_credentials_patch
@@ -183,6 +184,12 @@ class MusicImportParams:
     track: int | None = None
     #: defaults to the dump's recorded tuning difference
     transpose_adjust: int | None = None
+
+
+@dataclass(frozen=True)
+class PeachDressParams:
+    #: one of peach_dress.DRESS_COLOURS
+    colour: int
 
 
 @dataclass(frozen=True)
@@ -498,6 +505,12 @@ PATCH_SPECS: dict[str, PatchSpec[Any, Any]] = {
             "B then Select opens the green detail view, B then Start the scorecard (docs/green_shortcut.md)",
             NoParams,
             lambda ctx, params: green_shortcut_patch(),
+        ),
+        PatchSpec(
+            "peach_dress",
+            "Recolour Peach's dress in the putting view to a curated NES colour",
+            PeachDressParams,
+            lambda ctx, params: peach_dress_patch(params.colour),
         ),
         PatchSpec(
             "putting_practice",

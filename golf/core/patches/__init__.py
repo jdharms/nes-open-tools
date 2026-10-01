@@ -42,6 +42,11 @@ from .music_import import (
     MusicImportPatch,
     music_import_patch,
 )
+from .peach_dress import (
+    DRESS_COLOUR_FAMILIES,
+    DRESS_COLOURS,
+    peach_dress_patch,
+)
 from .practice_swing import (
     DEFAULT_HOLD_FRAMES,
     PRACTICE_SWING_OFFSET,
@@ -140,6 +145,9 @@ __all__ = [
     "MusicImportPatch",
     "music_import_patch",
     "COURSE_TRACKS",
+    "peach_dress_patch",
+    "DRESS_COLOUR_FAMILIES",
+    "DRESS_COLOURS",
     "Club",
     "sram_defaults_patch",
     "sram_defaults_patches",
