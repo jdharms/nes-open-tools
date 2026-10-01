@@ -18,6 +18,9 @@ against (the whole pale row and the faintest of the `$2x` row), and less one of 
 pair that looks the same as another. `SIGNPOST_COLOR_FAMILIES` groups them by the
 color they read as, so a caller that wants each family equally likely picks a family
 first, then a color within it.
+
+`SIGNPOST_DANGEROUS_COLORS` holds colors set aside on feedback, kept for a later look.
+The patch rejects them too.
 """
 
 from golf.core import rom_utils
@@ -33,18 +36,21 @@ VANILLA_BANNER_COLOR = 0x15
 #: with random.choice, then a color from its `colors`
 SIGNPOST_COLOR_FAMILIES: tuple[ColorFamily, ...] = (
     ColorFamily("green", (0x0B, 0x19)),
-    ColorFamily("blue", (0x01, 0x11, 0x12, 0x22)),
-    ColorFamily("purple", (0x03, 0x04, 0x13, 0x14, 0x23)),
-    ColorFamily("pink", (0x05, 0x15, 0x24, 0x25)),
-    ColorFamily("orange", (0x07, 0x17, 0x27)),
+    ColorFamily("blue", (0x01, 0x11, 0x12)),
+    ColorFamily("purple", (0x03, 0x04, 0x13, 0x14)),
+    ColorFamily("pink", (0x05, 0x15, 0x25)),
+    ColorFamily("orange", (0x07, 0x17)),
     ColorFamily("teal", (0x0C, 0x1C)),
     ColorFamily("gray", (0x00, 0x2D)),
-    ColorFamily("red", (0x06, 0x16, 0x26)),
-    ColorFamily("yellow", (0x08, 0x18, 0x28)),
+    ColorFamily("red", (0x06, 0x16)),
+    ColorFamily("yellow", (0x08, 0x18)),
 )
 
 #: every curated color, the families concatenated in order
 SIGNPOST_COLORS = family_colors(SIGNPOST_COLOR_FAMILIES)
+
+#: set aside on feedback, not accepted by the patch; kept for a later look
+SIGNPOST_DANGEROUS_COLORS: tuple[int, ...] = (0x22, 0x23, 0x24, 0x26, 0x27, 0x28)
 
 
 def signpost_color_patch(color: int) -> BytePatch:
