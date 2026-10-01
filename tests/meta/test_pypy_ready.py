@@ -1,7 +1,7 @@
 """
 The difficulty solver, and the ball physics under it, stay runnable under PyPy
 3.11, which plays shots about ten times faster than CPython
-(`docs/planning/hole_difficulty.md`). PyPy has no 3.12 yet, so nothing they
+(`docs/hole_difficulty.md`). PyPy has no 3.12 yet, so nothing they
 import may use 3.12-only syntax, and they must not import the patch package,
 which does.
 """

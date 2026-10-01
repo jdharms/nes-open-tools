@@ -102,7 +102,7 @@ def rng_sample(count: int) -> tuple[int, ...]:
 
 
 #: How much each error is, per unit of skill: a stated assumption, which the
-#: calibration's sensitivity runs vary (`docs/planning/hole_difficulty.md`).
+#: calibration's sensitivity runs vary (`docs/hole_difficulty.md`).
 POWER_FRAMES_PER_SKILL = 1.0
 ACCURACY_FRAMES_PER_SKILL = 1.0
 AIM_STEPS_PER_SKILL = 1.0

@@ -2,7 +2,7 @@
 The expected strokes to hole out, from every spot a hole's play reaches: value
 iteration over the player model (`golf.difficulty.player`).
 
-For now one pin (by default the first) and no wind (`docs/planning/hole_difficulty.md`).
+For now one pin (by default the first) and no wind (`docs/hole_difficulty.md`).
 
 **States.** Off the green a state is a cell of a `grid`-pixel grid, split by
 the lie class a full swing is played from (`landing.LieClass`); the first real
@@ -32,7 +32,12 @@ moved `rescreen_move` since it was screened is screened again however rarely
 play reaches it: intents chosen against values far off can hop between spots
 that all looked better than they were, a loop value iteration only climbs.
 After `rounds` no spot is added, and the solve stops only once no spot is due
-to be screened again. Screening and playing are
+to be screened again. From the round whose outcomes are no longer added, any
+intent the best play chooses that would visit a spot not yet valued as often as
+`reach` is set aside, and the values iterated again, until play stays among
+valued spots (`HoleSolver.stays_valued`): nothing could value where such an
+intent goes, so it would be chosen on borrowed values and guesses alone, and
+`guess` is optimistic on long holes. Screening and playing are
 separate tasks, so even the first round, the tee alone, is spread over every
 core.
 A state not yet valued borrows from valued neighbours of the same lie class, or
@@ -94,7 +99,8 @@ NO_WIND = (0, 0)
 #: screen replaces them. The solve ends with a full run.
 ROUND_SWEEPS = 300
 #: Rounds past `Settings.rounds` that add no states, only screen again those
-#: whose values moved, so the solve does not stop on intents that loop.
+#: whose values moved, so the solve does not stop on intents that loop. Their
+#: best play is kept among valued states (`HoleSolver.stays_valued`).
 CLEANUP_ROUNDS = 6
 
 #: Errors a draw when intents are raced (`Settings.race`).
@@ -843,6 +849,49 @@ class HoleSolver:
                 break
         return inside, outside
 
+    def stays_valued(
+        self, outcomes: list[tuple[Key | None, int, float]], visits: float
+    ) -> bool:
+        """
+        Whether play from a state visited `visits` times a hole, by a transition
+        with these outcomes, would visit no unplayed state `reach` times: the
+        test a state passes to be added, so past the last round that adds any,
+        a transition that fails it would be valued on borrowed values alone.
+        """
+        unplayed: dict[Key, float] = {}
+        for key, _, probability in outcomes:
+            if key is not None and key not in self.transitions:
+                unplayed[key] = unplayed.get(key, 0.0) + probability
+        return all(visits * p < self.settings.reach for p in unplayed.values())
+
+    def _set_aside_unvalued(self, sweeps: int) -> list[tuple[Key, Intent]]:
+        """
+        Once states are no longer added: drop each chosen transition that does
+        not stay among valued states (`stays_valued`) at the visits play gives
+        its state, unless it is the state's last, and iterate again, until the
+        best play stays among them. Such a transition is chosen on borrowed
+        values and guesses alone, however long ago it was played. What it drops.
+        """
+        dropped: list[tuple[Key, Intent]] = []
+        while True:
+            inside, _ = self.visits()
+            policy = self.policy()
+            failing = [
+                (key, transition)
+                for key, transition in policy.items()
+                if key[0] != GREEN
+                and len(self.transitions[key]) > 1
+                and not self.stays_valued(transition.outcomes, inside.get(key, 0.0))
+            ]
+            if not failing:
+                return dropped
+            for key, transition in failing:
+                self.transitions[key] = [
+                    t for t in self.transitions[key] if t is not transition
+                ]
+                dropped.append((key, transition.intent))
+            self.iterate(sweeps)
+
     # --- rounds ---------------------------------------------------------
 
     def _pool(self, table_path: str | None) -> ProcessPoolExecutor:
@@ -877,7 +926,11 @@ class HoleSolver:
             previous_tee = math.inf
             inside: dict[Key, float] = {}
             screened_at: dict[Key, float] = {}
+            # Intents dropped once states are no longer added, not to play again.
+            set_aside: dict[Key, set[Intent]] = {}
             for round_number in range(1, settings.rounds + CLEANUP_ROUNDS + 1):
+                # This round's outcomes can still be added as states (below).
+                adding = round_number < settings.rounds
                 clock = time.perf_counter()
                 self._value_green(greens)
                 greening = time.perf_counter() - clock
@@ -910,6 +963,7 @@ class HoleSolver:
                 for key, chosen, seconds in pool.map(_screen, screens, chunksize=4):
                     screening += seconds
                     played = {t.intent for t in self.transitions.get(key, [])}
+                    played |= set_aside.get(key, set())
                     fresh = [
                         (rank, intent, score)
                         for rank, (intent, score) in enumerate(chosen)
@@ -941,9 +995,14 @@ class HoleSolver:
                 pending.clear()
                 clock = time.perf_counter()
                 self.iterate(ROUND_SWEEPS)
+                aside = 0
+                if not adding:
+                    for key, intent in self._set_aside_unvalued(ROUND_SWEEPS):
+                        set_aside.setdefault(key, set()).add(intent)
+                        aside += 1
                 iterating = time.perf_counter() - clock
                 inside, outside = self.visits()
-                if round_number < settings.rounds:
+                if adding:
                     for key, mass in outside.items():
                         if mass >= settings.reach:
                             pending.add(key)
@@ -957,7 +1016,9 @@ class HoleSolver:
                 self.log(
                     f"round {round_number}: {len(keys)} of "
                     f"{sum(k[0] != GREEN for k in self.transitions)} states screened, "
-                    f"{added} intents played, {len(pending)} to add, "
+                    f"{added} intents played, "
+                    + (f"{aside} set aside, " if aside else "")
+                    + f"{len(pending)} to add, "
                     f"{due} to screen again, "
                     f"tee {self.expected[TEE]:.3f}, "
                     f"{time.perf_counter() - started:.0f} s "
@@ -972,7 +1033,15 @@ class HoleSolver:
             # Each round's iteration stopped at ROUND_SWEEPS: settle the values.
             self._value_green(greens)
             self.iterate()
+            self._set_aside_unvalued(2000)
         inside, outside = self.visits()
+        unvalued = [k for k, mass in outside.items() if mass >= settings.reach]
+        if unvalued:
+            self.log(
+                f"warning: {len(unvalued)} spots the best play visits at least "
+                f"{settings.reach} times a hole were never valued "
+                f"({sum(outside[k] for k in unvalued):.4f} a hole)"
+            )
         policy = self.policy()
         return Solution(
             dict(self.expected),

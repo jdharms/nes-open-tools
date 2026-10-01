@@ -2,7 +2,7 @@
 
 A Python model of the game's ball physics, ported from bank 13 and the fixed bank so that
 it matches the ROM register for register, frame for frame. `docs/shot_physics.md` explains
-how a shot works; `docs/planning/hole_difficulty.md` is what the model is for and what
+how a shot works; `docs/hole_difficulty.md` is what the model is for and what
 comes next; ADR 0007 is why it is an exact port.
 
 ## Tests

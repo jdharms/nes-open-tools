@@ -49,7 +49,7 @@ A toolset for reverse engineering, editing and patching the NES Open Tournament 
   - `adr.py` - architecture decision records: parsing, checks, the index, new records
 - `golf/difficulty/` - rating holes: the player model, the landing table, the green
   solved whole and the solver
-  (`golf-difficulty`; `docs/planning/hole_difficulty.md`)
+  (`golf-difficulty`; `docs/hole_difficulty.md`)
 - `editor/` - the course editor
 - `server/` - the randomizer website (FastAPI); conventions in `server/CLAUDE.md`, design in
   `docs/randomizer_devplan.md`

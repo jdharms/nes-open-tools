@@ -65,6 +65,7 @@ golf-rom-peek = "tools.research.rom_peek:main"
 golf-labels = "tools.research.labels:main"
 golf-shots = "tools.research.shots:main"
 golf-difficulty = "tools.research.difficulty:main"
+golf-difficulty-report = "tools.research.difficulty_report:main"
 
 # Art round-trips
 golf-golfer-export = "tools.art.golfer_export:main"

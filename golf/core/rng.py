@@ -6,7 +6,7 @@ anchors and each swing's wind. `docs/seeded_wind.md` traces the chain.
 Kept apart from the patches that use it (`golf.core.patches.seeded_wind`) so
 that the ball physics (`golf.physics`) depends on nothing but plain Python:
 the difficulty solver's workers can then run under PyPy
-(`docs/planning/hole_difficulty.md`).
+(`docs/hole_difficulty.md`).
 """
 
 from dataclasses import dataclass

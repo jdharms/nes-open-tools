@@ -10,7 +10,6 @@ One line per document. Command-line tools are indexed in the top-level `README.m
 | [randomizer.md](randomizer.md) | Randomizer design: goals, logic, what gets randomized |
 | [randomizer_devplan.md](randomizer_devplan.md) | Randomizer site architecture, data model, routes and the ordered development plan |
 | [planning/download_settings.md](planning/download_settings.md) | Plan: saved download settings, the new SRAM option defaults and finish ABI 2 |
-| [planning/hole_difficulty.md](planning/hole_difficulty.md) | Plan: strokes-to-hole difficulty maps from the game's own physics, calibrated to a scratch player |
 | [deployment.md](deployment.md) | Running the randomizer site on its server: setup, releases, rollback and database restores |
 | [documentation.md](documentation.md) | Philosophy and practices followed for documentation for the development process |
 | [catalog.md](catalog.md) | The randomizer hole catalog: frozen index, curation, ids, versions and families |
@@ -34,6 +33,7 @@ One line per document. Command-line tools are indexed in the top-level `README.m
 | [music_format.md](music_format.md) | The audio engine and track format, including inserting tracks |
 | [topspin.md](topspin.md) | Why the TOP 1 / TOP 2 spin settings have no effect on play |
 | [shot_physics.md](shot_physics.md) | Ball physics from swing to rest: launch, wind, lift, curve, bounce and roll, and the Python model of it |
+| [hole_difficulty.md](hole_difficulty.md) | Rating holes by expected strokes from the tee, solved over that model: how it was built, and every NES Open and Mario Open hole against par |
 
 ## Patches
 

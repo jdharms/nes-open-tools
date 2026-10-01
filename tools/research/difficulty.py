@@ -271,7 +271,18 @@ def solve_hole(
         ]
         pin = [solver.flag.x >> 8, solver.flag.y >> 8]
         output.write_text(
-            json.dumps({"tee": solution.tee, "par": par, "pin": pin, "states": states})
+            json.dumps(
+                {
+                    "tee": solution.tee,
+                    "par": par,
+                    "pin": pin,
+                    "pin_index": args.pin,
+                    "skill": args.skill,
+                    "unvalued": solution.unvalued,
+                    "rounds": solution.rounds,
+                    "states": states,
+                }
+            )
         )
     return par, solution.tee, recheck
 

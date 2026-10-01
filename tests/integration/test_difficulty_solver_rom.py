@@ -27,7 +27,9 @@ from golf.difficulty.landing import (
 from golf.difficulty.player import PERFECT, Hole, Intent, Position, outcomes, swings
 from golf.difficulty.solver import (
     GREEN,
+    TEE,
     HoleSolver,
+    Settings,
     Transition,
     _blur,
     _spread,
@@ -229,3 +231,49 @@ def test_a_shot_that_can_come_back_is_solved_not_iterated():
     # V = 0.25 (2 + V) + 0.75 (1 + 2), so V = 2.75 / 0.75, whatever V was.
     assert solver._q(shot, {}, here) == pytest.approx(2.75 / 0.75)
     assert solver._q(shot, {}) == pytest.approx(0.25 * 11 + 0.75 * 3)
+
+
+def test_a_shot_stays_valued_only_if_it_reaches_no_unplayed_spot_often():
+    """Played spots and the hole itself are fine; an unplayed one, only rarely."""
+    solver = HoleSolver.__new__(HoleSolver)
+    solver.settings = Settings(reach=0.01)
+    here, played, unplayed = (0, 1, 1), (0, 5, 5), (0, 9, 9)
+    solver.transitions = {here: [], played: []}
+    # Two results in the same unplayed cell count together: 0.02 of the shots.
+    outcomes = [
+        (None, 1, 0.5),
+        (played, 1, 0.46),
+        (unplayed, 1, 0.01),
+        (unplayed, 2, 0.01),
+        (here, 2, 0.02),
+    ]
+    assert solver.stays_valued(outcomes, visits=0.4)
+    assert not solver.stays_valued(outcomes, visits=0.5)
+    assert solver.stays_valued(outcomes[:2], visits=1.0)
+
+
+def test_once_no_state_is_added_play_is_kept_among_valued_states():
+    """The tee's hop into a cell valued only by borrowing is dropped for the honest shot."""
+    solver = HoleSolver.__new__(HoleSolver)
+    solver.settings = Settings(reach=0.01)
+    solver.height = 32
+    solver.flag = Flag(0, 0)
+    solver.tee = Position(8, 30)
+    played, unplayed = (0, 1, 1), (0, 2, 2)
+    honest = Transition(Intent(0, 0, 0), [(played, 2, 1.0)])
+    hop = Transition(Intent(13, 0, 0), [(unplayed, 1, 1.0)])
+    solver.positions = {TEE: solver.tee, played: Position(4, 4)}
+    solver.transitions = {
+        TEE: [honest, hop],
+        played: [Transition(Intent(4, 0, 0), [(None, 1, 1.0)])],
+    }
+    solver.expected = {}
+    solver.iterate()
+    # The unplayed cell borrows the played one's value: the hop looks a stroke better.
+    assert solver.policy()[TEE] is hop
+    assert solver._set_aside_unvalued(100) == [(TEE, hop.intent)]
+    assert solver.policy()[TEE] is honest
+    assert solver.expected[TEE] == pytest.approx(3.0)
+    # A state's last transition stays, wherever it goes.
+    solver.transitions[TEE] = [hop]
+    assert solver._set_aside_unvalued(100) == []

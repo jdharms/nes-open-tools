@@ -1,16 +1,14 @@
-# Hole Difficulty Analysis: Development Plan
+# Hole Difficulty Analysis
 
 > **Note**: This document was written by Claude from decisions made with jdharms.
-> It is the plan for rating how hard NES Open and Mario Open holes are, from the game's
-> own physics: what is built, what is decided, and the order of work.
+> It reports a spike: rating how hard NES Open and Mario Open holes are from the game's
+> own physics. What was built and decided, how to pick it up, and what it found.
 
-**Status**: phases 1 and 2 are done, apart from the Mesen spot checks. Phase 3 has a
-working solver for one pin and no wind (`golf-difficulty`), run under PyPy, with each
-green solved whole from a table of every putt. All three NES Open courses are solved at
-skill 3 (**The three courses**, phase 3), and every Mario Open hole, the 7 over 48 rows
-included, loads on a ROM with the `wram_expansion` patch. **The next step** is solving the
-90 Mario Open holes at skill 3 and ranking all 144 holes against par (**Next steps**,
-phase 3).
+**Status**: paused (ADR 0008). The physics model reproduces the game's shot loop exactly
+(phases 1 and 2, apart from the Mesen spot checks), and `golf-difficulty` solves a hole
+for one pin with no wind, under PyPy (phase 3). Every NES Open and Mario Open hole is
+solved at skill 3 from its first pin: **Results** ranks all 144 against par, and
+**Data** says where the solves are kept. What could come next is **Future work**.
 
 ## Goal
 
@@ -79,7 +77,7 @@ site.
   The calibration absorbs this, and it is the same everywhere.
 - **Skill is one number to start.** It scales every error source together, with their
   ratios as a stated assumption. A single target (72) can only pin down one number.
-  Sensitivity runs then vary the ratios (phase 4).
+  Sensitivity runs would then vary the ratios (**Future work**).
 - **Timing error is normal in frames about the intended press** (jdharms): a bell curve,
   rounded to whole frames, around the frame the player meant to press on. The intended
   accuracy stop is part of the intent, since hooks and slices on purpose are part of the
@@ -95,12 +93,13 @@ site.
   typical case. Revisit if the hole rankings disagree with real scores; the machinery for
   it is `golf/physics/wind.py`. Wind changes the best strategy on some holes (**Wind on
   two holes**, phase 3), which the average hides.
-- **The first solver has one pin** (jdharms): the hole's first pin. The other three
-  (`Flag.for_pin`) come after the Mario Open holes are placed; a seed knows each hole's
-  pin (`seed_holes.pin_index`), so they matter to the randomizer.
+- **The solver has one pin** (jdharms): the hole's first. The other three
+  (`Flag.for_pin`) are future work; a seed knows each hole's pin
+  (`seed_holes.pin_index`), so they matter to the randomizer.
 - **Only spots that play reaches are valued** (jdharms): the tee, and every spot the best
   play from it visits often enough. Most of a hole is rough nobody plays from.
-- **Errors reach 2 standard deviations** (jdharms), to be revisited in phase 4.
+- **Errors reach 2 standard deviations** (jdharms), a choice for the sensitivity runs to test
+  (**Future work**).
 - **The player aims from the overhead view** (jdharms). The behind-the-golfer scene is
   built once, along the aim at setup (`$BD`), and holds only what lies in its wedge, so
   aiming away before it is built and turning back afterwards leaves nearby trees out of
@@ -113,7 +112,7 @@ site.
 
 **Read first**, in this order:
 
-1. This plan.
+1. This document.
 2. `docs/shot_physics.md`: how a shot works in the game, with ROM addresses: the swing,
    the flight, the cup, penalties, and what the model does not cover.
 3. `golf/physics/CLAUDE.md`: how to test, and the rules for code in `golf/physics/`.
@@ -256,7 +255,46 @@ Things that will trip you up:
   them. Find them again by running the picker over seeds until each outcome has enough
   cases.
 
-## Phases
+### Data
+
+The solves behind **Results** are kept in the repository, slimmed:
+
+- `data/difficulty/holes.json`: one row per hole: its lineage as the catalog and
+  `data/catalog/curation.json` name it (`nes_us/16`, `jp_uk/02`), par, yards, handicap,
+  expected strokes from the tee, strokes over par, `unvalued` (visits a hole to spots too
+  rare to value, which borrow their values), rounds, skill and pin.
+- `data/difficulty/solves-skill3-pin0.tar.xz`: every hole's solve as `golf-difficulty
+  --output` writes it, less each state's `played` list (every intent tried there, with
+  its screen rank): per state its class, pixel, expected strokes, visits a hole and chosen
+  intent. With it, the solve logs; a `<course>.resolve.log` holds the holes solved again
+  after the cleanup-round fix (**Results**). To work with it, extract it to scratch:
+
+  ```bash
+  mkdir -p <scratch>/solves && tar -xJf data/difficulty/solves-skill3-pin0.tar.xz -C <scratch>/solves
+  ```
+
+- `golf-difficulty-report <solves>` (`golf/difficulty/report.py`) rebuilds both, and the
+  tables in **Results**, from a solves directory: a directory of `hole_NN.json` per
+  course, named as the catalog names the course (`nes_us`, `jp_uk`), and its logs beside
+  them. It reads an extracted archive as well as `golf-difficulty`'s own output.
+
+NES Open holes were solved on `nes_open_us.nes` (SHA-1 `53b47f2b68c353afbc822baee0a9172eb16e38af`),
+Mario Open holes on `nes_open_wram.nes` (`1e62a2a2a26795a3d932a063d34a702926597b87`,
+phase 1), whose physics tables are the same. A course takes 6-10 hours on 16-20
+workers. `--output` is a file for one hole and a directory for several:
+
+```bash
+mkdir -p .cache/difficulty/solves/jp_uk
+PYTHONPATH=. .cache/pypy/bin/python -u -m tools.research.difficulty \
+    nes_open_wram.nes --course jp/jp_uk --hole 1-18 --skill 3 --workers 16 \
+    --output .cache/difficulty/solves/jp_uk/ 2>&1 | tee .cache/difficulty/solves/jp_uk.log
+```
+
+Each log ends with the course's hole-by-hole table against par. A hole whose play still
+visits an unvalued spot at least `reach` times a hole prints a warning; on the holes
+solved since the cleanup-round fix that came to 0.002-0.009 a hole.
+
+## How it was built
 
 ### 1. Real holes under the model
 
@@ -281,15 +319,6 @@ Done:
   through the game's own frame loop. The model matches it on every register, every frame,
   for random shots from random lies on random holes (`tests/physics/test_game_rom.py`).
 - **View mode confirmed in Mesen** (jdharms): `$80` from the swing, then `$00`.
-
-Left:
-
-- **Emulator spot checks** (jdharms, in Mesen): a perfect medium 1W drive (235 carry, 268
-  total), and the `$40` wind distortion (`docs/shot_physics.md`). What they check now is
-  the emulated machine: that nothing it leaves out (the PPU, sprite 0, IRQs) changes a
-  shot.
-
-The scene builder (bank 9 `$8829`) belongs to phase 3.
 
 ### 2. The rest of the rules
 
@@ -403,7 +432,14 @@ Done:
     and the solve ends with a full run. Screens, races and plays are separate tasks in a
     process pool. It stops when no state is added, none is due to be screened again and
     the tee moves less than 0.002. After 12 rounds no state is added, and up to 6 more
-    screen again only (`CLEANUP_ROUNDS`).
+    screen again only (`CLEANUP_ROUNDS`). From the 12th round on, when what an intent
+    reaches can no longer be added, any intent the best play chooses that would visit an
+    unvalued spot at least 0.001 times a hole is set aside and the values iterated
+    again, until play stays among valued spots (`HoleSolver.stays_valued`), however
+    early the intent was played. Without that, the tee could choose a short hop into
+    spots valued only by `guess`, which is a stroke or more optimistic 300 pixels out on
+    a long hole: five Mario Open solves ended with every visit from the tee on such
+    spots. The solve warns when its play still visits an unvalued spot that often.
   - **Results on the US 1st** (par 4, 328 yards), pin 0, no wind, under PyPy with 16
     workers, the green's table already built:
 
@@ -503,30 +539,6 @@ Done:
   whole circle (scored on the same stale values, they hop too), policy iteration (under
   PyPy a dense solve of 1,000 states takes 2-3 s, and filling the matrix is slow), and
   holding the borrowed values fixed within a round (no difference).
-- **The three courses** at skill 3, pin 0, before the fringe screen and the loops were
-  fixed, the default settings otherwise:
-
-  | Course | Out | In | Round |
-  |--------|-----|----|-------|
-  | U.K. | 36.01 | 37.35 | 73.36 |
-  | US | 35.89 | 38.28 | 74.17; 73.77 with the 12th's loops fixed |
-  | Japan | 36.61 | 36.86 | 73.47 |
-
-  By hole, U.K.: 4.22, 3.76, 5.05, 2.96, 4.30, 3.73, 4.27, 2.98, 4.75; 3.81, 4.99, 2.96,
-  4.82, 4.19, 4.10, 4.89, 3.08, 4.53. US: 3.66, 4.46, 3.98, 2.85, 4.07, 4.06, 3.18, 5.44,
-  4.19; 3.10, 4.24, 5.41, 4.02, 4.01, 4.35, 3.73, 3.88, 5.14. Japan: 4.07, 4.06, 4.87,
-  2.99, 4.13, 2.87, 4.94, 4.13, 4.56; 3.77, 4.29, 4.64, 2.97, 4.26, 4.15, 3.14, 4.35,
-  5.30. The three rounds come out within half a stroke of one another, where the
-  expected order is Japan, US, U.K. (phase 4); holes differ far more than courses. The
-  hardest against par: U.K. 11th (+0.99), US 8th and 16th (+0.44, +0.73), Japan 9th
-  (+0.56).
-
-  Solved again with both fixes, ten U.K. holes moved by 0.04 or less: 1st 4.216, 2nd
-  3.760, 5th 4.290, 7th 4.239, 9th 4.737, 10th 3.802, 14th 4.187, 15th 4.098, 16th 4.879,
-  18th 4.489. The table stands as the NES Open side of the comparison with Mario Open.
-  Against the game's own hole handicaps (the `handicap` in each hole's JSON), expected
-  strokes over par rank the holes with a Spearman correlation of 0.55 (U.K.), 0.62 (US)
-  and 0.69 (Japan).
 - **Trees in the behind-the-golfer view, measured** on eight U.K. holes (jdharms picked
   the ones where trees shape the tee shot or which parts of the fairway are good). For
   every off-green spot the solved play visits at least 0.002 times a hole, the best 8
@@ -567,8 +579,7 @@ Done:
   2 in calm the fast drive is already level. On the Japan 17th a good NE or E wind lets
   the drive carry the river (jdharms). Wind changes which shot is right on such holes,
   which averaging it out hides.
-
-Assumptions to revisit in phase 4:
+Assumptions the results rest on:
 
 - Errors reach 2 standard deviations (jdharms), so one intent at skill 1.0 is 5 × 5
   timings × 5 aims × 4 RNG states: 500 shots. The three are in the ratio 1 : 1 : 1 (frames,
@@ -589,7 +600,7 @@ Assumptions to revisit in phase 4:
   the window for their aim errors. A putt starts from the pixel the last one stopped on,
   as every state does.
 - **No trees in the behind-the-golfer view**: `outcomes()` has no scene to collide with
-  until the scene builder is ported (below). Overhead-view trees work. On eight U.K.
+  until the scene builder is ported (**Future work**). Overhead-view trees work. On eight U.K.
   holes this costs about 0.2 strokes, and the wrong drive on the 14th (**Trees in the
   behind-the-golfer view, measured**).
 - **The solver's approximations**: the 4-pixel cells (a cell's value is its first spot's),
@@ -645,34 +656,20 @@ PYTHONPATH=. .cache/pypy/bin/python -u -m tools.research.difficulty nes_open_us.
     --course us --hole 1 --workers 16 --output us01.json
 ```
 
-**Next steps**, in order:
+## Future work
 
-1. **Solve the 90 Mario Open holes** at skill 3, pin 0, on `nes_open_wram.nes` (build it
-   first if missing, phase 1). Each hole builds its green's table (about 200 s) and then
-   solves: 7-12 minutes for a NES Open hole, and 38 minutes for the Mario Open U.K. 14th
-   (60 rows, 1,807 states, 6.498 from the tee, par 5), so a course may take 6-10 hours
-   and all five a few nights. The courses are independent:
+None of this is scheduled (ADR 0008).
 
-   ```bash
-   for c in jp_japan jp_australia jp_france jp_hawaii jp_uk; do
-     mkdir -p .cache/difficulty/solves/$c
-     PYTHONPATH=. .cache/pypy/bin/python -u -m tools.research.difficulty \
-         nes_open_wram.nes --course jp/$c --hole 1-18 --skill 3 --workers 16 \
-         --output .cache/difficulty/solves/$c/ 2>&1 | tee .cache/difficulty/solves/$c.log
-   done
-   ```
-
-   Each log ends with the course's hole-by-hole table against par. Note each hole's
-   "visits to spots too rare to value": the U.K. 14th left 0.28 a hole there, where NES
-   Open holes leave 0.05-0.11, so its value leans on borrowed ones more than theirs.
-2. **Rank all 144 holes against par**: expected strokes minus par, the NES Open side from
-   **The three courses** (the ten U.K. holes solved again replacing theirs), the Mario
-   Open side from step 1. This is what the randomizer needs (**Goal**).
-3. **The other three pins**, starting with the holes whose place against par is closest
-   to a boundary the randomizer cares about.
-
-Then, in no fixed order:
-
+- **The other three pins**, starting with the holes whose place against par is closest
+  to a boundary the randomizer draws: half a stroke over par, and the expert holes'
+  line (**Results**).
+- **An expert-hole budget in the randomizer** (suggested by one of jdharms's league-mates
+  on seeing the expert holes): a mode that draws a set number of expert holes into a
+  course, weighted toward the 9th and 18th.
+- **Emulator spot checks** (jdharms, in Mesen): a perfect medium 1W drive (235 carry, 268
+  total), and the `$40` wind distortion (`docs/shot_physics.md`). What they check now is
+  the emulated machine: that nothing it leaves out (the PPU, sprite 0, IRQs) changes a
+  shot.
 - **The scene builder** (bank 9 `$8829`), ported, so the solver sees behind-the-golfer
   trees and chooses the right drive on holes like the U.K. 14th. It samples a 20 × 64
   grid (`docs/shot_physics.md`, **Not modelled yet**) and builds the maps in `$9C1C`,
@@ -682,25 +679,425 @@ Then, in no fixed order:
   collisions for each start too.
 - **Wind**, at least for holes where it changes the best play (**Wind on two holes**).
   A seed knows each hole's wind (`seed_holes`), so the randomizer could use it directly.
-- **Validation against real play**: per-hole scores from the site's rounds, with their
-  pins and winds, and the game's handicaps.
-- **A rough calibration**, if a label for the skill is wanted (**Decisions**).
-- **The approach screen from 120 yards out**, where it is 0.1 optimistic.
-- **The baseline**: the same solver on uniform fairway with a cup.
+- **A better screen.** It misses intents: on the US 16th the solve chose a drive worth
+  3.721, where U.K. 2's drive, played there, is worth 3.619 (**Results**). It is 0.1
+  optimistic about approaches from 120 yards out (**The model's own approximations**).
+- **A better `guess`.** A spot never valued is guessed from its distance alone, a stroke
+  or more optimistic 300 pixels out on a long hole. The solver no longer chooses on such
+  guesses past its last adding round, but in earlier rounds they send it chasing short
+  hops that value iteration then disproves, which costs rounds on long holes. A guess fit
+  to the values already found would cost fewer.
+- **Calibration and validation**:
+  - Solve for the skill whose expected U.K. round is 72, and predict the US, Japan and
+    Mario Open courses with it. The expected order is Japan, US, U.K., then Mario Open's
+    hardest.
+  - Check against real play: per-hole averages from the scorecard QR submissions and the
+    site's rounds, with their pins and winds. Ranking the holes the same way real scores
+    do matters more than matching the scores.
+  - Sensitivity: vary the ratios between the three errors, the error reach and the RNG
+    sample, and see whether the hole rankings hold.
+- **Output from the value function**: strokes-to-hole and difficulty heatmaps over the
+  hole renders (`golf/rendering/`), against **the baseline** (the same solver on uniform
+  fairway with a cup), and a per-hole difficulty score for the randomizer catalog.
 
-### 4. Calibration and validation
+## Results
 
-- Solve for the skill whose expected U.K. round is 72.
-- Predict the US, Japan and Mario Open courses with that skill. The expected order is
-  Japan, US, U.K., then Mario Open's hardest.
-- Check against real play: per-hole averages from the scorecard QR submissions. Ranking
-  the holes the same way real scores do matters more than matching the scores.
-- Sensitivity: vary the ratios between the three errors, the error reach and the RNG
-  sample, and see whether the hole rankings hold.
+Every hole at skill 3, from its first pin, with no wind and the default `Settings`, by
+the solver as it stood at ADR 0008: NES Open holes on the vanilla ROM, Mario Open holes on
+`nes_open_wram.nes` (phase 1). The tables are `golf-difficulty-report`'s (**Data**).
+"Over par" is expected strokes from the tee minus par; "Rare visits" is how often a hole's
+best play visits spots too rare to value, which borrow their values (**The solver**).
+For now the NES Open holes are from earlier versions of the solver, and their rare
+visits were not kept (**Earlier NES Open solves**).
 
-### 5. Output, derived from the value function
+### Courses
 
-- Strokes-to-hole and difficulty heatmaps drawn over the hole renders
-  (`golf/rendering/`).
-- A per-hole difficulty score, and a proposal for how the randomizer catalog would use
-  it.
+| Course | Out | In | Round | Over par | Par 3s | Par 4s | Par 5s | Holes over +0.5 | Spearman vs handicap |
+|---|---|---|---|---|---|---|---|---|---|
+| NES Japan | 36.62 | 36.87 | 73.49 | +1.49 | -0.01 | +0.18 | -0.06 | 1 | 0.69 |
+| NES US | 35.89 | 37.88 | 73.77 | +1.77 | +0.22 | +0.05 | +0.11 | 1 | 0.62 |
+| NES U.K. | 35.96 | 37.30 | 73.27 | +1.27 | -0.01 | +0.18 | -0.13 | 1 | 0.55 |
+| Mario Japan | 36.57 | 36.84 | 73.41 | +1.41 | -0.06 | +0.16 | +0.02 | 0 | 0.13 |
+| Mario Australia | 36.89 | 38.82 | 75.71 | +3.71 | +0.10 | +0.24 | +0.22 | 3 | 0.45 |
+| Mario France | 37.88 | 39.75 | 77.63 | +5.63 | +0.26 | +0.22 | +0.59 | 3 | 0.53 |
+| Mario Hawaii | 40.37 | 46.26 | 86.63 | +14.63 | +0.43 | +0.67 | +1.55 | 12 | 0.34 |
+| Mario U.K. | 45.73 | 48.71 | 94.44 | +22.44 | +1.36 | +1.07 | +1.58 | 16 | 0.41 |
+
+### Every hole against par
+
+| # | Hole | Par | Yards | Handicap | Expected | Over par | Rare visits |
+|---|---|---|---|---|---|---|---|
+| 1 | NES US 2 | 5 | 481 | 13 | 4.460 | -0.540 |  |
+| 2 | NES Japan 12 | 5 | 535 | 6 | 4.640 | -0.360 |  |
+| 3 | NES US 1 | 4 | 328 | 17 | 3.660 | -0.340 |  |
+| 4 | Mario France 5 | 4 | 350 | 16 | 3.696 | -0.304 | 0.048 |
+| 5 | NES U.K. 6 | 4 | 357 | 7 | 3.730 | -0.270 |  |
+| 6 | Mario Japan 8 | 5 | 524 | 6 | 4.737 | -0.263 | 0.122 |
+| 7 | NES U.K. 9 | 5 | 528 | 13 | 4.737 | -0.263 |  |
+| 8 | NES U.K. 2 | 4 | 393 | 12 | 3.760 | -0.240 |  |
+| 9 | Mario Australia 6 | 4 | 386 | 14 | 3.760 | -0.240 | 0.053 |
+| 10 | NES Japan 10 | 4 | 350 | 15 | 3.770 | -0.230 |  |
+| 11 | NES U.K. 10 | 4 | 325 | 11 | 3.802 | -0.198 |  |
+| 12 | NES U.K. 13 | 5 | 571 | 18 | 4.820 | -0.180 |  |
+| 13 | NES US 4 | 3 | 154 | 16 | 2.850 | -0.150 |  |
+| 14 | Mario Japan 13 | 5 | 581 | 1 | 4.860 | -0.140 | 0.111 |
+| 15 | NES Japan 3 | 5 | 534 | 16 | 4.870 | -0.130 |  |
+| 16 | NES Japan 6 | 3 | 166 | 11 | 2.870 | -0.130 |  |
+| 17 | Mario Japan 5 | 3 | 171 | 14 | 2.874 | -0.126 | 0.010 |
+| 18 | Mario Japan 15 | 4 | 424 | 13 | 3.878 | -0.122 | 0.053 |
+| 19 | NES U.K. 16 | 5 | 571 | 16 | 4.879 | -0.121 |  |
+| 20 | NES US 17 | 4 | 435 | 12 | 3.880 | -0.120 |  |
+| 21 | Mario France 10 | 5 | 566 | 5 | 4.881 | -0.119 | 0.113 |
+| 22 | Mario Australia 9 | 5 | 573 | 6 | 4.902 | -0.098 | 0.096 |
+| 23 | Mario Hawaii 7 | 3 | 212 | 18 | 2.922 | -0.078 | 0.013 |
+| 24 | Mario France 9 | 4 | 338 | 14 | 3.937 | -0.063 | 0.038 |
+| 25 | NES Japan 7 | 5 | 535 | 10 | 4.940 | -0.060 |  |
+| 26 | Mario Japan 3 | 3 | 220 | 8 | 2.954 | -0.046 | 0.022 |
+| 27 | NES U.K. 4 | 3 | 221 | 10 | 2.960 | -0.040 |  |
+| 28 | NES U.K. 12 | 3 | 162 | 14 | 2.960 | -0.040 |  |
+| 29 | Mario Japan 11 | 3 | 164 | 9 | 2.961 | -0.039 | 0.006 |
+| 30 | Mario Japan 16 | 3 | 174 | 17 | 2.964 | -0.036 | 0.013 |
+| 31 | Mario France 8 | 3 | 198 | 10 | 2.966 | -0.034 | 0.005 |
+| 32 | NES Japan 13 | 3 | 160 | 18 | 2.970 | -0.030 |  |
+| 33 | NES US 3 | 4 | 446 | 7 | 3.980 | -0.020 |  |
+| 34 | NES U.K. 8 | 3 | 201 | 17 | 2.980 | -0.020 |  |
+| 35 | Mario Japan 12 | 4 | 433 | 15 | 3.980 | -0.020 | 0.069 |
+| 36 | NES Japan 4 | 3 | 202 | 13 | 2.990 | -0.010 |  |
+| 37 | NES US 14 | 4 | 400 | 4 | 4.010 | +0.010 |  |
+| 38 | NES US 13 | 4 | 420 | 15 | 4.020 | +0.020 |  |
+| 39 | Mario Australia 4 | 4 | 417 | 8 | 4.025 | +0.025 | 0.060 |
+| 40 | Mario Australia 8 | 4 | 397 | 18 | 4.031 | +0.031 | 0.058 |
+| 41 | Mario Hawaii 6 | 4 | 400 | 8 | 4.033 | +0.033 | 0.033 |
+| 42 | NES U.K. 3 | 5 | 550 | 6 | 5.050 | +0.050 |  |
+| 43 | Mario Japan 4 | 5 | 547 | 4 | 5.058 | +0.058 | 0.082 |
+| 44 | NES Japan 2 | 4 | 392 | 14 | 4.060 | +0.060 |  |
+| 45 | NES US 6 | 4 | 400 | 11 | 4.060 | +0.060 |  |
+| 46 | Mario Australia 2 | 3 | 171 | 16 | 3.066 | +0.066 | 0.004 |
+| 47 | NES Japan 1 | 4 | 400 | 17 | 4.070 | +0.070 |  |
+| 48 | NES US 5 | 4 | 392 | 8 | 4.070 | +0.070 |  |
+| 49 | Mario Australia 15 | 3 | 194 | 17 | 3.071 | +0.071 | 0.013 |
+| 50 | NES U.K. 17 | 3 | 196 | 5 | 3.080 | +0.080 |  |
+| 51 | Mario Japan 6 | 4 | 397 | 12 | 4.098 | +0.098 | 0.076 |
+| 52 | NES U.K. 15 | 4 | 410 | 8 | 4.098 | +0.098 |  |
+| 53 | NES US 10 | 3 | 217 | 14 | 3.100 | +0.100 |  |
+| 54 | Mario Australia 10 | 3 | 216 | 7 | 3.111 | +0.111 | 0.005 |
+| 55 | Mario Australia 13 | 5 | 566 | 5 | 5.125 | +0.125 | 0.106 |
+| 56 | Mario France 17 | 4 | 440 | 17 | 4.125 | +0.125 | 0.041 |
+| 57 | NES Japan 5 | 4 | 410 | 8 | 4.130 | +0.130 |  |
+| 58 | NES Japan 8 | 4 | 464 | 12 | 4.130 | +0.130 |  |
+| 59 | Mario Japan 9 | 4 | 393 | 18 | 4.137 | +0.137 | 0.080 |
+| 60 | Mario Australia 14 | 4 | 388 | 15 | 4.140 | +0.140 | 0.036 |
+| 61 | NES US 18 | 5 | 571 | 5 | 5.140 | +0.140 |  |
+| 62 | NES Japan 16 | 3 | 192 | 9 | 3.140 | +0.140 |  |
+| 63 | Mario Australia 16 | 4 | 459 | 9 | 4.142 | +0.142 | 0.069 |
+| 64 | Mario Australia 7 | 3 | 200 | 10 | 3.146 | +0.146 | 0.027 |
+| 65 | NES Japan 15 | 4 | 410 | 5 | 4.150 | +0.150 |  |
+| 66 | Mario France 4 | 3 | 200 | 18 | 3.157 | +0.157 | 0.012 |
+| 67 | Mario Australia 11 | 4 | 405 | 11 | 4.162 | +0.162 | 0.075 |
+| 68 | NES US 7 | 3 | 167 | 18 | 3.180 | +0.180 |  |
+| 69 | Mario Australia 1 | 4 | 400 | 12 | 4.180 | +0.180 | 0.057 |
+| 70 | NES U.K. 14 | 4 | 403 | 4 | 4.187 | +0.187 |  |
+| 71 | NES US 9 | 4 | 410 | 10 | 4.190 | +0.190 |  |
+| 72 | Mario Japan 10 | 4 | 417 | 11 | 4.196 | +0.196 | 0.063 |
+| 73 | Mario Japan 1 | 4 | 412 | 16 | 4.213 | +0.213 | 0.079 |
+| 74 | NES U.K. 1 | 4 | 418 | 15 | 4.216 | +0.216 |  |
+| 75 | Mario France 14 | 4 | 421 | 11 | 4.231 | +0.231 | 0.127 |
+| 76 | Mario Japan 17 | 4 | 445 | 5 | 4.235 | +0.235 | 0.099 |
+| 77 | Mario France 15 | 4 | 424 | 13 | 4.238 | +0.238 | 0.069 |
+| 78 | Mario Japan 7 | 4 | 414 | 2 | 4.239 | +0.239 | 0.024 |
+| 79 | NES U.K. 7 | 4 | 428 | 1 | 4.239 | +0.239 |  |
+| 80 | NES US 11 | 4 | 421 | 9 | 4.240 | +0.240 |  |
+| 81 | Mario France 7 | 5 | 645 | 2 | 5.258 | +0.258 | 0.200 |
+| 82 | Mario Japan 2 | 4 | 405 | 10 | 4.259 | +0.259 | 0.060 |
+| 83 | NES Japan 14 | 4 | 464 | 4 | 4.260 | +0.260 |  |
+| 84 | Mario France 6 | 4 | 357 | 12 | 4.287 | +0.287 | 0.051 |
+| 85 | NES Japan 11 | 4 | 368 | 7 | 4.290 | +0.290 |  |
+| 86 | NES U.K. 5 | 4 | 431 | 2 | 4.290 | +0.290 |  |
+| 87 | NES Japan 18 | 5 | 605 | 2 | 5.300 | +0.300 |  |
+| 88 | Mario U.K. 7 | 3 | 227 | 10 | 3.326 | +0.326 | 0.019 |
+| 89 | Mario Japan 14 | 4 | 404 | 7 | 4.341 | +0.341 | 0.114 |
+| 90 | NES Japan 17 | 4 | 432 | 3 | 4.350 | +0.350 |  |
+| 91 | NES US 15 | 4 | 428 | 6 | 4.350 | +0.350 |  |
+| 92 | Mario Hawaii 2 | 4 | 440 | 14 | 4.352 | +0.352 | 0.083 |
+| 93 | Mario Australia 3 | 5 | 609 | 2 | 5.359 | +0.359 | 0.098 |
+| 94 | Mario Hawaii 3 | 3 | 240 | 12 | 3.360 | +0.360 | 0.017 |
+| 95 | Mario France 11 | 4 | 440 | 9 | 4.385 | +0.385 | 0.092 |
+| 96 | Mario France 1 | 4 | 438 | 8 | 4.400 | +0.400 | 0.077 |
+| 97 | NES US 12 | 5 | 642 | 3 | 5.410 | +0.410 |  |
+| 98 | Mario France 16 | 3 | 235 | 7 | 3.417 | +0.417 | 0.009 |
+| 99 | Mario Australia 5 | 4 | 440 | 4 | 4.424 | +0.424 | 0.064 |
+| 100 | Mario Japan 18 | 5 | 564 | 3 | 5.426 | +0.426 | 0.101 |
+| 101 | Mario France 2 | 4 | 452 | 4 | 4.440 | +0.440 | 0.117 |
+| 102 | NES US 8 | 5 | 560 | 1 | 5.440 | +0.440 |  |
+| 103 | Mario U.K. 3 | 4 | 452 | 12 | 4.465 | +0.465 | 0.155 |
+| 104 | Mario Hawaii 15 | 4 | 452 | 13 | 4.475 | +0.475 | 0.126 |
+| 105 | NES U.K. 18 | 4 | 460 | 9 | 4.489 | +0.489 |  |
+| 106 | Mario France 13 | 4 | 440 | 3 | 4.491 | +0.491 | 0.074 |
+| 107 | Mario Hawaii 8 | 5 | 678 | 4 | 5.495 | +0.495 | 0.207 |
+| 108 | Mario Australia 17 | 5 | 619 | 1 | 5.507 | +0.507 | 0.106 |
+| 109 | Mario France 12 | 3 | 224 | 15 | 3.513 | +0.513 | 0.010 |
+| 110 | NES Japan 9 | 4 | 418 | 1 | 4.560 | +0.560 |  |
+| 111 | Mario Hawaii 16 | 4 | 455 | 3 | 4.564 | +0.564 | 0.117 |
+| 112 | Mario U.K. 15 | 3 | 251 | 17 | 3.588 | +0.588 | 0.015 |
+| 113 | Mario Hawaii 17 | 3 | 238 | 7 | 3.600 | +0.600 | 0.008 |
+| 114 | Mario Australia 18 | 4 | 468 | 3 | 4.626 | +0.626 | 0.059 |
+| 115 | Mario Hawaii 9 | 4 | 412 | 6 | 4.643 | +0.643 | 0.092 |
+| 116 | Mario Hawaii 4 | 4 | 405 | 10 | 4.662 | +0.662 | 0.063 |
+| 117 | NES US 16 | 3 | 230 | 2 | 3.730 | +0.730 |  |
+| 118 | Mario France 3 | 5 | 624 | 6 | 5.737 | +0.737 | 0.108 |
+| 119 | Mario Hawaii 1 | 4 | 435 | 16 | 4.846 | +0.846 | 0.071 |
+| 120 | Mario Hawaii 12 | 3 | 231 | 15 | 3.854 | +0.854 | 0.011 |
+| 121 | Mario U.K. 11 | 4 | 471 | 5 | 4.922 | +0.922 | 0.097 |
+| 122 | Mario Australia 12 | 4 | 424 | 13 | 4.936 | +0.936 | 0.046 |
+| 123 | Mario U.K. 17 | 4 | 450 | 7 | 4.938 | +0.938 | 0.089 |
+| 124 | Mario U.K. 12 | 4 | 464 | 11 | 4.985 | +0.985 | 0.031 |
+| 125 | NES U.K. 11 | 4 | 424 | 3 | 4.990 | +0.990 |  |
+| 126 | Mario U.K. 16 | 4 | 464 | 13 | 5.005 | +1.005 | 0.060 |
+| 127 | Mario U.K. 4 | 5 | 576 | 6 | 6.019 | +1.019 | 0.067 |
+| 128 | Mario U.K. 2 | 3 | 226 | 16 | 4.022 | +1.022 | 0.004 |
+| 129 | Mario U.K. 6 | 4 | 428 | 18 | 5.034 | +1.034 | 0.056 |
+| 130 | Mario Hawaii 11 | 4 | 456 | 11 | 5.037 | +1.037 | 0.085 |
+| 131 | Mario Hawaii 10 | 4 | 464 | 9 | 5.041 | +1.041 | 0.059 |
+| 132 | Mario Hawaii 13 | 4 | 416 | 17 | 5.043 | +1.043 | 0.046 |
+| 133 | Mario Hawaii 5 | 5 | 773 | 2 | 6.055 | +1.055 | 0.263 |
+| 134 | Mario U.K. 13 | 4 | 447 | 15 | 5.137 | +1.137 | 0.062 |
+| 135 | Mario U.K. 5 | 4 | 440 | 8 | 5.204 | +1.204 | 0.086 |
+| 136 | Mario Hawaii 18 | 5 | 750 | 5 | 6.252 | +1.252 | 0.175 |
+| 137 | Mario U.K. 1 | 4 | 470 | 14 | 5.437 | +1.437 | 0.040 |
+| 138 | Mario France 18 | 5 | 700 | 1 | 6.471 | +1.471 | 0.106 |
+| 139 | Mario U.K. 14 | 5 | 778 | 3 | 6.499 | +1.499 | 0.274 |
+| 140 | Mario U.K. 8 | 4 | 464 | 4 | 5.557 | +1.557 | 0.035 |
+| 141 | Mario U.K. 9 | 5 | 766 | 2 | 6.665 | +1.665 | 0.155 |
+| 142 | Mario U.K. 18 | 5 | 838 | 1 | 7.122 | +2.122 | 0.169 |
+| 143 | Mario Hawaii 14 | 5 | 762 | 1 | 8.398 | +3.398 | 0.067 |
+| 144 | Mario U.K. 10 | 3 | 200 | 9 | 6.515 | +3.515 | 0.002 |
+
+### Expert holes
+
+The 19 Mario Open holes that play worse against par than every NES Open hole (the worst is NES U.K. 11, +0.990), hardest first.
+
+| Hole | Par | Yards | Expected | Over par |
+|---|---|---|---|---|
+| Mario U.K. 10 | 3 | 200 | 6.515 | +3.515 |
+| Mario Hawaii 14 | 5 | 762 | 8.398 | +3.398 |
+| Mario U.K. 18 | 5 | 838 | 7.122 | +2.122 |
+| Mario U.K. 9 | 5 | 766 | 6.665 | +1.665 |
+| Mario U.K. 8 | 4 | 464 | 5.557 | +1.557 |
+| Mario U.K. 14 | 5 | 778 | 6.499 | +1.499 |
+| Mario France 18 | 5 | 700 | 6.471 | +1.471 |
+| Mario U.K. 1 | 4 | 470 | 5.437 | +1.437 |
+| Mario Hawaii 18 | 5 | 750 | 6.252 | +1.252 |
+| Mario U.K. 5 | 4 | 440 | 5.204 | +1.204 |
+| Mario U.K. 13 | 4 | 447 | 5.137 | +1.137 |
+| Mario Hawaii 5 | 5 | 773 | 6.055 | +1.055 |
+| Mario Hawaii 13 | 4 | 416 | 5.043 | +1.043 |
+| Mario Hawaii 10 | 4 | 464 | 5.041 | +1.041 |
+| Mario Hawaii 11 | 4 | 456 | 5.037 | +1.037 |
+| Mario U.K. 6 | 4 | 428 | 5.034 | +1.034 |
+| Mario U.K. 2 | 3 | 226 | 4.022 | +1.022 |
+| Mario U.K. 4 | 5 | 576 | 6.019 | +1.019 |
+| Mario U.K. 16 | 4 | 464 | 5.005 | +1.005 |
+
+### New holes at NES Open level
+
+The 36 Mario Open holes that are not expert holes and share no family with a NES Open hole (`data/catalog/curation.json`), easiest first.
+
+| Hole | Par | Yards | Expected | Over par |
+|---|---|---|---|---|
+| Mario France 10 | 5 | 566 | 4.881 | -0.119 |
+| Mario Hawaii 7 | 3 | 212 | 2.922 | -0.078 |
+| Mario France 9 | 4 | 338 | 3.937 | -0.063 |
+| Mario France 8 | 3 | 198 | 2.966 | -0.034 |
+| Mario Australia 4 | 4 | 417 | 4.025 | +0.025 |
+| Mario Hawaii 6 | 4 | 400 | 4.033 | +0.033 |
+| Mario Japan 4 | 5 | 547 | 5.058 | +0.058 |
+| Mario France 17 | 4 | 440 | 4.125 | +0.125 |
+| Mario Australia 14 | 4 | 388 | 4.140 | +0.140 |
+| Mario France 4 | 3 | 200 | 3.157 | +0.157 |
+| Mario France 14 | 4 | 421 | 4.231 | +0.231 |
+| Mario France 7 | 5 | 645 | 5.258 | +0.258 |
+| Mario U.K. 7 | 3 | 227 | 3.326 | +0.326 |
+| Mario Hawaii 2 | 4 | 440 | 4.352 | +0.352 |
+| Mario Australia 3 | 5 | 609 | 5.359 | +0.359 |
+| Mario Hawaii 3 | 3 | 240 | 3.360 | +0.360 |
+| Mario France 11 | 4 | 440 | 4.385 | +0.385 |
+| Mario France 1 | 4 | 438 | 4.400 | +0.400 |
+| Mario France 16 | 3 | 235 | 3.417 | +0.417 |
+| Mario France 2 | 4 | 452 | 4.440 | +0.440 |
+| Mario U.K. 3 | 4 | 452 | 4.465 | +0.465 |
+| Mario Hawaii 15 | 4 | 452 | 4.475 | +0.475 |
+| Mario France 13 | 4 | 440 | 4.491 | +0.491 |
+| Mario Hawaii 8 | 5 | 678 | 5.495 | +0.495 |
+| Mario France 12 | 3 | 224 | 3.513 | +0.513 |
+| Mario Hawaii 16 | 4 | 455 | 4.564 | +0.564 |
+| Mario U.K. 15 | 3 | 251 | 3.588 | +0.588 |
+| Mario Hawaii 17 | 3 | 238 | 3.600 | +0.600 |
+| Mario Australia 18 | 4 | 468 | 4.626 | +0.626 |
+| Mario Hawaii 9 | 4 | 412 | 4.643 | +0.643 |
+| Mario Hawaii 4 | 4 | 405 | 4.662 | +0.662 |
+| Mario Hawaii 1 | 4 | 435 | 4.846 | +0.846 |
+| Mario Hawaii 12 | 3 | 231 | 3.854 | +0.854 |
+| Mario U.K. 11 | 4 | 471 | 4.922 | +0.922 |
+| Mario U.K. 17 | 4 | 450 | 4.938 | +0.938 |
+| Mario U.K. 12 | 4 | 464 | 4.985 | +0.985 |
+
+### Findings
+
+- **Mario Open's Japan plays like a NES Open course; Australia and France play 2-4
+  strokes harder; Hawaii and the U.K. far harder.** 28 of those two courses' 36 holes
+  play more than half a stroke over par, where the 54 NES Open holes have 3. Holes differ
+  far more than courses: the three NES Open rounds come out within half a stroke of one
+  another, where the expected order is Japan, US, U.K.
+- **19 expert holes**: Mario Open holes that play worse than every NES Open hole. Twelve
+  are on the U.K. course, six on Hawaii, one on France, and all seven par 5s over 48 rows
+  are among them. The hardest are the U.K. 10th (+3.52), a par 3 from an island tee to
+  an island green, where every shot into the water drops back at the tee island's edge
+  (the game's own drop rule, **Penalties and drops**), the Hawaii 14th (+3.40) and the
+  U.K. 18th (+2.12). The line between expert and not is close: the worst NES Open hole,
+  U.K. 11th, is +0.99, and the Mario U.K. 12th (+0.985) and 16th (+1.005) sit either
+  side of it.
+- **36 new holes at NES Open level**: Mario Open holes neither expert nor in a family
+  with a NES Open hole. 4 play under par, 20 within +0.49 (where most NES Open holes
+  are), and 12 from +0.5 to +0.99, as only NES Open's 3 hardest do. France (13) and
+  Hawaii (12) give most of them, then the U.K. (6), Australia (4) and Japan (1): nearly
+  every Mario Japan hole is a NES Open hole's twin.
+- **Length predicts difficulty within a par**: over all 144 holes, the Spearman
+  correlation of yards with strokes over par is 0.65 for par 3s, 0.66 for par 4s and 0.84
+  for par 5s. **The game's handicaps predict it less well**: 0.55-0.69 on the NES Open
+  courses, 0.13-0.53 on Mario Open's.
+- **The long par 5s lean most on borrowed values**: the U.K. 14th visits spots too rare
+  to value 0.27 times a hole, the Hawaii 5th 0.26 and 8th 0.21, where most holes visit
+  them 0.01-0.15 times.
+
+### NES US 16th and Mario U.K. 2nd
+
+The U.K. 2nd (+1.02) is the US 16th changed (+0.72, solved again with the current solver), with the same tee, green box and
+pins and the same river carry. It plays about 0.4 strokes harder for two reasons:
+
+- **Less land around the green.** The rough between the green and water or out of
+  bounds narrows from 5-13 pixels to 1-5 on the east, 5-21 to 3-9 on the north, and 19-22
+  to 5-14 on the west. The tee shot reaches the green as often on both (25.5% against
+  25.6% for the U.K. 2nd's chosen drive), but near misses that stayed in rough on the
+  US 16th go in the water: 38% of drives are dropped beside the green, against 25%.
+  The new bunker short of the river is never reached.
+- **The green is a crown, where the US 16th's is a bowl.** Both greens are four
+  quadrants around a flat cross. The US 16th's quadrants slope gently toward the centre
+  (light tiles `$90-$93`, slope 40.40). The U.K. 2nd's slope away from it, about three
+  times as steeply (`$40`/`$42` north and south, dark, scaled ×2.5; `$89`/`$8B` east and
+  west, light, ×2; slope 120.C0). From the same spot a putt drifts toward the centre on
+  one and toward the edge on the other. Putting from the east and north quadrants is
+  worth about 0.15 more a hole, and the chip from the drop beside the green 2.86 against
+  2.53.
+
+Played with the same drive, the U.K. 2nd's, the gap is 0.40: 0.18 from more drives in
+the water and 0.22 from what follows them. The US 16th's own solve chose a drive worth
+3.721, 0.10 worse than that one, so the screen missed it (**Future work**).
+
+### The cleanup-round fix
+
+After round 12 the solver adds no new states (**The solver**, Rounds). Until the fix, a
+state could still switch to an intent whose outcomes landed on spots never valued, and
+nothing could correct it: the tee chose short hops into cells priced by `guess` alone.
+Five Mario Open holes ended with every visit from the tee on such spots (rare visits
+1.0). Now intents chosen past that point must stay among valued states
+(`HoleSolver.stays_valued`). The holes that had run past round 12, solved again:
+
+| Hole | Before | After | Tee shot before → after |
+|---|---|---|---|
+| Mario France 3rd | 5.095 | 5.737 | 2W at power 30 → 1W |
+| Mario France 18th | 5.668 | 6.471 | PW at power 37 → 1W |
+| Mario Hawaii 14th | 7.699 | 8.398 | SW at power 24 → 1W |
+| Mario Hawaii 18th | 5.983 | 6.252 | SW at power 1 → 1W |
+| Mario U.K. 18th | 6.263 | 7.122 | 3W at power 28 → 1W |
+| Mario U.K. 14th | 6.498 | 6.499 | unchanged |
+| Mario U.K. 13th | 5.137 | 5.137 | unchanged |
+
+
+### Earlier NES Open solves
+
+The NES Open holes in the tables above were solved before the fringe screen, the loops
+fix and the cleanup-round fix, and their solve files were not kept; the tables were made
+from these numbers.
+
+At skill 3, pin 0, before the fringe screen and the loops were fixed, the default settings
+otherwise:
+
+| Course | Out | In | Round |
+|--------|-----|----|-------|
+| U.K. | 36.01 | 37.35 | 73.36 |
+| US | 35.89 | 38.28 | 74.17; 73.77 with the 12th's loops fixed |
+| Japan | 36.61 | 36.86 | 73.47 |
+
+By hole, U.K.: 4.22, 3.76, 5.05, 2.96, 4.30, 3.73, 4.27, 2.98, 4.75; 3.81, 4.99, 2.96,
+4.82, 4.19, 4.10, 4.89, 3.08, 4.53. US: 3.66, 4.46, 3.98, 2.85, 4.07, 4.06, 3.18, 5.44,
+4.19; 3.10, 4.24, 5.41, 4.02, 4.01, 4.35, 3.73, 3.88, 5.14. Japan: 4.07, 4.06, 4.87,
+2.99, 4.13, 2.87, 4.94, 4.13, 4.56; 3.77, 4.29, 4.64, 2.97, 4.26, 4.15, 3.14, 4.35,
+5.30. The three rounds come out within half a stroke of one another, where the
+expected order is Japan, US, U.K. (**Future work**); holes differ far more than courses.
+The hardest against par: U.K. 11th (+0.99), US 8th and 16th (+0.44, +0.73), Japan 9th
+(+0.56).
+
+Solved again with both fixes, ten U.K. holes moved by 0.04 or less: 1st 4.216, 2nd
+3.760, 5th 4.290, 7th 4.239, 9th 4.737, 10th 3.802, 14th 4.187, 15th 4.098, 16th 4.879,
+18th 4.489; the tables above use these.
+Against the game's own hole handicaps (the `handicap` in each hole's JSON), expected
+strokes over par rank the holes with a Spearman correlation of 0.55 (U.K.), 0.62 (US)
+and 0.69 (Japan).
+
+## Hand-off: the NES Open re-solves (delete this section when done)
+
+The NES Open numbers in **Results** are from solves made before three fixes, and their
+files were not kept (**Earlier NES Open solves**). The 54 NES Open holes are being solved
+again with the current solver, so that all 144 holes come from one solver and one
+archive. Everything else in this document is final.
+
+**jdharms runs this overnight**: 6-8 hours on 16 workers, from the repository root, with
+the PyPy environment (**Running under PyPy**) and `nes_open_us.nes`. It keeps running if
+the terminal closes; follow it with `tail -f .cache/difficulty/solves/nes_us.log` and so
+on.
+
+```bash
+nohup bash -c 'for c in us uk japan; do
+  mkdir -p .cache/difficulty/solves/nes_$c
+  PYTHONPATH=. .cache/pypy/bin/python -u -m tools.research.difficulty \
+      nes_open_us.nes --course $c --hole 1-18 --skill 3 --workers 16 \
+      --output .cache/difficulty/solves/nes_$c/ > .cache/difficulty/solves/nes_$c.log 2>&1
+done' > /dev/null 2>&1 &
+```
+
+**The agent finishing this**, in a new session, once the run is done:
+
+1. **Check the run.** `nes_us`, `nes_uk` and `nes_japan` under `.cache/difficulty/solves/`
+   each hold 18 `hole_NN.json`, and each log ends with its course's table and has no
+   traceback. Every hole's "visits to spots too rare to value" should be under about 0.3
+   a hole: 1.0 means the failure in **The cleanup-round fix** is back, and needs fixing
+   and that hole solving again before going on. "warning:" lines should report under
+   about 0.01 a hole. If anything is wrong, report it to jdharms and stop.
+2. **Check the Mario Open solves are there**: `jp_japan`, `jp_australia`, `jp_france`,
+   `jp_hawaii` and `jp_uk` with 18 holes each, and their logs, in the same directory. If
+   they are not, extract the archive there (**Data**); its slim solves serve as well.
+3. **Rebuild the data and tables** (it should report 144 holes):
+
+   ```bash
+   uv run golf-difficulty-report .cache/difficulty/solves --summary data/difficulty/holes.json \
+       --archive data/difficulty/solves-skill3-pin0.tar.xz --markdown <scratch>/tables.md
+   ```
+
+4. **Replace the tables** in **Results**, from "### Courses" up to "### Findings", with
+   `tables.md`.
+5. **Bring the prose up to date with the new NES Open numbers**, and check every number
+   that compares against NES Open:
+   - **Findings**: the NES Open courses' spread and order, the count of NES Open holes
+     over +0.5, the expert holes (how many, which courses, the worst NES Open hole and
+     the holes either side of the line), the new holes at NES Open level (how many, and
+     in which bands and courses), and the handicap correlations.
+   - **NES US 16th and Mario U.K. 2nd**: the US 16th's value and whether its new solve
+     finds a drive as good as 3.619.
+   - **Decisions**, "Skill 3 for placing the Mario Open holes": the U.K. round at skill 3.
+   - **Results**' first paragraph: drop its last sentence, on the earlier NES Open solves.
+   - Delete **Earlier NES Open solves**.
+6. **Tell jdharms what changed**: which holes joined or left the expert holes and the
+   new holes at NES Open level (`git diff` on this document shows them). jdharms's
+   league-mates have reviewed the list of 19 expert holes.
+7. Run `uv run pytest` (not the physics tests) and `uv run golf-check`, and delete this
+   section.
