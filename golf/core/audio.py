@@ -239,7 +239,7 @@ def build_nsf(
     )
 
 
-# Drum-kit NSF: one song per DPCM slot. Rather than synthesising anything, this
+# Drum-kit NSF: one song per DPCM slot. Rather than synthesizing anything, this
 # hands the sample id to the game's own DmcUpdate and lets it run, so the hit --
 # including the frame-counter cut-off -- is byte-for-byte what plays in game.
 _DRUM_STUB = bytes(

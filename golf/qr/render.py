@@ -1,5 +1,5 @@
 """
-PNG rendering of the QR screen, in NES colours.
+PNG rendering of the QR screen, in NES colors.
 
 Everything here renders from the CHR + nametable rather than straight from the
 module matrix, so a preview image is an honest simulation of what the PPU will

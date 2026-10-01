@@ -1,7 +1,7 @@
 """
 SRAM defaults: change what a new save starts with - the player name, both
 players' club bags and the BGM option - and the magic that marks a save as
-initialised.
+initialized.
 
 `InitializeSram` (bank 9 $ACBC) runs at boot and returns if $6001/$6002 hold
 the magic, "5S" ($35 $53). Otherwise, and when "clear saved data" option 3
@@ -25,9 +25,9 @@ tables:
   `LDA #`. A save holding any other magic is wiped and rebuilt at boot, so a
   save from another ROM cannot carry its bag in. Neither byte may be $00 or
   $FF, what blank SRAM usually holds: blank SRAM would pass the check and
-  never be initialised.
+  never be initialized.
 
-Only a save being initialised gets these defaults.
+Only a save being initialized gets these defaults.
 
 The bags live in SRAM (`Player1ClubBag` $6027, `Player2ClubBag` $6035), which
 every bank sees. `InitializeSram` is the only absolute store to them ($AD3D,

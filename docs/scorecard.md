@@ -76,7 +76,7 @@ rows`, then the tiles. `header & $3F` is the width; bit 7 means the two bytes af
 | `$06` | `$B0C1` | — | — | `36H MATCH PLAY  TOURNAMENT` |
 | `$07` | `$B0CE` | `$B0DA` | `$2089` | `BET ON 1 HOLE` |
 
-The 26-wide strings start at column 3; the short ones are centred by hand at column 9.
+The 26-wide strings start at column 3; the short ones are centered by hand at column 9.
 The two tournament match-play strings carry a **double space** before `TOURNAMENT`,
 padding them to the same 26 tiles as the stroke-play ones.
 
@@ -210,27 +210,27 @@ follows the handler's `JSR $CE84`. Changing the pointer is a two-byte edit:
 | `BET ON 1 HOLE` | `$B0D7` | `$B0DA` |
 
 A same-length-or-shorter string is an in-place edit of the descriptor: fix the width byte
-(offset +2) and the dest address (+0/+1) to re-centre, then the tiles. A longer one goes
+(offset +2) and the dest address (+0/+1) to re-center, then the tiles. A longer one goes
 in free space with the `.dw` repointed. Whole handlers can be repointed too, in the
 dispatch tables at `$AE8E` (game mode) and `$AEAA` (course).
 
 The title font has **only `A`-`Z`, `0`-`9` and space** (`$00`-`$24`). No lowercase, no
 punctuation.
 
-**Colour is set by the attribute table, and the two rows are not equally forgiving.**
+**Color is set by the attribute table, and the two rows are not equally forgiving.**
 
 - The title row (4) sits in attribute row 1, which is palette 2 (`$19` green) across
   **columns 2-29** - the whole card. Any title placement works.
 - The course-name row (3) is the lower half of attribute row 0, palette 3 (`$16` red)
   over **columns 10-21 only**, sized to fit `JAPAN COURSE` exactly. Outside that band
-  the text comes out in palette 0, whose colour 2 is `$25` (pink).
+  the text comes out in palette 0, whose color 2 is `$25` (pink).
 
 To widen the red band, patch the attribute bytes in place. The whole of attribute row 0
 (PPU `$23C0`-`$23C7`, one byte per four columns) sits inside one 9-byte literal in the
 compressed nametable stream: opcode `$08` at bank 2 `$B9EF`, then **`$B9F0`**-`$B9F7` =
 `00 00 C0 F0 F0 30 00 00`, and `$B9F8`, the first byte of attribute row 1. Bits 4-7 of
 each byte are the lower half of the attribute row, tile rows 2 and 3. Row 2 is the card's
-top frame, and the frame tiles use only colours 0 and 3, which are `$30` and `$0F` in all
+top frame, and the frame tiles use only colors 0 and 3, which are `$30` and `$0F` in all
 four palettes, so the band can cover any columns without changing the frame. The 36-hole
 match play tournament card at `$BA0B` stores the row as `C0`, a `$20` run of six `$F0`
 bytes seeded at **`$BB04`**, then `30`, so there columns 2-29 are already all palette 3.
@@ -245,15 +245,15 @@ of this for `<NAME> COURSE`, with no free space:
 
 - it repoints the US and UK entries of the course table (`$AEAE`, `$AEB1`) at the Japan
   handler `$AFC2`, so every slot draws the same name
-- it rewrites the descriptor at `$AFC8` in place, centred at column `(32 - width) // 2`
-  as vanilla centres its own names; past 16 bytes it runs into the now-unreachable US
+- it rewrites the descriptor at `$AFC8` in place, centered at column `(32 - width) // 2`
+  as vanilla centers its own names; past 16 bytes it runs into the now-unreachable US
   handler at `$AFD8`
 - it rebuilds attribute row 0 at `$B9F0`-`$B9F7` so palette 3 covers the name's columns
 
 Its optional `title` replaces `18H STROKE PLAY` (mode `$00`). The vanilla descriptor at
 `$B00D` is 15 tiles with the mode `$01` handler right behind it at `$B020`, so the new
 descriptor goes in the unreachable US and UK handler bytes instead, at `$AFE0` (just past
-the longest name descriptor), and the `.dw` at `$B00A` is repointed. It is centred at
+the longest name descriptor), and the `.dw` at `$B00A` is repointed. It is centered at
 column `(33 - width) // 2`, which is where vanilla puts `18H STROKE PLAY`,
 `18H MATCH PLAY` and the 26-tile tournament titles. Other game modes keep their titles.
 

@@ -86,8 +86,8 @@ def test_chr_is_the_documented_size() -> None:
     assert len(nes.build_chr()) == nes.CHR_BYTES == 256
 
 
-def test_chr_uses_only_colour_zero_and_one() -> None:
-    """Plane 1 is empty, so every dark pixel is colour 1 of whatever palette."""
+def test_chr_uses_only_color_zero_and_one() -> None:
+    """Plane 1 is empty, so every dark pixel is color 1 of whatever palette."""
     tiles = nes.decode_chr(nes.build_chr())
     assert set(np.unique(tiles).tolist()) <= {0, 1}
 
@@ -133,7 +133,7 @@ def test_nametable_only_references_the_sixteen_qr_tiles(matrices) -> None:
         assert max(nametable) < nes.QR_TILE_COUNT
 
 
-def test_nametable_honours_a_base_tile_offset(matrices) -> None:
+def test_nametable_honors_a_base_tile_offset(matrices) -> None:
     base = 0x40
     plain = nes.build_nametable(matrices[0].rows())
     offset = nes.build_nametable(matrices[0].rows(), base_tile=base)
@@ -211,10 +211,10 @@ def test_render_scales_by_whole_pixels(matrices) -> None:
     assert image.size == (nes.SCREEN_WIDTH_PX * 3, nes.SCREEN_HEIGHT_PX * 3)
 
 
-def test_render_uses_only_two_colours(matrices) -> None:
+def test_render_uses_only_two_colors(matrices) -> None:
     image = render_screen(matrices[0])
-    colours = {tuple(px) for px in np.array(image).reshape(-1, 3).tolist()}
-    assert len(colours) == 2
+    colors = {tuple(px) for px in np.array(image).reshape(-1, 3).tolist()}
+    assert len(colors) == 2
 
 
 def test_render_code_rejects_too_large_a_quiet_zone(matrices) -> None:

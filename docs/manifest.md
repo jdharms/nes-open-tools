@@ -129,7 +129,7 @@ A slot is a catalog hole `id`, its `par` (a copy of the catalog's, for readabili
 empty. The wind seed is the 16-bit state the ROM's own RNG starts the hole from
 (`docs/seeded_wind.md`), not a seed for generation. No hole id appears twice.
 
-The SRAM magic is what the ROM's save initialisation compares a save against at boot
+The SRAM magic is what the ROM's save initialization compares a save against at boot
 (`sram_defaults`). A save holding any other magic, from the vanilla game or another seed,
 is wiped and rebuilt with the name and bag the player chose at download, so those choices
 always land. Neither byte may be `$00` or `$FF`, what blank SRAM holds, or blank SRAM would

@@ -9,7 +9,7 @@ CHR that never changes.
 
 `render_modules` reconstructs the module grid back out of the CHR and
 nametable, which is what lets the renderer and the validation harness work from
-the same bytes the PPU will see rather than from an idealised matrix.
+the same bytes the PPU will see rather than from an idealized matrix.
 """
 
 import numpy as np
@@ -32,7 +32,7 @@ CHR_TILE_BYTES = 16
 CHR_BYTES = QR_TILE_COUNT * CHR_TILE_BYTES
 
 #: Where the code sits on screen, in tiles (column, row). Chosen so the code is
-#: tile-aligned and roughly centred, with well over the 4-module quiet zone on
+#: tile-aligned and roughly centered, with well over the 4-module quiet zone on
 #: every side and room for a caption above and below.
 SCREEN_TILE_ORIGIN = (7, 5)
 
@@ -77,7 +77,7 @@ def build_chr() -> bytes:
     The 16 QR tiles in NES CHR format, 256 bytes, tile n holding pattern n.
 
     Plane 0 carries the pattern and plane 1 is zero, so every dark pixel is
-    colour 1 of whatever palette the screen uses.
+    color 1 of whatever palette the screen uses.
     """
     out = bytearray()
     for index in range(QR_TILE_COUNT):
@@ -110,7 +110,7 @@ def build_nametable(matrix_rows: list[list[int]], base_tile: int = 0) -> bytes:
 
 def decode_chr(chr_data: bytes) -> np.ndarray:
     """
-    Decode a CHR blob into an (n, 8, 8) array of colour indices 0-3, the way
+    Decode a CHR blob into an (n, 8, 8) array of color indices 0-3, the way
     the PPU combines the two bit planes.
     """
     raw = np.frombuffer(chr_data, dtype=np.uint8).reshape(-1, 2, TILE_PX)
@@ -120,7 +120,7 @@ def decode_chr(chr_data: bytes) -> np.ndarray:
 
 def render_tiles(chr_data: bytes, nametable: bytes, base_tile: int = 0) -> np.ndarray:
     """
-    Decode CHR + nametable back into a pixel array of colour indices (0 light,
+    Decode CHR + nametable back into a pixel array of color indices (0 light,
     1 dark), 152 x 152 for the 19x19 block.
 
     This is the PPU's job done in software: everything downstream renders from
@@ -157,7 +157,7 @@ def render_modules(
 
 def screen_pixels(matrix_rows: list[list[int]], base_tile: int = 0) -> np.ndarray:
     """
-    A full 256x240 screen of colour indices with the code placed at
+    A full 256x240 screen of color indices with the code placed at
     `SCREEN_TILE_ORIGIN`, built through the CHR and nametable.
     """
     chr_data = build_chr()

@@ -204,7 +204,7 @@ copies the same bag back from the ROM.
 `unfinished_steps` passes `choose_clubs=False` when the seed places any constraint on
 clubs, `manifest.course.clubs != ClubRules()`: a required bag, a banned club or a max
 below 14. That is the same test the saving rule uses to decide whether a download's bag
-is saved. A seed without club rules keeps CHOOSE CLUBS, and its bag stays on the honour
+is saved. A seed without club rules keeps CHOOSE CLUBS, and its bag stays on the honor
 system as it is today, since no bag breaks its rules. The removal is part of the
 unfinished build, so it bumps `BUILD_VERSION` but not the finish ABI; seeds already
 stored keep CHOOSE CLUBS. Repointing the bank 13 reads at a
@@ -282,7 +282,7 @@ a ROM the user playtests.
    club rules; add it to the recipe parameters in the registry and in
    `docs/patch_stack.md`'s table, update `menu_trim`'s docstring and the worked example
    in `docs/menu_system.md`, replace the "Future option" note in `sram_defaults.py`, and
-   update the devplan's honour-system paragraph under entries and its "Bag from ROM"
+   update the devplan's honor-system paragraph under entries and its "Bag from ROM"
    polish item.
    Draft an ADR (`golf-adr`, proposed, `--drafted-by Claude`) for ABI 2 and how old seeds
    are finished. Tests: unit tests for the patch bytes; the ABI golden for ABI 2 beside

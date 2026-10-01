@@ -52,7 +52,7 @@ vanilla ones.
 
 - **Detecting attribute streaming per write** (chosen 2026-09-03, reversed here). Two
   code paths in `multi_bank_lookup` for one feature. Attribute streaming was later
-  removed altogether in favour of a larger attribute buffer inside `wram_expansion`.
+  removed altogether in favor of a larger attribute buffer inside `wram_expansion`.
 - **Choosing the mirrors from the hole count.** The course patch would decide which
   slots to mirror; always applying both is simpler and leaves no slot playing
   vanilla holes.

@@ -93,7 +93,7 @@
       null,
       null
     ],
-    "note": "nes_by_index maps a palette index to a NES colour; null means transparent or a guide colour. The nine redundant blacks are collapsed onto $0F.",
+    "note": "nes_by_index maps a palette index to a NES color; null means transparent or a guide color. The nine redundant blacks are collapsed onto $0F.",
     "body_indices": [
       33,
       14,
@@ -104,7 +104,7 @@
       14,
       42
     ],
-    "max_body_colours": 3
+    "max_body_colors": 3
   },
   "body_in_front_frames": [],
   "layers": [

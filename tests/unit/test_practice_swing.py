@@ -122,7 +122,7 @@ class TestRoutineEncoding:
         assert HOLD_PRACTICE_ADDR + 0x11 + 2 + hold[0x12] == loop
         assert hold[0x19:0x1C] == bytes([0xAD, 0xAC, 0x05])  # LDA WaterLandingCount
 
-    def test_hold_frames_is_parameterised(self):
+    def test_hold_frames_is_parameterized(self):
         assert _hold_practice_swing(0x40)[0x10] == 0x40
         assert _hold_practice_swing(0x99)[0x10] == 0x99
 

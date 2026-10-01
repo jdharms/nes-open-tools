@@ -151,11 +151,18 @@ The indexes and pointers above only stay useful if changes keep them current:
 ### Linting, formatting and type checking
 
 `uv run golf-check` runs ruff (lint and format) and pyright over the Python, djLint over
-the Jinja templates and Biome over the site's JS and CSS; `--fix` formats and applies safe
-fixes. Configuration is in `pyproject.toml` and `biome.jsonc`. The tools' output is the
+the Jinja templates, Biome over the site's JS and CSS, and codespell over every tracked
+file; `--fix` formats and applies safe fixes. Configuration is in `pyproject.toml` and `biome.jsonc`. The tools' output is the
 house style: Python is formatted by `ruff format` at 88 columns, and code that disagrees
 with a tool is not precedent. Biome is not a Python package; `golf-biome`
 (`tools/dev/biome.py`) downloads a pinned, hash-checked binary, so no Node tooling is involved.
+
+### Spelling
+
+The repo uses American spelling - color, center, behavior, labeled, initialize - in code,
+identifiers, docs and label names alike. Don't match a British spelling in surrounding
+code; fix it. codespell (configured in `pyproject.toml`) catches the common ones in
+`golf-check`, and reports rather than rewrites them.
 
 ### JSON inspection
 

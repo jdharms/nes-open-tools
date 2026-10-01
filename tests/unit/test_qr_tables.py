@@ -270,7 +270,7 @@ def test_chr_tiles_decode_to_their_own_index(by_name) -> None:
         )
         for pixel, bit in quadrants:
             assert pixel == (index >> bit) & 1
-        # Each quadrant is solid, and nothing uses colour 2 or 3.
+        # Each quadrant is solid, and nothing uses color 2 or 3.
         assert set(tile.flatten().tolist()) <= {0, 1}
         for row_start in (0, 4):
             for col_start in (0, 4):

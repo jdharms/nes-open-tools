@@ -64,7 +64,7 @@ so key `$01`) the handler at `$9291` sets the script pointer to bank 11 `$A0EE`.
 The match-play handlers also copy `OpponentGolferIdentity ($0131)` into `$071D`, which
 selects the opponent's sprite tiles and palette below.
 
-> `$071D` is labelled `SuppressMenuHistoryPushFlag` in the `.mlb`. That is its meaning in
+> `$071D` is labeled `SuppressMenuHistoryPushFlag` in the `.mlb`. That is its meaning in
 > the title-menu driver (`docs/menu_system.md`); this scene reuses the same byte as a
 > variant index. Both readings are correct in their own context.
 
@@ -108,7 +108,7 @@ Indexed by `$071D` (`0` for every 1-player stroke/tournament game):
 | `$96B9` | 32-byte palette (bank 12) | `$9777 $9797 $97F7 $97B7 $9817 $97D7 $97D7` |
 
 The seven palettes are identical in their background half; only the sprite half changes,
-which is how the portraits get different clothing colours.
+which is how the portraits get different clothing colors.
 
 `GolfGameMode` also picks a 32-tile header row written to PPU `$20E0` (nametable row 7)
 from `CourseIntroModeTextPtrTable` (`$96B3`): `$988B` = 18-hole, `$98AB` = 36-hole,
@@ -169,7 +169,7 @@ in bank 13 reads to back out to the menu.
 |---|---|---|
 | `0` (no match) | falls through to `$960A` | nametable write, descriptor `$9610` |
 | `1` | `$960A` | same |
-| `2` | `$9615` | walks 12 steps from `TextBoxOpenStepPtrTable` (`$96E3`) using `CourseIntroPhaseStep` as the counter — the text box opening outward from its centre — then `INC $070A` |
+| `2` | `$9615` | walks 12 steps from `TextBoxOpenStepPtrTable` (`$96E3`) using `CourseIntroPhaseStep` as the counter — the text box opening outward from its center — then `INC $070A` |
 | `3` | `$9672` | `INC $070A`, then the box's left and right edges (`$98CB`, `$98DA`) |
 | `4` | `$9680` | the box's top and bottom edges (`$98E9`, `$98EE`), clears `ScriptResumePtr`, sets `ScriptDelayCounter = $16` (22-frame pause) and `ScriptTextBufferPage = $70`, `INC $070A` |
 | `5` | `$96A0` | `ExecuteFarCall` bank 11 `$9033` — run the text script |

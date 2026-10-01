@@ -157,8 +157,8 @@ class TestDisassembleInlineArgs:
         assert listing.rows[2].text.startswith("LDA #$01")
         assert listing.rows[3].text.startswith("RTS")
 
-    def test_disabling_inline_args_desynchronises(self):
-        """The vanilla behaviour, kept as an escape hatch."""
+    def test_disabling_inline_args_desynchronizes(self):
+        """The vanilla behavior, kept as an escape hatch."""
         listing = disassemble(self.build(), 13 * BANK_SIZE, count=4, inline_args=False)
         assert all(r.kind != "inline" for r in listing.rows)
         assert not listing.rows[2].text.startswith("LDA #$01")
@@ -170,7 +170,7 @@ class TestDisassembleInlineArgs:
 
 
 class TestDisassembleDataRanges:
-    def test_labelled_range_becomes_db_rows(self):
+    def test_labeled_range_becomes_db_rows(self):
         rom = MockReader()
         rom.write(13 * BANK_SIZE, bytes(range(0x10)))
         labels = store(

@@ -428,7 +428,7 @@ class SelectionTool:
         """Clear selection or cancel paste mode."""
         if self.state.paste_mode:
             self._cancel_paste(context)
-            return ToolResult(is_handled=True, message="Paste cancelled")
+            return ToolResult(is_handled=True, message="Paste canceled")
         else:
             self.state.clear_selection()
             if context.highlight_state:

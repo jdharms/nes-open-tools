@@ -38,7 +38,7 @@ slot, so words 1 and 2 always start at columns 4 and 11:
 
 Matching vanilla's span matters because `SetMenuEntryPalette` sets palette 1
 on every 2x2 attribute cell the entry covers. An entry starting at column 3
-would share a cell with the box border at column 2 and recolour it.
+would share a cell with the box border at column 2 and recolor it.
 
 The header list and its line 1 entry live in the 26 bytes freed by the removed
 MATCH,PLAY and TOURNAMENT entries:

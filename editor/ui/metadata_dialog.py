@@ -99,7 +99,7 @@ class MetadataDialog:
 
         # Result tracking
         self.saved = False
-        self.cancelled = False
+        self.canceled = False
 
     def _calculate_layout(self):
         """Calculate layout rectangles."""
@@ -211,7 +211,7 @@ class MetadataDialog:
             if self.save_button_rect.collidepoint(event.pos):
                 return self._save()
             elif self.cancel_button_rect.collidepoint(event.pos):
-                self.cancelled = True
+                self.canceled = True
                 return True
 
             # Check field clicks
@@ -259,7 +259,7 @@ class MetadataDialog:
             # Global keys (no field active)
             else:
                 if event.key == pygame.K_ESCAPE:
-                    self.cancelled = True
+                    self.canceled = True
                     return True
                 elif event.key == pygame.K_RETURN:
                     return self._save()

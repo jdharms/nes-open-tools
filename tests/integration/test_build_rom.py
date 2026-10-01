@@ -314,9 +314,9 @@ def test_finishing_writes_the_seeds_sram_magic(signed_in, jp_manifest):
         assert signed_in.rom[operand] == magic_bytes(magic)[index]
 
 
-@pytest.mark.parametrize("flavour", ["signed_in", "guest"])
-def test_the_stages_overlap_only_at_the_placeholders(flavour, request, unfinished):
-    finished = request.getfixturevalue(flavour)
+@pytest.mark.parametrize("flavor", ["signed_in", "guest"])
+def test_the_stages_overlap_only_at_the_placeholders(flavor, request, unfinished):
+    finished = request.getfixturevalue(flavor)
     unfinished_bytes = set().union(
         *(prg_bytes(regions) for regions in unfinished.regions.values())
     )

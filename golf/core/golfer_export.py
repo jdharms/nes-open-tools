@@ -50,9 +50,9 @@ from golf.core.palettes import (
     distinct_nes_entries,
 )
 
-# Palette layout.  Index 0 is transparent, then every NES colour worth offering -
+# Palette layout.  Index 0 is transparent, then every NES color worth offering -
 # all 64 less the nine redundant blacks, which fold onto $0F - then the guide
-# colours.  The artist can reach for any of them; the importer is what enforces
+# colors.  The artist can reach for any of them; the importer is what enforces
 # "at most three on the body".
 NES_ENTRIES = distinct_nes_entries()
 NES_TO_INDEX = {value: 1 + slot for slot, value in enumerate(NES_ENTRIES)}
@@ -65,7 +65,7 @@ IDX_ORIGIN = IDX_BOX + 1
 IDX_PRIORITY = IDX_ORIGIN + 1
 PALETTE_SIZE = IDX_PRIORITY + 1
 
-GUIDE_COLOURS = {
+GUIDE_COLORS = {
     IDX_GRID: (0x3A, 0x3A, 0x46, 0xFF, "guide: cell grid"),
     IDX_BOX: (0x2E, 0x8B, 0xA8, 0xFF, "guide: body box"),
     IDX_ORIGIN: (0xD6, 0x3C, 0x8A, 0xFF, "guide: origin and foot line"),
@@ -74,15 +74,15 @@ GUIDE_COLOURS = {
 
 
 def nes_index(value: int) -> int:
-    """Palette index for a NES colour; the spare blacks resolve to $0F's slot."""
+    """Palette index for a NES color; the spare blacks resolve to $0F's slot."""
     return NES_TO_INDEX[canonical_nes(value)]
 
 
 def build_palette(body_nes, club_nes):
-    """Index 0 transparent, 1-64 the NES system palette, then the guide colours.
+    """Index 0 transparent, 1-64 the NES system palette, then the guide colors.
 
     Entries are named so hovering a swatch in Aseprite shows its NES value, with
-    the golfer's own three colours and the unsafe blacks called out.
+    the golfer's own three colors and the unsafe blacks called out.
     """
     palette = [(0, 0, 0, 0, "transparent")] * PALETTE_SIZE
     roles = {}
@@ -97,13 +97,13 @@ def build_palette(body_nes, club_nes):
         if value in roles:
             name += " - " + ", ".join(roles[value])
         palette[nes_index(value)] = NES_SYSTEM_PALETTE[value] + (255, name)
-    for slot, rgba in GUIDE_COLOURS.items():
+    for slot, rgba in GUIDE_COLORS.items():
         palette[slot] = rgba
     return palette
 
 
 def nes_by_index() -> list[int | None]:
-    """Palette index -> NES colour, with None for transparent and the guides.
+    """Palette index -> NES color, with None for transparent and the guides.
 
     The authoritative map for an importer, since the collapsed blacks mean the
     relationship is no longer arithmetic.
@@ -149,7 +149,7 @@ def canvas_bounds(sprites: GolferSprites) -> tuple[int, int, int, int]:
     return x0, y0, x1, y1
 
 
-def render_metasprite(meta, vram, colour_indices, ox, oy, w, h, dx=0, dy=0):
+def render_metasprite(meta, vram, color_indices, ox, oy, w, h, dx=0, dy=0):
     """Paint a metasprite into a canvas-sized buffer of palette indices."""
     buf = bytearray(w * h)
     for sprite in meta.sprites:
@@ -164,7 +164,7 @@ def render_metasprite(meta, vram, colour_indices, ox, oy, w, h, dx=0, dy=0):
                     continue
                 px = ox + sprite.dx + dx + x
                 if 0 <= px < w:
-                    buf[py * w + px] = colour_indices[value - 1]
+                    buf[py * w + px] = color_indices[value - 1]
     return buf
 
 
@@ -286,13 +286,13 @@ def export_golfer(rom, sprites, golfer, putt, bounds, out_dir, visible_club=0):
             "transparent_index": IDX_TRANSPARENT,
             "nes_by_index": nes_by_index(),
             "note": (
-                "nes_by_index maps a palette index to a NES colour; null means "
-                "transparent or a guide colour. The nine redundant blacks are "
+                "nes_by_index maps a palette index to a NES color; null means "
+                "transparent or a guide color. The nine redundant blacks are "
                 f"collapsed onto ${NES_CANONICAL_BLACK:02X}."
             ),
             "body_indices": list(body_indices),
             "club_indices": list(club_indices),
-            "max_body_colours": 3,
+            "max_body_colors": 3,
         },
         "body_in_front_frames": [
             f for f in range(len(body)) if not putt and f in BODY_IN_FRONT_FRAMES

@@ -328,14 +328,14 @@ def _print_null_warning(reader, addr, labels, args, code: bool, report=None) -> 
         f"\n  escalating: {len(hits)} raw byte-pair(s) matching ${addr:04X} in the ROM."
     )
     print(
-        "  For a pointer search the usual reading is inverted - a hit inside a labelled"
+        "  For a pointer search the usual reading is inverted - a hit inside a labeled"
     )
     print("  table is a LIKELY indirect reference, not a coincidence:")
     for hit in hits[:25]:
         where = (
             f"in {hit.in_data_range}  <-- likely a real pointer-table entry"
             if hit.in_data_range
-            else "not in any labelled range"
+            else "not in any labeled range"
         )
         print(f"    bank {hit.bank:2}  ${hit.cpu:04X}  prg 0x{hit.prg:05X}  {where}")
     if len(hits) > 25:
@@ -448,7 +448,7 @@ def main():
         "--routine",
         action="store_true",
         help="Decode until the routine ends (terminator with no pending forward branch, "
-        "or the start of a labelled data range) instead of a fixed --count",
+        "or the start of a labeled data range) instead of a fixed --count",
     )
     disasm_parser.add_argument(
         "--max",
@@ -459,12 +459,12 @@ def main():
     disasm_parser.add_argument(
         "--no-inline-args",
         action="store_true",
-        help="Decode inline arguments as instructions (the vanilla, desynchronising behaviour)",
+        help="Decode inline arguments as instructions (the vanilla, desynchronizing behavior)",
     )
     disasm_parser.add_argument(
         "--no-data-ranges",
         action="store_true",
-        help="Decode labelled data ranges as instructions instead of .db rows",
+        help="Decode labeled data ranges as instructions instead of .db rows",
     )
 
     refs_parser = subparsers.add_parser(

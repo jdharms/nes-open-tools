@@ -38,7 +38,7 @@ PATCH_FILL = 0x00
 
 
 #: The scorecard font's tile numbers (docs/scorecard.md): digits `$00`-`$09`,
-#: `A`-`Z` at `$0A`-`$23`, space `$24`. Every glyph is drawn in colour 2 only,
+#: `A`-`Z` at `$0A`-`$23`, space `$24`. Every glyph is drawn in color 2 only,
 #: which is why one palette covers both the captions and the code.
 def caption_tiles(text: str) -> list[int]:
     out = []
@@ -65,7 +65,7 @@ HOLD_CAPTION = "HOLD UP SELECT A"
 
 
 def caption_address(row: int, width: int) -> int:
-    """Nametable address that centres `width` tiles on `row`."""
+    """Nametable address that centers `width` tiles on `row`."""
     return 0x2000 + row * 32 + (32 - width) // 2
 
 
@@ -133,8 +133,8 @@ def constants_source() -> str:
             f"QrHoldText:                     ; {HOLD_CAPTION!r}",
             byte_row(hold),
             "",
-            "; White backdrop, black everywhere else: the QR modules are colour 1",
-            "; and the card font draws in colour 2.",
+            "; White backdrop, black everywhere else: the QR modules are color 1",
+            "; and the card font draws in color 2.",
             "QrPalette:",
             "\n".join(byte_row([0x30, 0x0F, 0x0F, 0x0F]) for _ in range(8)),
             "",

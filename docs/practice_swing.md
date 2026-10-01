@@ -140,7 +140,7 @@ the club together.
 ## The markers hold for free
 
 `$A8DD` draws the power and accuracy markers at X = `$D6`/`$D7` + `$5D`, Y = `$D0` +
-`$05BC`. Two things fall out favourably:
+`$05BC`. Two things fall out favorably:
 
 - Sprite choice is `TYA / SEC / SBC $0586` (`$A90E`), so with `$0586 >= 3` both markers
   render in the committed style and simply stay put.
@@ -207,7 +207,7 @@ LDA Controller_NewPress_Tmp,X / AND #$60   ; B or Select
 BEQ Exit
 AND #$40 / BEQ ToggleSelect                ; B wins if both are held
 LDA #$00 / STA PracticeSwingOffset         ; B: leaving the shot
-SEC / RTS                                  ; vanilla's "cancelled" return
+SEC / RTS                                  ; vanilla's "canceled" return
 ToggleSelect: LDA PracticeSwingOffset / EOR #$08 / STA PracticeSwingOffset
 Exit:         JMP $AA2A
 ```
@@ -243,7 +243,7 @@ ball has moved: it restores `$0586`, `$0587`, `$0589`, `$059A`, `$D0`, `$D1`, `$
 and `$D6`/`$D7` to exactly their values at `$AA09`, and its one subroutine call (`$B75C`)
 merely zeroes the velocity accumulators `$B3`-`$B6` - no RNG, fully idempotent.
 
-### Deliberate behaviours
+### Deliberate behaviors
 
 - **Practice mode never survives leaving the shot.** Taking a real shot requires toggling
   it off, and backing out with B clears it, so the flag can never be set while another

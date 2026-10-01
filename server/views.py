@@ -96,7 +96,7 @@ class HoleView:
     source_hole: int | None
 
 
-#: every downloaded ROM's file name starts with this, so tools can recognise a randomizer ROM
+#: every downloaded ROM's file name starts with this, so tools can recognize a randomizer ROM
 DOWNLOAD_PREFIX = "notgr"
 
 

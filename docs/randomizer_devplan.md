@@ -43,7 +43,7 @@ needed:
   unfinished ROM cannot cause downstream problems.
 - **Finished.** Run per download, in milliseconds: SRAM defaults for name, clubs and
   music under the seed's SRAM magic, so a save from vanilla or another seed is rebuilt
-  with the player's choices, and one of two flavours.
+  with the player's choices, and one of two flavors.
   - *Signed in*: a credentials patch of three byte patches writing the seed's `qr_seed_id` as
     the seed ID, the player ID and the MAC keys into the placeholders. Their expected original bytes are the
     placeholder fill, so finishing can only land on an unfinished image.
@@ -151,7 +151,7 @@ An entry's name and clubs are the new-save defaults of the latest download, not 
 the bag a round was played with. A save made before a re-download keeps its old defaults
 under the seed's SRAM magic, and an older ROM file still submits. In a seed with club
 rules the club house has no CHOOSE CLUBS, so the bag played is one the rules allowed; in a
-seed without them CHOOSE CLUBS changes the bag in-game, and the bag is on the honour
+seed without them CHOOSE CLUBS changes the bag in-game, and the bag is on the honor
 system.
 
 A scan is submitted; a scan the server accepts becomes a round, and a rejected one is
@@ -287,7 +287,7 @@ says so, a ROM playtested. Items 1 to 6 build the library; 7 onward build the si
    finishing stack for `PlayerOptions` (name, bag, music), checked against the seed's club
    rules, with `credentials_for` or as a guest. The manifest's course gained `sram_magic`,
    drawn per seed. NES Open themes use the new `course_theme` patch rather than an import.
-   `tests/integration/test_build_rom.py` builds both flavours from generated manifests on
+   `tests/integration/test_build_rom.py` builds both flavors from generated manifests on
    the real ROM and checks the stages overlap only where `scorecard_qr` wrote.
 6. **`golf-randomize` CLI.** Done: `tools/randomize.py`. `generate` turns settings flags
    into a manifest file, `build` turns a manifest into a finished guest ROM or IPS by

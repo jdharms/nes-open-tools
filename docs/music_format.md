@@ -279,7 +279,7 @@ ROM is used by more than one track.
 
 `$D9FE` in the fixed bank is the only place `BGMOnFlag` gates music. The flag has four
 references in all: the OPTIONS screen writes it at bank 11 `$8BCE` and reads it back at
-`$8BF2`, bank 9 `$AD4A` initialises it, and this routine consumes it:
+`$8BF2`, bank 9 `$AD4A` initializes it, and this routine consumes it:
 
 ```
 $D9FE  LDA #$00

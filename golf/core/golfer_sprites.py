@@ -73,9 +73,9 @@ CLUB_CHR_TABLES = {
 }
 # bank 5: per-golfer palette and build
 SHOT_SPRITE_PALETTES = (5, 0xBEA0)  # 16 bytes -> $0486
-SHIRT_COLOUR_TABLE = (5, 0xBF1B)
+SHIRT_COLOR_TABLE = (5, 0xBF1B)
 BODY_TYPE_TABLE = (5, 0xBF21)
-BILLY_COLOUR3 = 0x27  # bank 5 $BF0F overrides it in his stub
+BILLY_COLOR3 = 0x27  # bank 5 $BF0F overrides it in his stub
 
 
 def _signed(value: int) -> int:
@@ -227,10 +227,10 @@ class GolferSprites:
         """The four entries of sprite palette 0; index 0 is never displayed."""
         bank, addr = SHOT_SPRITE_PALETTES
         base = list(self.rom.read_switched(addr, bank, 16)[0:4])
-        shirt_bank, shirt_addr = SHIRT_COLOUR_TABLE
+        shirt_bank, shirt_addr = SHIRT_COLOR_TABLE
         base[1] = self.rom.read_switched(shirt_addr, shirt_bank, 6)[golfer]
         if golfer == 5:
-            base[3] = BILLY_COLOUR3
+            base[3] = BILLY_COLOR3
         return [None, base[1], base[2], base[3]]
 
     def club_palette(self) -> list[int | None]:

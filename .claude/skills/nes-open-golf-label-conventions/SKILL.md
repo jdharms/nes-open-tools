@@ -25,7 +25,7 @@ correct by this scheme - check here before renaming it.
 The label file describes the unpatched ROM. Never label code, data or RAM that
 exists only after a patch (routines written into free space or padding, RAM
 bytes only a patch uses). If a
-patch is worth labelling, it will get its own patch-specific label file later.
+patch is worth labeling, it will get its own patch-specific label file later.
 A vanilla label may *mention* a patch in its comment (e.g. "NOPed by the
 seeded_wind patch").
 

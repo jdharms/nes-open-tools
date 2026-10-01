@@ -49,7 +49,7 @@ $8190  10 C5       BPL $8157
 
 `$0113/$0115/$0117/$0119/$011B,X` is the per-player ball position: X fraction, X, Y fraction, Y low, Y high. `LD_86C8` (`$86C8`) loads it into `$AD`-`$B2` at shot start; `LD_86ED` (`$86ED`) saves it back.
 
-The `$80` fractions written at `$816B`-`$8172` sit **above** the splice site and can be left alone - they put the ball at the centre of whichever tile is chosen.
+The `$80` fractions written at `$816B`-`$8172` sit **above** the splice site and can be left alone - they put the ball at the center of whichever tile is chosen.
 
 The other three `InitHole` callers (`$813C`, `$8D13`, `$8D66`) are resume paths that restore a saved position; they must not be touched.
 
@@ -134,7 +134,7 @@ BallY     = GreenY + tileY          BallYfrac = (subY & 7) << 5
 BallYHigh = carry out of the Y add
 ```
 
-With the vanilla `$80` fractions left in place, the ball lands at tile centre and only the integer parts need writing.
+With the vanilla `$80` fractions left in place, the ball lands at tile center and only the integer parts need writing.
 
 ## Placing the payload
 
@@ -178,7 +178,7 @@ $D3BD  60          RTS
 - The target receives the caller's A, X and Y intact, so the player index in X survives into the routine.
 - A and X are preserved on return; the target's flags are preserved, so it can return carry. Y is not managed on return - irrelevant here, since `$8157`-`$8190` uses only A and X.
 - It clobbers `$30`/`$31`/`$32` and `$4C`-`$4F`. None are live at `$8173`.
-- The `LDA $0102,X` / `LDA $0103,X` at `$D37C`/`$D381` render as `CurrCourse` / `HoleMatchStatus` in a labelled listing. That is the `.mlb` mislabelling a stack-page access - with `TSX` those are stack-relative reads of the return address. It nests correctly.
+- The `LDA $0102,X` / `LDA $0103,X` at `$D37C`/`$D381` render as `CurrCourse` / `HoleMatchStatus` in a labeled listing. That is the `.mlb` mislabeling a stack-page access - with `TSX` those are stack-relative reads of the return address. It nests correctly.
 
 A payload reached this way must not call into banked code. This routine does not: zero page `$A3`/`$A4`, WRAM `$75A6`, `LSFR_RNG_ALGO` in the always-mapped fixed bank, and writes to `$0113`-`$011B,X`.
 
@@ -191,7 +191,7 @@ Candidate homes are the switchable bank tails. Every bank ends with an identical
 Entered with X = player index, which it preserves. 127 bytes as written.
 
 ```
-        LDA #$0C            ; default to the centre tile so a run of
+        LDA #$0C            ; default to the center tile so a run of
         STA $26             ; rejected draws still lands somewhere sane
         STA $27
         LDA #$FF
@@ -267,9 +267,9 @@ Found:
         RTS
 ```
 
-Zero page `$26`-`$29` are unlabelled general scratch; `$2A` is `Tmp_2A`. Nothing is live across the splice site - the init loop uses only A and X.
+Zero page `$26`-`$29` are unlabeled general scratch; `$2A` is `Tmp_2A`. Nothing is live across the splice site - the init loop uses only A and X.
 
-`$0C` as the pre-seeded default matters: if every draw is rejected the routine falls through with whatever tile was last accepted, and on the first pass through there is none. The centre of the grid is on the surface for every vanilla green.
+`$0C` as the pre-seeded default matters: if every draw is rejected the routine falls through with whatever tile was last accepted, and on the first pass through there is none. The center of the grid is on the surface for every vanilla green.
 
 ### Generating the acceptance chain
 

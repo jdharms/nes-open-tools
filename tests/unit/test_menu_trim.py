@@ -43,7 +43,7 @@ def test_header_lines_use_fixed_word_slots():
 
 
 def test_header_lines_are_as_wide_as_vanilla():
-    """PLEASE SELECT / COURSE: the attribute cells the header colours."""
+    """PLEASE SELECT / COURSE: the attribute cells the header colors."""
     for words in (["ABCD", "ABCD", "ABCD"], ["ABCDEF", "ABCDEF", "ABCDEF"]):
         line1, line2 = header_lines(words)
         assert (len(line1), len(line2)) == (13, 6)

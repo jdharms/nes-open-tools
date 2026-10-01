@@ -13,7 +13,7 @@ Format:
         offset (3 bytes), 0x0000, run length (2 bytes, big-endian), value (1 byte)
     "EOF"
     optional truncation length (3 bytes, big-endian) - an extension some
-    tools write; `apply` honours it, `diff` never writes it
+    tools write; `apply` honors it, `diff` never writes it
 
 `diff` is deterministic: the same two files always produce the same patch.
 """

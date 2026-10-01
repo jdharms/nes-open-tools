@@ -319,7 +319,7 @@ Vanilla copies each hole's attribute bytes out of its terrain bank into `Terrain
 at internal RAM `$0533`-`$057A` when the hole loads: `LoadTerrainAndAttrs` runs
 `LDY #$47` / `LDA ($50),Y` / `STA $0533,Y` / `DEY` / `BPL` at `$DB96`. Each attribute
 row is 6 bytes and covers 4 terrain rows, so those 72 bytes hold 48 rows, and a 60-row
-hole needs 90. The buffer can't grow in place: the 11 bytes after it are unlabelled and
+hole needs 90. The buffer can't grow in place: the 11 bytes after it are unlabeled and
 `SwingPhaseState` sits at `$0586`.
 
 `golf/core/patches/wram_expansion/relocate_attr_buffer.py` moves it to WRAM

@@ -43,7 +43,7 @@ PAD_CODEWORDS = (0xEC, 0x11)
 #: Sentinel for "free data module" in a static matrix.
 FREE = 0xFF
 
-#: Alignment pattern centre coordinates for version 5.
+#: Alignment pattern center coordinates for version 5.
 ALIGNMENT_COORDS = (6, 30)
 
 
@@ -219,20 +219,20 @@ def build_static_matrix(mask: int) -> bytes:
         put(i, 6, i % 2 == 0)
 
     # Finder patterns, drawn 9x9 so the separators come along for free.
-    # Chebyshev distance from the centre: 0-1 is the dark core, 2 the light
+    # Chebyshev distance from the center: 0-1 is the dark core, 2 the light
     # ring, 3 the dark ring, 4 the light separator.
-    for centre_row, centre_col in ((3, 3), (3, SIZE - 4), (SIZE - 4, 3)):
+    for center_row, center_col in ((3, 3), (3, SIZE - 4), (SIZE - 4, 3)):
         for dy in range(-4, 5):
             for dx in range(-4, 5):
-                row, col = centre_row + dy, centre_col + dx
+                row, col = center_row + dy, center_col + dx
                 if 0 <= row < SIZE and 0 <= col < SIZE:
                     distance = max(abs(dx), abs(dy))
                     put(row, col, distance not in (2, 4))
 
     # Alignment patterns, minus the three that collide with the finders.
-    for centre_row in ALIGNMENT_COORDS:
-        for centre_col in ALIGNMENT_COORDS:
-            if (centre_row, centre_col) in (
+    for center_row in ALIGNMENT_COORDS:
+        for center_col in ALIGNMENT_COORDS:
+            if (center_row, center_col) in (
                 (ALIGNMENT_COORDS[0], ALIGNMENT_COORDS[0]),
                 (ALIGNMENT_COORDS[0], ALIGNMENT_COORDS[-1]),
                 (ALIGNMENT_COORDS[-1], ALIGNMENT_COORDS[0]),
@@ -240,7 +240,7 @@ def build_static_matrix(mask: int) -> bytes:
                 continue
             for dy in range(-2, 3):
                 for dx in range(-2, 3):
-                    put(centre_row + dy, centre_col + dx, max(abs(dx), abs(dy)) != 1)
+                    put(center_row + dy, center_col + dx, max(abs(dx), abs(dy)) != 1)
 
     # Format information, both copies.
     bits = format_bits(mask)

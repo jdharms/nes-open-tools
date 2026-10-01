@@ -318,7 +318,7 @@ def _summaries(conn: sqlite3.Connection, day: str) -> Iterator[DaySummary]:
 
 
 async def flush_periodically(sink: TimingSink) -> None:
-    """Flush the sink on its interval until cancelled, writing off the event loop.
+    """Flush the sink on its interval until canceled, writing off the event loop.
 
     A failed write is logged and the loop goes on: losing one batch of timings must not
     take the collection down with it.

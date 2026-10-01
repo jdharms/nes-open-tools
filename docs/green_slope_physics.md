@@ -105,7 +105,7 @@ neither of which fits.
 
 The rule instead is: an axis takes the full `friction` if its `|v|` is at least
 `(|vx| + |vy|) / 4`. That threshold is cheap (an add and two shifts) and gives the right
-behaviour at both ends:
+behavior at both ends:
 
 | Angle off the axis | Friction on X | Friction on Y | Effect on direction |
 |---|---|---|---|
@@ -164,7 +164,7 @@ ROM. They are correct for a vanilla ROM, so they are left alone.
 
 Two items from the same design do not fit an in-place patch:
 
-- **Bilinear interpolation of the slope vector between tile centres.** Acceleration
+- **Bilinear interpolation of the slope vector between tile centers.** Acceleration
   currently jumps as the ball crosses an 8-pixel boundary, so paths are faceted. This
   would be the biggest remaining visual improvement, but it needs more than the 6 spare
   bytes.

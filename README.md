@@ -113,7 +113,7 @@ Build a standalone editor executable with `uv run pyinstaller run_editor.spec`.
 
 | Command | Description |
 |---------|-------------|
-| `golf-check [--fix]` | Run every linter, formatter check and type checker (ruff, pyright, djLint, Biome); `--fix` formats and applies safe fixes |
+| `golf-check [--fix]` | Run every linter, formatter check and type checker (ruff, pyright, djLint, Biome) and the American-spelling check (codespell); `--fix` formats and applies safe fixes |
 | `golf-biome <biome args>` | Run the pinned Biome JS/CSS linter and formatter, downloading and hash-checking it on first use |
 | `golf-adr new/status/index/check` | Create architecture decision records, change their status and regenerate the index in `docs/adr/README.md` |
 

@@ -40,7 +40,7 @@ def labels():
 class TestInlineArgs:
     def test_prize_money_setup_stays_aligned(self, reader):
         """$8F80-$8FA7 is five inline-arg calls in a row; a naive decode
-        desynchronises for ~20 instructions."""
+        desynchronizes for ~20 instructions."""
         listing = disassemble(reader, cpu_to_prg_switched(0x8F80, 12), count=14)
         assert [r.kind for r in listing.rows] == ["code", "inline"] * 7
         # The last pair must land on the real instruction boundary.
@@ -126,7 +126,7 @@ class TestFindCodeReferences:
 
     def test_unanchorable_false_positive_is_flagged_not_asserted(self, reader, labels):
         """$A64D -> JMP ($9190) is also a coincidence, but it sits in an
-        unlabelled data region with no code label to anchor a check. The tool
+        unlabeled data region with no code label to anchor a check. The tool
         must report it as unverified rather than silently confirming it."""
         report = find_code_references(reader, 0x9190, 12, labels)
         assert len(report.unverified) == 1

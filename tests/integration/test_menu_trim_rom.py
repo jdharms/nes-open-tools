@@ -149,7 +149,7 @@ def test_main_player_and_course_menus_share_the_header(patched):
 
 
 def test_header_occupies_exactly_vanilla_course_select_span(patched, vanilla):
-    """Same positions and widths, so the same attribute cells are coloured."""
+    """Same positions and widths, so the same attribute cells are colored."""
 
     def span(entries):
         return [(x, y, len(text)) for x, y, text in entries]

@@ -70,7 +70,7 @@ HideAllSprites:
 
 ; Records its three inline arguments at $5FF0 and steps the return address
 ; past them, the way the real routine does. Decompression itself is not
-; modelled: nothing the port draws depends on the card font's pixels.
+; modeled: nothing the port draws depends on the card font's pixels.
         .org $D45F
 LoadCompressedGraphics:
         tsx
@@ -103,7 +103,7 @@ class RunawayError(RuntimeError):
 
 
 class Bus:
-    """CPU memory plus the slice of PPU behaviour the display layer uses."""
+    """CPU memory plus the slice of PPU behavior the display layer uses."""
 
     def __init__(self) -> None:
         self.memory = bytearray(0x10000)

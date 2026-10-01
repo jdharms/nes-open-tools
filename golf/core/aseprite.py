@@ -1,13 +1,13 @@
 """
 A minimal reader and writer for Aseprite's `.aseprite` / `.ase` format.
 
-Only what a layered reference export needs: indexed colour, one palette, named
+Only what a layered reference export needs: indexed color, one palette, named
 layers with flags, and one compressed cel per layer per frame.  Cel position is
 part of the format, which is what lets a layer be *moved* by an artist and read
 back as an offset.
 
 `read` is the return leg: a file that has been through Aseprite carries chunks
-this module never writes (colour profile, tags, user data, the deprecated
+this module never writes (color profile, tags, user data, the deprecated
 palette chunks), and the artist may have added, hidden or reordered layers.
 Unknown chunks are skipped by their length rather than parsed, so the reader
 only has to understand the four chunk types that carry pixels.
@@ -80,7 +80,7 @@ class LinkedCel:
 
     The game reuses metasprite pointers between frames - swing frames 6 and 7
     are literally frames 4 and 3 - and a linked cel says so in a way Aseprite
-    honours: editing one edits both.
+    honors: editing one edits both.
 
     A linked cel still carries its own position in the file, so `x`/`y` must
     repeat the source cel's position.  Leaving them at the default drops the

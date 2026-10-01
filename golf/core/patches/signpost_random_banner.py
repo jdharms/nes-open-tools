@@ -272,7 +272,7 @@ def signpost_banner_patch(
     result = convert_banner(edited.pixels, reference, palette, descriptor)
     if result.errors:
         raise PatchError(
-            "the art uses colours the attribute table does not allow: "
+            "the art uses colors the attribute table does not allow: "
             + "; ".join(str(error) for error in result.errors)
         )
 

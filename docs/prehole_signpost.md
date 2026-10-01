@@ -348,7 +348,7 @@ checked by decoding the result back through `decompress_stream`, turns the 352 b
 a 22-tile import into 351. Compression is worth using for the *bank freedom* it brings,
 not for the size.
 
-For reference, the filler runs of 48 bytes or more, totalling about 1.6KB: bank 9
+For reference, the filler runs of 48 bytes or more, totaling about 1.6KB: bank 9
 `$8DD0` x256 (which sits directly after a signed ramp table and may be in range of an
 indexed read - confirm before trusting it), bank 3 `$BF59` x154, bank 10 `$BF6B` x136
 (**taken** by `putting_practice`), bank 14 `$8E44` x91, bank 5 `$BF83` x112, bank 13

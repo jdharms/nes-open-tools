@@ -224,7 +224,7 @@ so `$6003` is a 0-based progression counter through the four computer opponents.
 at `$857F` walks it forward, and the `6 -> 5` clamp at `$8236` means the fourth opponent is
 also the last.
 
-**[G]** `$6003` is labelled `SramMagic` in the `.mlb`. Given it feeds an opponent index
+**[G]** `$6003` is labeled `SramMagic` in the `.mlb`. Given it feeds an opponent index
 via `+2`, that label looks wrong - it reads more like a tournament progression or rank
 counter. Worth re-checking before relying on the existing name.
 
@@ -245,7 +245,7 @@ upward), so only one golfer's tiles can be resident at a time.
 
 ```
 $BDFA  LDX GolferIdentity ($0132)
-$BDFD  LDA GolferShirtColourTable,X : STA $0487
+$BDFD  LDA GolferShirtColorTable,X : STA $0487
 $BE03  LDA GolferBodyTypeTable,X : PHA
 $BE07  TXA
 $BE08  JSR LD267                  ; inline (key, lo, hi) table
@@ -280,19 +280,19 @@ in bank 8 and the graphics tables in banks 0-2 — agree, which is what fixes th
 | 2 | `0F 16 0A 30` | |
 | 3 | `0F 2A 21 30` | |
 
-**[C]** `$BE00` then overwrites colour 1 of palette 0 from `GolferShirtColourTable`
-(`$BF1B`): `25 2B 28 22 26 38`. Billy's stub additionally sets colour 3 to `$27`
+**[C]** `$BE00` then overwrites color 1 of palette 0 from `GolferShirtColorTable`
+(`$BF1B`): `25 2B 28 22 26 38`. Billy's stub additionally sets color 3 to `$27`
 (`$BF0F`).
 
-So **each golfer gets exactly one custom colour** as shipped. Colour 2 (`$0F` black) and
-colour 3 (`$36`, the skin tone) are shared by all six, and only Billy escapes the second.
+So **each golfer gets exactly one custom color** as shipped. Color 2 (`$0F` black) and
+color 3 (`$36`, the skin tone) are shared by all six, and only Billy escapes the second.
 
 ### Write order, and what Billy actually does
 
 **[C]** The three writes happen in this order, which is why the later ones stick:
 
 1. `$BDDC` bulk-copies 16 bytes from `$BEA0` into `$0486`
-2. `$BE00` overwrites `$0487` from `GolferShirtColourTable`
+2. `$BE00` overwrites `$0487` from `GolferShirtColorTable`
 3. the per-golfer stub runs, and may overwrite anything
 
 **[C]** Billy's stub is the only one that uses step 3, and it does nothing clever — it is
@@ -306,24 +306,24 @@ $BF17  02 4E A5     .db $02, $4E, $A5
 $BF1A  60           RTS
 ```
 
-**[D]** Any stub could do the same to any of the 32 palette bytes. Generalising it is a
-table widening, not a mechanism: make `GolferShirtColourTable` 6 x 3 and copy three bytes at
+**[D]** Any stub could do the same to any of the 32 palette bytes. Generalizing it is a
+table widening, not a mechanism: make `GolferShirtColorTable` 6 x 3 and copy three bytes at
 `$BDFD` instead of one, and every golfer gets independent control of all three usable
-colours with no per-stub special-casing.
+colors with no per-stub special-casing.
 
-### Three colours is a hardware ceiling
+### Three colors is a hardware ceiling
 
 **[C]** Two independent reasons, both about the PPU rather than this ROM:
 
-- Colour 0 of a sprite palette is **transparent in every sprite**, so `$0486` is never
+- Color 0 of a sprite palette is **transparent in every sprite**, so `$0486` is never
   displayed. (It is also uploaded to `$3F10`, which the PPU mirrors onto `$3F00`, so writing
-  it disturbs the universal backdrop instead of giving you a fourth colour.)
+  it disturbs the universal backdrop instead of giving you a fourth color.)
 - `RenderMetaspriteWithAttr` (`$FF38`) writes `SpriteAttrOrTransferMode` (`$29`) into OAM+2
   for **every** sprite in a metasprite (`$FF60`-`$FF62`). One metasprite, one palette.
 
-**[D]** To exceed three colours the body has to be split across two metasprites drawn with
+**[D]** To exceed three colors the body has to be split across two metasprites drawn with
 different `$29` — e.g. a second `RenderGolferBody` call with `$29 = $02` and a second
-pointer-table set, for six colours, leaving `$FF38` untouched. The more flexible option is a
+pointer-table set, for six colors, leaving `$FF38` untouched. The more flexible option is a
 golfer-specific renderer with four bytes per sprite carrying a per-sprite attribute; that
 should be a new routine rather than a change to `$FF38`.
 
@@ -352,8 +352,8 @@ which loads each object's own attribute byte from `$78F1,X` into `$29` at
 
 **Open:** which sprite palettes are live during a shot. Answering it means enumerating the
 attribute bytes of the objects allocated on the shot screen, or a breakpoint on OAM writes —
-not a byte search. What *is* established is that colours 1 and 3 of palette 0 are safe to
-repoint, because the shipped game already changes colour 1 for every golfer and colour 3
+not a byte search. What *is* established is that colors 1 and 3 of palette 0 are safe to
+repoint, because the shipped game already changes color 1 for every golfer and color 3
 whenever Billy plays.
 
 ## Sprite layout
@@ -441,8 +441,8 @@ both animations and the club's full travel including its nudge. The Aseprite gri
 
 ### Palette
 
-**[D]** The file carries **every NES colour worth offering**, not just the three the golfer
-uses: index 0 is transparent, then 55 colour entries, then four guide colours - 60 in all.
+**[D]** The file carries **every NES color worth offering**, not just the three the golfer
+uses: index 0 is transparent, then 55 color entries, then four guide colors - 60 in all.
 
 Ten of the console's 64 entries render as solid black, so the nine spares are folded onto
 `$0F`, the one the game itself uses. `$0D` goes with them, which is a bonus: it sits *below*
@@ -450,16 +450,16 @@ black and some CRTs and most capture hardware object to it, and an artist can no
 reach it by accident. `canonical_nes()` in `golf/core/palettes.py` does the folding, so an
 importer reading `$2E` off a modified ROM resolves it to the same slot.
 
-That makes the index-to-colour relationship non-arithmetic, so the sidecar carries
+That makes the index-to-color relationship non-arithmetic, so the sidecar carries
 `palette.nes_by_index` as the authoritative map - `null` marks transparent and the guides.
 Every entry is named, so hovering a swatch in Aseprite shows its NES value, with the
-golfer's own colours marked (`$25 - body 1`) and the black labelled `$0F - black`.
+golfer's own colors marked (`$25 - body 1`) and the black labeled `$0F - black`.
 
 One duplicate survives on purpose: `$20` and `$30` are both white in this palette rendering,
 but they are genuinely distinct entries and `$30` is the one the club uses.
 
-The three-colour limit is therefore **not enforced while drawing** - an artist can reach for
-any NES colour. It is the importer's job to read the body layer, collect the distinct
+The three-color limit is therefore **not enforced while drawing** - an artist can reach for
+any NES color. It is the importer's job to read the body layer, collect the distinct
 indices, and reject anything using more than three. The sidecar's `palette` block records
 the base index and the golfer's current three so a check has something to compare against.
 
@@ -527,7 +527,7 @@ up:
 | 5 Billy | `-40 .. +24` | 64 px | 24 px |
 
 **[D]** All six share the same bottom edge, `dY +24`. **The origin is the golfer's feet, not
-his centre**, which is exactly what lets one club-indexed origin serve six different heights.
+his center**, which is exactly what lets one club-indexed origin serve six different heights.
 Mario and Mark are a short, wide build; Luigi, Steve, Tony and Billy are tall and narrow.
 
 **3. The club gets its own animation set per build, plus a fine nudge.** `$8083` pushes

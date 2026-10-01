@@ -87,7 +87,7 @@ QR geometry. 42 bytes is the ceiling.
 | Property | Value |
 |---|---|
 | Modules | 37 x 37 |
-| Alignment patterns | one, centred at (30, 30) |
+| Alignment patterns | one, centered at (30, 30) |
 | Dark module | row 29, col 8 |
 | Function modules | 290 |
 | Free (data region) modules | 1,079 |
@@ -201,10 +201,10 @@ the dismissal hint is worded without punctuation. The 16 QR tiles go to PPU `$18
 tile `$80`, clear of the font's `$00`-`$7F`; that is where the nametable builder's tile
 base comes from.
 
-Only two colours are needed, so a single palette covers the whole screen and the
+Only two colors are needed, so a single palette covers the whole screen and the
 attribute table is all zeroes. Universal backdrop `$30` (white) makes the quiet zone
-free: the all-light QR tile is the blank tile, and the screen is cleared with it. Colour
-1 is `$0F` (black) for the modules — and so is colour 2, which is the only colour the
+free: the all-light QR tile is the blank tile, and the screen is cleared with it. Color
+1 is `$0F` (black) for the modules — and so is color 2, which is the only color the
 title font draws in.
 
 Rendering is off while the screen is built, so the nametable, CHR and palette all go out
@@ -628,7 +628,7 @@ arrays at `$0158` (strokes) and `$018E` (putts), with `PlayerCount` `$9A` = 1.
   the slot 1 key.
 
 The MAC's purpose is to stop a player submitting a scorecard *as someone else*, which a
-per-(seed, player) key does. It is not a defence against a player forging their own
+per-(seed, player) key does. It is not a defense against a player forging their own
 score; implausible scorecards are handled by a human on the backend.
 
 ## Reference implementation
@@ -762,7 +762,7 @@ The one thing still unobserved is whether anything the scorecard's input wait ta
   strokes 1-32 and putts 0-7. Clamping putts leaves the total score valid; clamping
   strokes does not. An 8-putt is more likely than a 17-stroke hole, which argues for
   4/4; the asymmetry in what clamping costs argues for 5/3. Making the mercy tap-in
-  mandatory in randomized ROMs would settle it in favour of 4/4. Currently 4/4.
+  mandatory in randomized ROMs would settle it in favor of 4/4. Currently 4/4.
 
   The split lives in one constant, `payload.STROKE_BITS`, and both candidates are
   covered by tests, so changing it is a one-line edit rather than a hunt for hardcoded

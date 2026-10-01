@@ -44,7 +44,7 @@ def _contiguous_runs(values: set[int]) -> list[tuple[int, int]]:
 # bank 13 $8173, inside the per-player init loop at $8155-$8190. The
 # vanilla bytes copy TeeBlocksX/Y/YHigh into the player's ball position.
 # The $80 fractions written at $816B-$8172 are left alone: they put the
-# ball at the centre of whatever tile we pick.
+# ball at the center of whatever tile we pick.
 _SPLICE_PRG = 0x34173
 _SPLICE_ORIGINAL = bytes(
     [
@@ -92,10 +92,10 @@ _GREEN_TILE_BUFFER = 0x75A6  # WRAM, 24x24 row-major, filled by DecompressGreen
 _SURFACE_RUNS = _contiguous_runs(PUTTING_SURFACE_TILES)
 
 _ATTEMPTS = 0xFF
-_DEFAULT_TILE = 0x0C  # centre of the 24x24 grid
+_DEFAULT_TILE = 0x0C  # center of the 24x24 grid
 
 # Zero page scratch. $2A is Tmp_2A in the label file; $26-$29 are
-# unlabelled general scratch. Nothing is live across the splice site -
+# unlabeled general scratch. Nothing is live across the splice site -
 # the init loop at $8157-$8190 uses only A and X.
 _TILE_X = 0x26
 _TILE_Y = 0x27
@@ -108,7 +108,7 @@ def _build_routine() -> bytes:
     """
     PlaceBallOnGreen. Entered with X = player index, which it preserves.
 
-        LDA #$0C            ; default to the centre tile, so a run of
+        LDA #$0C            ; default to the center tile, so a run of
         STA $26             ; rejected draws still lands somewhere sane
         STA $27
         LDA #$FF
@@ -331,6 +331,6 @@ def putting_practice_patches() -> list[BytePatch]:
 #     putting, deliberate for now.
 #   - The ball can land on the pin's own tile and hole out on contact.
 #   - No fallback if 32 attempts all miss: it uses the last accepted
-#     tile, or the centre tile if none was ever accepted.
+#     tile, or the center tile if none was ever accepted.
 #   - MaybePlayerHoleStatus ($0111,X) is left at 0, so the distance
 #     readout uses course units until after the first putt.
