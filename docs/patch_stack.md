@@ -155,6 +155,7 @@ A recipe is a stack written as JSON (`golf/core/patches/recipe.py`):
     {"patch": "mercy_tap_in", "mercy_point": 9},
     {"patch": "seeded_wind", "seed": "abc123"},
     {"patch": "practice_swing"},
+    {"patch": "round_stats"},
     {"patch": "scorecard_qr"}
   ]
 }
@@ -221,7 +222,8 @@ three requirements and the `course` step.
 | `mercy_tap_in` | `mercy_point`, `mercy_result` (default `mercy_point` + 1) | |
 | `seeded_wind` | `seed` | `course_mirrors` |
 | `practice_swing` | `hold_frames` (default `0x78`) | |
-| `scorecard_qr` | none; the seed ID, player ID and MAC key placeholders are left at the fill | `course_mirrors` |
+| `round_stats` | none; counts fairways hit and penalty strokes in SRAM for the QR payload (`docs/scorecard_qr.md`, Round stats) | `course_mirrors` |
+| `scorecard_qr` | none; the seed ID, player ID and MAC key placeholders are left at the fill | `course_mirrors`, `round_stats` |
 | `qr_credentials` | `credentials` (a `golf-qr-credentials` file); fills the placeholders, expecting the fill | `scorecard_qr` |
 | `qr_disable` | none; reverts the round-end splice for a guest ROM, expecting the splice `scorecard_qr` wrote | |
 | `course_theme` | `music` (`$02` US, `$03` Japan or `$04` UK); plays that US ROM theme on every course | |

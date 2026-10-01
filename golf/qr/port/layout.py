@@ -53,6 +53,23 @@ GOLF_GAME_MODE = 0x0100  # $00 = 18-hole stroke play
 STROKE_STRIDE = 36
 PUTT_STRIDE = 18
 
+#: The round stats the `round_stats` patch keeps, in SRAM: three bytes per
+#: player, already in the payload's wire order. See ROUND_STATS_* below.
+ROUND_STATS = 0x6C0E
+ROUND_STATS_STRIDE = 3
+
+#: `round_stats` keeps a snapshot of all six live bytes per stroke play save
+#: slot (0, one player; 1, two players), right after them: the save and
+#: continue it rides on happen after every shot. `$6C0E`-`$6C1F` is the one
+#: gap in the vanilla save layout, between the last save slot's per-hole
+#: scores and the first tournament region, and these 18 bytes fill it exactly.
+ROUND_STATS_LIVE_LEN = 2 * ROUND_STATS_STRIDE
+ROUND_STATS_SNAPSHOTS = ROUND_STATS + ROUND_STATS_LIVE_LEN
+ROUND_STATS_SNAPSHOT_SLOTS = 2
+ROUND_STATS_END = (
+    ROUND_STATS_SNAPSHOTS + ROUND_STATS_SNAPSHOT_SLOTS * ROUND_STATS_LIVE_LEN
+)
+
 #: Held buttons, one byte per controller, refreshed by the NMI's
 #: `ProcessBothControllers`. A $80, B $40, Select $20, Start $10, Up $08,
 #: Down $04, Left $02, Right $01.
@@ -179,6 +196,7 @@ def symbols(mask: int | None = None) -> dict[str, int]:
         "GolfGameMode": GOLF_GAME_MODE,
         "StrokeStride": STROKE_STRIDE,
         "PuttStride": PUTT_STRIDE,
+        "RoundStats": ROUND_STATS,
         "QrMatrix": MATRIX,
         "QrMatrixStride": MATRIX_STRIDE,
         "QrMatrixRows": MATRIX_ROWS,

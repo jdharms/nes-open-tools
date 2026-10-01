@@ -61,6 +61,7 @@ def staged(program, round_payload: RoundPayload, key: bytes, slot: int = 0) -> M
         [(hole.strokes, hole.putts) for hole in round_payload.holes],
         player=slot,
         player_count=1 if slot else 0,
+        stats=round_payload.stats(),
     )
     return machine
 
@@ -330,10 +331,16 @@ def test_two_players_get_a_screen_each(program) -> None:
     machine.write(program.symbol("QrPlayerId"), first.player_id + second.player_id)
     machine.write(program.symbol("QrMacKey"), keys[0] + keys[1])
     machine.set_round(
-        [(hole.strokes, hole.putts) for hole in first.holes], player=0, player_count=1
+        [(hole.strokes, hole.putts) for hole in first.holes],
+        player=0,
+        player_count=1,
+        stats=first.stats(),
     )
     machine.set_round(
-        [(hole.strokes, hole.putts) for hole in second.holes], player=1, player_count=1
+        [(hole.strokes, hole.putts) for hole in second.holes],
+        player=1,
+        player_count=1,
+        stats=second.stats(),
     )
 
     screens: list[str | None] = []
@@ -350,6 +357,8 @@ def test_two_players_get_a_screen_each(program) -> None:
         player_id=second.player_id,
         holes=second.holes,
         player_slot=1,
+        fairways=second.fairways,
+        penalty_strokes=second.penalty_strokes,
     ).to_url(keys[1])
     assert screens == [first.to_url(keys[0]), expected_second]
     assert machine.bus.frames == layout.HOLD_FRAMES * 2

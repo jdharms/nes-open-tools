@@ -54,6 +54,18 @@ pointers.
 
 (A future "reclaim" patch that fills the freed region with `$FF` would let this
 one assert on the region too. See the note in the doc.)
+
+The finishing contract
+----------------------
+
+The finishing patches run long after this one, on unfinished ROMs stored by
+earlier build versions, so everything they rely on is pinned here rather than
+derived from today's port: the placeholders' addresses and lengths
+(`PLACEHOLDER_ADDRESSES`), the splice, and the trampoline's shape. The entry
+point the trampoline far-calls is *not* part of it: `is_applied` skips those
+two bytes, so the routine is free to move between build versions. Building
+this patch fails if the port no longer puts a placeholder at its pinned
+address. See ADR 0009.
 """
 
 from golf.core import rom_utils
@@ -64,6 +76,7 @@ from golf.qr.port import layout
 from .base import PatchError, ROMPatch
 from .byte_patch import BytePatch
 from .multi_bank import COURSE_MIRRORS_PATCH
+from .round_stats import ROUND_STATS_PATCH
 
 # --- Splice site ------------------------------------------------------------
 
@@ -90,6 +103,19 @@ TRAMPOLINE_LIMIT = rom_utils.TABLE_PAR
 TRAMPOLINE_VANILLA = bytes([0x77, 0x8D, 0x11, 0x8E, 0x01, 0x8F, 0xDE, 0x8F, 0xBF, 0x90])
 
 EXECUTE_FAR_CALL = 0xD372
+
+#: Where the finishing patches write, fixed for every build version under finish
+#: ABI 2 and earlier. The port has to keep putting each placeholder here.
+PLACEHOLDER_ADDRESSES = {
+    "QrSeedId": 0x8E5F,
+    "QrPlayerId": 0x8E67,
+    "QrMacKey": 0x8E6F,
+}
+
+#: The trampoline bytes that hold the far call's target, which the contract
+#: leaves out: index 7 and 8, after `JSR $85BA`, `JSR ExecuteFarCall` and the
+#: bank byte.
+TRAMPOLINE_ENTRY_BYTES = range(7, 9)
 
 PRG_BANK_SIZE = 0x4000
 
@@ -119,15 +145,24 @@ class ScorecardQrPatch(ROMPatch):
 
     name = "scorecard_qr"
     description = "Draw a scorecard submission QR code after the post-round scorecard"
-    requires = (COURSE_MIRRORS_PATCH,)
+    #: `round_stats` keeps the fairway and penalty bytes the payload copies.
+    requires = (COURSE_MIRRORS_PATCH, ROUND_STATS_PATCH)
 
     def __init__(self) -> None:
         try:
             self.image = port.rom_bytes()
         except ValueError as error:  # an origin that cannot hold the tables
             raise PatchError(str(error)) from error
-        self.entry = port.build().symbol("QrShowCodes")
+        program = port.build()
+        self.entry = program.symbol("QrShowCodes")
         self.trampoline = build_trampoline(self.entry)
+        for symbol, address in PLACEHOLDER_ADDRESSES.items():
+            if program.symbol(symbol) != address:
+                raise PatchError(
+                    f"the port puts {symbol} at ${program.symbol(symbol):04X}, but "
+                    f"finishing writes it at ${address:04X}; stored unfinished ROMs "
+                    "depend on that address"
+                )
 
         end = layout.TABLE_ORIGIN + len(self.image) - 1
         if layout.TABLE_ORIGIN < layout.REGION_START or end > layout.REGION_END:
@@ -189,11 +224,19 @@ class ScorecardQrPatch(ROMPatch):
         )
 
     def is_applied(self, rom_writer) -> bool:
+        """
+        The splice points at the trampoline and the trampoline has its fixed
+        shape. The entry point it far-calls is left out: this is what the
+        finishing patches' `requires` checks, on ROMs whose port may be from an
+        earlier build version.
+        """
         if rom_writer.read_prg(self.splice_offset, 2) != self.splice_bytes:
             return False
-        return (
-            rom_writer.read_prg(self.trampoline_offset, len(self.trampoline))
-            == self.trampoline
+        found = rom_writer.read_prg(self.trampoline_offset, len(self.trampoline))
+        return all(
+            found[i] == self.trampoline[i]
+            for i in range(len(self.trampoline))
+            if i not in TRAMPOLINE_ENTRY_BYTES
         )
 
     def apply(self, rom_writer) -> None:

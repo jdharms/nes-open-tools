@@ -1,9 +1,10 @@
 """
-The 36-byte submission payload, its MAC, and its URL encoding.
+The submission payload, its MAC, and its URL encoding: version 2, which the ROM
+builds, and version 1, which released ROMs still send.
 
 Several of these assert properties the ROM depends on being constant — payload
-length, URL length, the multiple-of-3 and multiple-of-4 rules — so a future
-layout change that breaks the on-cart assumptions fails here first.
+length, URL length, the multiple-of-3 rule — so a future layout change that
+breaks the on-cart assumptions fails here first.
 """
 
 import random
@@ -16,19 +17,24 @@ from golf.qr.payload import (
     BODY_LEN,
     HOLE_COUNT,
     MAC_LEN,
+    MAX_PENALTY_STROKES,
     MAX_PUTTS,
     MAX_STROKES,
     PAYLOAD_LEN,
+    PAYLOAD_LENS,
     PROTOCOL_VERSION,
     STROKE_BITS,
     URL_LEN,
     URL_PREFIX,
+    VERSION_BY_BASE64_LEN,
     HoleRecord,
     RoundPayload,
     base64url_decode,
     base64url_encode,
     pack_hole,
+    pack_stats,
     unpack_hole,
+    unpack_stats,
     verify,
 )
 
@@ -53,20 +59,33 @@ def make_round(**overrides) -> RoundPayload:
 
 def test_payload_length_is_a_multiple_of_three() -> None:
     """Keeps base64 pad-free, which keeps the QR character count constant."""
-    assert PAYLOAD_LEN % 3 == 0
+    for length in PAYLOAD_LENS.values():
+        assert length % 3 == 0
 
 
-def test_maced_region_is_a_multiple_of_four() -> None:
+def test_the_current_version_is_two() -> None:
+    assert PROTOCOL_VERSION == 2
+    assert PAYLOAD_LENS == {1: 36, 2: 39}
+    assert PAYLOAD_LEN == 39
+
+
+def test_the_maced_body_has_a_three_byte_tail() -> None:
     """
-    HalfSipHash consumes 32-bit words; a whole number of them means the 6502
-    implementation needs no partial-word tail path.
+    35 bytes is eight whole words and three left over, which is the final
+    block the 6502 builds. No payload length that is a multiple of 3 and fits
+    the QR leaves a whole number of words, so the tail is unavoidable.
     """
-    assert BODY_LEN % 4 == 0
+    assert BODY_LEN == 35
+    assert BODY_LEN % 4 == 3
 
 
 def test_url_fits_the_qr_with_headroom() -> None:
-    assert URL_LEN == 74
+    assert URL_LEN == 78
     assert URL_LEN < encoder.MAX_CHARS
+
+
+def test_every_version_has_its_own_base64_length() -> None:
+    assert VERSION_BY_BASE64_LEN == {48: 1, 52: 2}
 
 
 def test_headroom_allows_growth_to_forty_two_bytes() -> None:
@@ -182,13 +201,73 @@ def test_unclamped_round_reports_nothing() -> None:
 
 
 def test_body_layout() -> None:
-    body = make_round(player_slot=1).body()
+    fairways = tuple(hole in (0, 8, 17) for hole in range(HOLE_COUNT))
+    body = make_round(player_slot=1, fairways=fairways, penalty_strokes=5).body()
     assert len(body) == BODY_LEN
     assert body[0] == PROTOCOL_VERSION
     assert body[1:9] == SEED_ID
     assert body[9:13] == PLAYER_ID
     assert body[13] == 0x01
     assert body[14:32] == bytes([0x32] * HOLE_COUNT)
+    # hole 1 is bit 0 of byte 32, hole 9 bit 0 of byte 33, hole 18 bit 1 of
+    # byte 34; penalties fill the top six bits of byte 34
+    assert body[32:35] == bytes([0x01, 0x01, 0x02 | 5 << 2])
+
+
+def test_version_one_body_layout() -> None:
+    body = make_round(protocol_version=1, player_slot=1).body()
+    assert len(body) == 32
+    assert body[0] == 1
+    assert body[14:32] == bytes([0x32] * HOLE_COUNT)
+
+
+# --------------------------------------------------------------------------
+# Round stats
+# --------------------------------------------------------------------------
+
+
+def test_stats_default_to_nothing_recorded_in_version_two() -> None:
+    payload = make_round()
+    assert payload.fairways == (False,) * HOLE_COUNT
+    assert payload.penalty_strokes == 0
+
+
+def test_version_one_carries_no_stats() -> None:
+    payload = make_round(protocol_version=1)
+    assert payload.fairways is None
+    assert payload.penalty_strokes is None
+    with pytest.raises(ValueError, match="no round stats"):
+        make_round(protocol_version=1, penalty_strokes=0)
+
+
+@pytest.mark.parametrize("hole", range(HOLE_COUNT))
+def test_each_fairway_has_its_own_bit(hole: int) -> None:
+    fairways = tuple(i == hole for i in range(HOLE_COUNT))
+    packed = pack_stats(fairways, 0)
+    assert int.from_bytes(packed, "little") == 1 << hole
+    assert unpack_stats(packed) == (fairways, 0)
+
+
+@pytest.mark.parametrize("penalties", [0, 1, 17, 63])
+def test_penalties_round_trip_beside_every_fairway(penalties: int) -> None:
+    fairways = (True,) * HOLE_COUNT
+    assert unpack_stats(pack_stats(fairways, penalties)) == (fairways, penalties)
+
+
+def test_penalties_clamp_at_sixty_three() -> None:
+    assert MAX_PENALTY_STROKES == 63
+    payload = make_round(penalty_strokes=70)
+    assert payload.penalty_strokes_clamped
+    parsed, _ = RoundPayload.from_bytes(payload.to_bytes(KEY))
+    assert parsed.penalty_strokes == 63
+    assert parsed.fairways == (False,) * HOLE_COUNT
+
+
+def test_stats_are_validated() -> None:
+    with pytest.raises(ValueError, match="fairway flags"):
+        make_round(fairways=(True,) * 17)
+    with pytest.raises(ValueError, match="negative"):
+        make_round(penalty_strokes=-1)
 
 
 def test_player_slot_occupies_two_bits() -> None:
@@ -233,8 +312,39 @@ def test_clamped_round_decodes_to_the_clamped_value() -> None:
 
 
 def test_wrong_length_payload_is_rejected() -> None:
-    with pytest.raises(ValueError, match=f"must be {PAYLOAD_LEN} bytes"):
-        RoundPayload.from_bytes(b"\x00" * 10)
+    with pytest.raises(ValueError, match="version 2 payload is 39 bytes"):
+        RoundPayload.from_bytes(b"\x02" * 36)
+    with pytest.raises(ValueError, match="version 1 payload is 36 bytes"):
+        RoundPayload.from_bytes(b"\x01" * 39)
+
+
+def test_unknown_version_is_rejected() -> None:
+    with pytest.raises(ValueError, match="unsupported protocol version 3"):
+        RoundPayload.from_bytes(b"\x03" * 39)
+    with pytest.raises(ValueError, match="unsupported protocol version"):
+        verify(b"\x00" * 36, KEY)
+
+
+def test_version_one_round_trips() -> None:
+    """Released ROMs send this; it must decode for good."""
+    rng = random.Random(9)
+    original = sample.random_round(rng, disaster_chance=0.0)
+    v1 = make_round(protocol_version=1, holes=original.holes)
+    data = v1.to_bytes(KEY)
+    assert len(data) == 36
+    url = v1.to_url(KEY)
+    assert len(url) == len(URL_PREFIX) + 48
+    parsed, mac = RoundPayload.from_url(url)
+    assert parsed == v1
+    assert mac == data[32:]
+    assert verify(data, KEY)
+
+
+def test_a_version_one_payload_is_maced_over_its_first_thirty_two_bytes() -> None:
+    data = make_round(protocol_version=1).to_bytes(KEY)
+    tampered = bytearray(data)
+    tampered[31] ^= 1
+    assert not verify(bytes(tampered), KEY)
 
 
 def test_url_with_wrong_prefix_is_rejected() -> None:
@@ -256,12 +366,16 @@ def test_mac_fails_with_the_wrong_key() -> None:
 
 
 def test_every_body_byte_is_covered_by_the_mac() -> None:
-    """A one-bit change anywhere in bytes 0-31 must invalidate the MAC."""
+    """A one-bit change anywhere in bytes 0-34 must invalidate the MAC."""
     payload = make_round().to_bytes(KEY)
     for index in range(BODY_LEN):
         for bit in range(8):
             tampered = bytearray(payload)
             tampered[index] ^= 1 << bit
+            if index == 0:  # a different version byte is refused outright
+                with pytest.raises(ValueError, match="protocol version"):
+                    verify(bytes(tampered), KEY)
+                continue
             assert not verify(bytes(tampered), KEY), f"byte {index} bit {bit}"
 
 

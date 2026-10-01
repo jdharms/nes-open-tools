@@ -171,4 +171,59 @@ MIGRATIONS: list[str] = [
         updated_at TEXT NOT NULL
     );
     """,
+    # 5: scorecard QR protocol version 2: 39-byte payloads carrying fairways hit and penalty
+    # strokes (docs/scorecard_qr.md). Both are NULL for a round whose payload is version 1,
+    # which did not record them. SQLite cannot change a CHECK in place, so the two tables
+    # whose payload length it pins are rebuilt. round_holes refers to rounds, so its rows
+    # are set aside, the table dropped and made again under its own name, and the rows put
+    # back: with foreign keys deferred, the drop's violations are settled by the reinsert
+    # before COMMIT checks them.
+    """
+    PRAGMA defer_foreign_keys = ON;
+
+    CREATE TEMP TABLE rounds_before_v5 AS SELECT * FROM rounds;
+    DROP TABLE rounds;
+    CREATE TABLE rounds (
+        id INTEGER PRIMARY KEY,
+        public_id TEXT NOT NULL UNIQUE CHECK (length(public_id) = 10),
+        entry_id INTEGER NOT NULL REFERENCES entries (id),
+        slot INTEGER NOT NULL CHECK (slot IN (0, 1)),
+        payload BLOB NOT NULL CHECK (length(payload) IN (36, 39)),
+        total_strokes INTEGER NOT NULL,
+        total_putts INTEGER NOT NULL,
+        penalty_strokes INTEGER CHECK (penalty_strokes BETWEEN 0 AND 63),
+        received_at TEXT NOT NULL,
+        flagged INTEGER NOT NULL DEFAULT 0 CHECK (flagged IN (0, 1)),
+        flag_note TEXT,
+        UNIQUE (entry_id, slot),
+        CHECK ((length(payload) = 36) = (penalty_strokes IS NULL))
+    );
+    INSERT INTO rounds (id, public_id, entry_id, slot, payload, total_strokes, total_putts,
+                        received_at, flagged, flag_note)
+        SELECT id, public_id, entry_id, slot, payload, total_strokes, total_putts,
+               received_at, flagged, flag_note
+        FROM rounds_before_v5;
+    DROP TABLE rounds_before_v5;
+
+    ALTER TABLE round_holes
+        ADD COLUMN fairway_hit INTEGER CHECK (fairway_hit IN (0, 1));
+
+    CREATE TEMP TABLE voided_rounds_before_v5 AS SELECT * FROM voided_rounds;
+    DROP TABLE voided_rounds;
+    CREATE TABLE voided_rounds (
+        id INTEGER PRIMARY KEY,
+        public_id TEXT NOT NULL UNIQUE CHECK (length(public_id) = 10),
+        entry_id INTEGER NOT NULL REFERENCES entries (id),
+        slot INTEGER NOT NULL CHECK (slot IN (0, 1)),
+        payload BLOB NOT NULL UNIQUE CHECK (length(payload) IN (36, 39)),
+        received_at TEXT NOT NULL,
+        flagged INTEGER NOT NULL CHECK (flagged IN (0, 1)),
+        flag_note TEXT,
+        voided_at TEXT NOT NULL,
+        void_note TEXT
+    );
+    INSERT INTO voided_rounds SELECT * FROM voided_rounds_before_v5;
+    DROP TABLE voided_rounds_before_v5;
+    CREATE INDEX voided_rounds_by_entry ON voided_rounds (entry_id, slot);
+    """,
 ]

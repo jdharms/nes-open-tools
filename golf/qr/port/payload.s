@@ -1,16 +1,18 @@
-; The 36-byte payload and the URL it becomes.
+; The 39-byte payload and the URL it becomes.
 ;
-;   byte  0      protocol version
+;   byte  0      protocol version 2
 ;   bytes 1-8    seed ID        (patched in at build time)
 ;   bytes 9-12   player ID      (patched in, one per player slot)
 ;   byte  13     flags: bits 0-1 player slot
 ;   bytes 14-31  hole records, strokes-1 in the high nibble, putts in the low
-;   bytes 32-35  HalfSipHash-2-4-32 over bytes 0-31
+;   bytes 32-34  round stats, copied as the round_stats patch keeps them
+;   bytes 35-38  HalfSipHash-2-4-32 over bytes 0-34
 ;
 ; Both fields clamp rather than overflow, which is also what makes an unplayed
 ; hole safe: the game leaves $FF there, and $FF clamps to 16 strokes like any
-; other blow-up. The URL is the 26-byte prefix followed by 48 base64url
-; characters, 74 in all.
+; other blow-up. The round stats are already in wire order: fairway bits for
+; holes 1-18, then penalty strokes in the top six bits of the third byte. The
+; URL is the 26-byte prefix followed by 52 base64url characters, 78 in all.
 
 QrSlot        = QrTemp + 0          ; player slot, 0 or 1
 QrStrokeBase  = QrTemp + 1          ; slot * 36
@@ -28,7 +30,7 @@ QrBuildPayload:
         and #$03
         sta QrSlot
 
-        lda #$01                        ; protocol version
+        lda #QrProtocolVersion
         sta QrPayload
 
         ldx #0
@@ -103,6 +105,19 @@ QrBuildPayload:
         inx
         cpx #18
         bne @hole
+
+        lda QrSlot                      ; round stats, three bytes per slot
+        asl a                           ; (carry clear: the slot is 0 or 1)
+        adc QrSlot
+        tay
+        ldx #0
+@stats:
+        lda RoundStats,y
+        sta QrPayload + 32,x
+        iny
+        inx
+        cpx #3
+        bne @stats
 
         lda QrSlot                      ; the slot's MAC key
         asl a

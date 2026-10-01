@@ -19,7 +19,11 @@ from golf.core.patches.extended_sram_defaults import (
 )
 from golf.core.patches.music_import import MusicImportPatch
 from golf.core.patches.qr_credentials import PLACEHOLDERS, placeholder_offset
-from golf.core.patches.scorecard_qr import QR_DISABLE_PATCH, SCORECARD_QR_PATCH
+from golf.core.patches.scorecard_qr import (
+    QR_DISABLE_PATCH,
+    SCORECARD_QR_PATCH,
+    TRAMPOLINE_ENTRY_BYTES,
+)
 from golf.core.patches.sram_defaults import Club, magic_bytes
 from golf.qr import payload, port
 from golf.randomizer.build import (
@@ -85,9 +89,16 @@ def test_finishing_refuses_an_unsupported_artifact_abi_before_reading_the_rom():
 
 
 def qr_contract() -> dict:
-    """The QR half of the finish ABI, which ABIs 1 and 2 share."""
+    """
+    The QR half of the finish ABI, which ABIs 1 and 2 share (ADR 0009).
+
+    The payload protocol is not part of it: the unfinished image decides what the
+    ROM sends, finishing writes none of it, and the server accepts every version
+    ever released. Nor is the far call's target in the trampoline, which finishing
+    never checks, so the routine it reaches may move between build versions.
+    """
+    trampoline = SCORECARD_QR_PATCH.trampoline
     return {
-        "protocol": payload.PROTOCOL_VERSION,
         "credential_lengths": (
             payload.SEED_ID_LEN,
             payload.PLAYER_ID_LEN,
@@ -100,7 +111,11 @@ def qr_contract() -> dict:
         ),
         "qr_identity": (
             SCORECARD_QR_PATCH.trampoline_offset,
-            SCORECARD_QR_PATCH.trampoline,
+            bytes(
+                byte
+                for i, byte in enumerate(trampoline)
+                if i not in TRAMPOLINE_ENTRY_BYTES
+            ),
             SCORECARD_QR_PATCH.splice_offset,
             SCORECARD_QR_PATCH.splice_bytes,
         ),
@@ -113,7 +128,6 @@ def qr_contract() -> dict:
 
 
 QR_CONTRACT = {
-    "protocol": 1,
     "credential_lengths": (8, 4, 8),
     "placeholder_fill": 0,
     "placeholders": (
@@ -123,7 +137,7 @@ QR_CONTRACT = {
     ),
     "qr_identity": (
         0x3DCBD,
-        bytes.fromhex("20ba852072d302978e60"),
+        bytes.fromhex("20ba852072d30260"),  # less the entry point's two bytes
         0x3452E,
         bytes.fromhex("bddc"),
     ),

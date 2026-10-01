@@ -67,6 +67,7 @@ from .recipe import (
     parse_step_arg,
 )
 from .registry import PATCH_SPECS, BuildContext, PatchSpec
+from .round_stats import ROUND_STATS_PATCH
 from .scorecard_course_name import (
     scorecard_course_name_patch,
     scorecard_course_name_patches,
@@ -109,6 +110,7 @@ __all__ = [
     "describe_params",
     "parse_step_arg",
     "ScorecardQrPatch",
+    "ROUND_STATS_PATCH",
     "SCORECARD_QR_PATCH",
     "QR_DISABLE_PATCH",
     "scorecard_course_name_patch",

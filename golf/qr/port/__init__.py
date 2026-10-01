@@ -85,6 +85,11 @@ def constants_source() -> str:
             f"URL prefix is {len(prefix)} characters; the constant code word "
             f"head assumes {CONSTANT_PREFIX_LEN}"
         )
+    if payload.BODY_LEN % 4 != 3:
+        raise ValueError(
+            f"the hash reads its final block in place, which needs a 3-byte "
+            f"tail; a {payload.BODY_LEN}-byte body has {payload.BODY_LEN % 4}"
+        )
     fill = f"${PATCH_FILL:02X}"
     player = caption_tiles(PLAYER_CAPTION)
     scan = caption_tiles(SCAN_CAPTION)
@@ -98,6 +103,8 @@ def constants_source() -> str:
             f"QrUrlPrefixLen = {len(prefix)}",
             f"QrUrlLen = {payload.URL_LEN}",
             f"QrPayloadLen = {payload.PAYLOAD_LEN}",
+            f"QrBodyLen = {payload.BODY_LEN}",
+            f"QrProtocolVersion = {payload.PROTOCOL_VERSION}",
             f"QrHoleCount = {payload.HOLE_COUNT}",
             f"QrConstantCodewords = {CONSTANT_CODEWORDS}",
             f"QrDataCodewordCount = {encoder.DATA_CODEWORDS}",

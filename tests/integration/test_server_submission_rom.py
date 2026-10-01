@@ -11,7 +11,7 @@ from fastapi.testclient import TestClient
 
 from golf.core import ips
 from golf.core.patches import SCORECARD_QR_PATCH
-from golf.qr.payload import URL_LEN, URL_PREFIX
+from golf.qr.payload import URL_LEN, URL_PREFIX, pack_stats
 from golf.qr.port import layout
 from golf.qr.port.sim import Machine
 from golf.randomizer.catalog import US_ROM
@@ -34,6 +34,11 @@ ROUNDS = {
     0: [(4, 2)] * 9 + [(5, 2)] * 9,
     1: [(3, 1)] * 18,
 }
+#: (fairway bits, penalty strokes) per player slot, as round_stats keeps them
+STATS = {
+    0: (tuple(hole % 2 == 0 for hole in range(18)), 2),
+    1: ((False,) * 18, 0),
+}
 
 
 def rom_url(rom: bytes, slot: int) -> str:
@@ -44,7 +49,9 @@ def rom_url(rom: bytes, slot: int) -> str:
     machine = Machine()
     machine.write(layout.TABLE_ORIGIN, image)
     for player, holes in ROUNDS.items():
-        machine.set_round(holes, player=player, player_count=1)
+        machine.set_round(
+            holes, player=player, player_count=1, stats=pack_stats(*STATS[player])
+        )
     machine.call("QrBuildPayload", a=slot)
     machine.call("QrBuildUrl")
     return machine.read(layout.URL, URL_LEN).decode("ascii")
@@ -98,9 +105,24 @@ def test_a_downloaded_roms_codes_record_both_players_rounds(vanilla_courses):
 
         with app_state(client).db.transaction() as conn:
             recorded = conn.execute(
-                "SELECT slot, total_strokes, total_putts FROM rounds ORDER BY slot"
+                """
+                SELECT slot, total_strokes, total_putts, penalty_strokes FROM rounds
+                ORDER BY slot
+                """
+            ).fetchall()
+            fairways = conn.execute(
+                """
+                SELECT rounds.slot, round_holes.fairway_hit FROM round_holes
+                JOIN rounds ON rounds.id = round_holes.round_id
+                ORDER BY rounds.slot, round_holes.position
+                """
             ).fetchall()
     assert [tuple(row) for row in recorded] == [
-        (slot, sum(s for s, _ in holes), sum(p for _, p in holes))
+        (slot, sum(s for s, _ in holes), sum(p for _, p in holes), STATS[slot][1])
         for slot, holes in ROUNDS.items()
     ]
+    for slot in ROUNDS:
+        assert (
+            tuple(bool(row["fairway_hit"]) for row in fairways if row["slot"] == slot)
+            == STATS[slot][0]
+        )

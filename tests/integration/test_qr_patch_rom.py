@@ -16,6 +16,7 @@ import pytest
 from golf.core.patches import (
     COURSE_MIRRORS_PATCH,
     QR_DISABLE_PATCH,
+    ROUND_STATS_PATCH,
     SCORECARD_QR_PATCH,
     PatchError,
     QrCredentials,
@@ -46,8 +47,10 @@ PATCH = SCORECARD_QR_PATCH
 
 
 def mirrored_writer(out: Path) -> RomWriter:
+    """The vanilla ROM with what scorecard_qr requires: the mirrors and round stats."""
     writer = RomWriter(ROM_PATH, str(out))
     COURSE_MIRRORS_PATCH.apply(writer)
+    ROUND_STATS_PATCH.apply(writer)
     return writer
 
 
@@ -296,6 +299,7 @@ def test_the_feature_in_the_finished_rom_draws_a_scannable_code(tmp_path) -> Non
         [(hole.strokes, hole.putts) for hole in round_payload.holes],
         player=0,
         player_count=0,
+        stats=round_payload.stats(),
     )
     machine.call(
         "QrShowCodes",
@@ -321,5 +325,7 @@ def test_the_feature_in_the_finished_rom_draws_a_scannable_code(tmp_path) -> Non
         seed_id=CREDENTIALS.seed_id,
         player_id=CREDENTIALS.player_ids[0],
         holes=round_payload.holes,
+        fairways=round_payload.fairways,
+        penalty_strokes=round_payload.penalty_strokes,
     ).to_url(CREDENTIALS.keys[0])
     assert DECODERS["zxing"](render_screen(matrix)) == expected
