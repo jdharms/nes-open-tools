@@ -39,3 +39,7 @@ wheels/
 
 # Built temporary results
 .cache/*
+
+# Developer scratch space
+scratch/
+.scratch/
