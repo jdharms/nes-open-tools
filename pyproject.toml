@@ -52,6 +52,7 @@ golf-adr = "tools.dev.adr:main"
 
 # ROM patches
 golf-patch = "tools.patch:main"
+golf-practice-greens = "tools.practice_greens:main"
 golf-randomize = "tools.randomize:main"
 
 # Randomizer site

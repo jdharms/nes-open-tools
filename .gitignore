@@ -43,3 +43,6 @@ wheels/
 # Developer scratch space
 scratch/
 .scratch/
+
+# Local standalone practice build includes extracted vanilla pins.
+/practice_greens.build.json

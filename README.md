@@ -121,6 +121,7 @@ Build a standalone editor executable with `uv run pyinstaller run_editor.spec`.
 
 | Command | Description |
 |---------|-------------|
+| `golf-practice-greens [rom] [-o out.nes]` | Build the standalone putting-only ROM containing every vanilla green from both games; see `docs/practice_greens.md` |
 | `golf-patch <rom> [recipe.json] [-p ID[:key=value,...]]` | Build a ROM or IPS patch from a recipe and/or inline patch steps; `--list` shows every patch type; see `docs/patch_stack.md` |
 | `golf-randomize generate [-o manifest.json] [--seed S] [settings]` | Generate a randomizer seed manifest from settings; see `docs/manifest.md` |
 | `golf-randomize build <rom> <manifest.json> [-o out.nes] [--ips out.ips]` | Build a seed's ROM or IPS when this release implements the manifest's unfinished `build_version`: a finished guest ROM by default, `--unfinished` or `--credentials keys.json` for the other stages |

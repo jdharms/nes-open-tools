@@ -1,10 +1,10 @@
 # Putting Practice
 
-> **Note**: This document was written by Claude based on reverse-engineering requested by jdharms. Everything below was verified against the US ROM, and the mechanism was confirmed working in a throwaway prototype that was not kept. No patch module implements this yet.
+> **Note**: This document was written by Claude based on reverse-engineering requested by jdharms. Everything below was verified against the US ROM, and the mechanism was confirmed working in a throwaway prototype that was not kept. The later experimental implementation is `golf/core/patches/putting_practice.py`, available through `golf-patch -p putting_practice`. The standalone [Practice Greens](practice_greens.md) project replaces its spawn algorithm and adds the full vanilla green pool.
 
 Places the ball at a random point on the green's putting surface at hole init instead of on the tee, so every hole starts as a putt.
 
-This is a design note, not a description of shipped code. The assembly is given in full because it was built and run; the payload address is deliberately left open - see [Placing the payload](#placing-the-payload).
+This is the original design note, not a description of the current standalone hack. The assembly is given in full because it was built and run; the payload address is deliberately left open - see [Placing the payload](#placing-the-payload).
 
 ## Why this is cheap
 

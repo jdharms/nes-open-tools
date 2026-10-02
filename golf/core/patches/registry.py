@@ -59,6 +59,7 @@ from .seeded_wind import derive_hole_seeds, seeded_wind_patch
 from .signpost_banner import remove_course_banner_patches
 from .signpost_color import signpost_color_patch
 from .signpost_random_banner import signpost_banner_patch
+from .skip_hole_celebrations import skip_hole_celebrations_patch
 from .sram_defaults import (
     VANILLA_CLUBS,
     VANILLA_MAGIC,
@@ -532,6 +533,12 @@ PATCH_SPECS: dict[str, PatchSpec[Any, Any]] = {
             "Recolor Peach's dress in the putting view to a curated NES color",
             PeachDressParams,
             lambda ctx, params: peach_dress_patch(params.color),
+        ),
+        PatchSpec(
+            "skip_hole_celebrations",
+            "Skip post-hole ball retrieval and ace celebrations",
+            NoParams,
+            lambda ctx, params: skip_hole_celebrations_patch(),
         ),
         PatchSpec(
             "putting_practice",
