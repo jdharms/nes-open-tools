@@ -1,0 +1,17 @@
+{
+  "id": "tree_rough_9E_9D",
+  "name": "tree 9E/9D",
+  "description": "",
+  "created": "",
+  "category": "tree",
+  "tags": [],
+  "mode": "terrain",
+  "width": 1,
+  "height": 2,
+  "tiles": {
+    "rows": [
+      "9E",
+      "9D"
+    ]
+  }
+}

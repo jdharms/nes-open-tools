@@ -1,0 +1,17 @@
+{
+  "id": "tree_feature_BC_BF",
+  "name": "tree on feature BC/BF",
+  "description": "",
+  "created": "",
+  "category": "tree",
+  "tags": [],
+  "mode": "terrain",
+  "width": 1,
+  "height": 2,
+  "tiles": {
+    "rows": [
+      "BC",
+      "BF"
+    ]
+  }
+}

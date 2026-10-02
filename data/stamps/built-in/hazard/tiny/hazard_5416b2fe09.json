@@ -1,0 +1,16 @@
+{
+  "id": "hazard_5416b2fe09",
+  "name": "vanilla \u00d78",
+  "description": "",
+  "created": "",
+  "category": "hazard/tiny",
+  "tags": [],
+  "mode": "terrain",
+  "width": 3,
+  "height": 1,
+  "tiles": {
+    "rows": [
+      "52 4A 51"
+    ]
+  }
+}

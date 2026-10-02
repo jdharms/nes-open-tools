@@ -1,0 +1,16 @@
+{
+  "id": "tree_bush",
+  "name": "bush",
+  "description": "",
+  "created": "",
+  "category": "tree",
+  "tags": [],
+  "mode": "terrain",
+  "width": 1,
+  "height": 1,
+  "tiles": {
+    "rows": [
+      "3E"
+    ]
+  }
+}

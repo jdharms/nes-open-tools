@@ -1,0 +1,22 @@
+{
+  "id": "hazard_839c7a3aa0",
+  "name": "vanilla \u00d72",
+  "description": "",
+  "created": "",
+  "category": "hazard/medium",
+  "tags": [],
+  "mode": "terrain",
+  "width": 7,
+  "height": 7,
+  "tiles": {
+    "rows": [
+      "52 4A 44 4B 45 -- --",
+      "-- 7A 27 27 27 44 45",
+      "-- -- 6A 27 27 27 59",
+      "-- -- 48 27 27 73 --",
+      "-- 40 27 27 59 -- --",
+      "-- 70 27 6B -- -- --",
+      "-- -- 58 7B -- -- --"
+    ]
+  }
+}

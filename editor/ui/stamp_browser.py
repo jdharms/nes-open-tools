@@ -230,6 +230,17 @@ class StampBrowser:
                     )
                     stamp_surf.blit(tile_surf, (tile_x, tile_y))
 
+        # A stamp too large for the box even at 1x is shrunk to fit
+        largest = max(stamp_width, stamp_height)
+        if largest > preview_rect.width:
+            stamp_surf = pygame.transform.scale(
+                stamp_surf,
+                (
+                    max(1, stamp_width * preview_rect.width // largest),
+                    max(1, stamp_height * preview_rect.width // largest),
+                ),
+            )
+
         # Cache the preview with palette
         self._preview_cache[cache_key] = stamp_surf
 

@@ -42,6 +42,8 @@ A toolset for reverse engineering, editing and patching the NES Open Tournament 
   - `golf/core/patches/` - ROM patches (`ROMPatch`, `BytePatch`, `CompositePatch`), and
     `PatchStack` for building a ROM from an ordered list of them (`docs/patch_stack.md`)
   - `formats/` - hole data model and JSON serialization (see `docs/course_data.md`)
+  - `algorithms/` - hole-editing algorithms shared by the editor and the randomizer:
+    terrain features (fairways, bunkers, water) and the hazard shapes cut from them
   - `rendering/` - PIL rendering for static images
   - `qr/` - scorecard QR reference implementation and 6502 port
   - `physics/` - Python model of the ball physics (launch to rest), checked frame by frame

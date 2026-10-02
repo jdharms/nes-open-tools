@@ -101,6 +101,7 @@ Build a standalone editor executable with `uv run pyinstaller run_editor.spec`.
 | `golf-analyze-putting` | Putting surface sizes -> `data/statistics/putting_surface_sizes.json` |
 | `golf-catalog-sync [courses_root] [--check]` | Add dumped vanilla holes to the randomizer catalog and verify the rest -> `data/catalog/holes.json`; see `docs/catalog.md` |
 | `golf-curate list/show/family/suggest/check` | Read and edit hole curation -> `data/catalog/curation.json`; `suggest` proposes families from the hole data; see `docs/catalog.md` |
+| `golf-hazard-stamps [courses_root] [--check]` | Regenerate the editor's built-in hazard stamps from every enclosed bunker and water hazard in the vanilla courses -> `data/stamps/built-in/hazard/` |
 
 ### Utilities
 
