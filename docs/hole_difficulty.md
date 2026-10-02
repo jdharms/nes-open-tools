@@ -62,7 +62,7 @@ site.
 - **Skill is solved for, not assumed.** A scratch player is whoever averages 72 over a
   round, with no allowance for physical strength since NES Open has none. That skill is
   then carried to other holes and courses unchanged.
-- **Skill 3 for placing the Mario Open holes** (jdharms). The U.K. round is 73.4 at skill
+- **Skill 3 for placing the Mario Open holes** (jdharms). The U.K. round is 73.2 at skill
   3, so a scratch player's skill is a little under 3, about 2.7-2.9, and a skill that close
   moves individual holes by hundredths to a tenth. Fitting one number to one target
   cannot test the model, so a careful calibration waits; a rough one (one more U.K.
@@ -292,7 +292,8 @@ PYTHONPATH=. .cache/pypy/bin/python -u -m tools.research.difficulty \
 
 Each log ends with the course's hole-by-hole table against par. A hole whose play still
 visits an unvalued spot at least `reach` times a hole prints a warning; on the holes
-solved since the cleanup-round fix that came to 0.002-0.009 a hole.
+solved since the cleanup-round fix that came to 0.002-0.009 a hole, and 0.027 on the NES
+US 12th.
 
 ## How it was built
 
@@ -534,7 +535,8 @@ Done:
   finite answer, so value iteration climbed to its cap, 44 spots reached 24 strokes,
   and their neighbours borrowed from them. Such spots are rarely visited, so they were
   never screened again. Screening a spot again once its value moves, and not stopping
-  while any is due, settled the 12th at 5.412 in 16 rounds, highest value 6.5. No
+  while any is due, settled the 12th at 5.412 in 16 rounds, highest value 6.5 (5.793
+  since **The cleanup-round fix**). No
   U.K. or Japan hole had any such spot. Turned down on the way: escape shots round the
   whole circle (scored on the same stale values, they hop too), policy iteration (under
   PyPy a dense solve of 1,000 states takes 2-3 s, and filling the matrix is slow), and
@@ -707,16 +709,14 @@ the solver as it stood at ADR 0008: NES Open holes on the vanilla ROM, Mario Ope
 `nes_open_wram.nes` (phase 1). The tables are `golf-difficulty-report`'s (**Data**).
 "Over par" is expected strokes from the tee minus par; "Rare visits" is how often a hole's
 best play visits spots too rare to value, which borrow their values (**The solver**).
-For now the NES Open holes are from earlier versions of the solver, and their rare
-visits were not kept (**Earlier NES Open solves**).
 
 ### Courses
 
 | Course | Out | In | Round | Over par | Par 3s | Par 4s | Par 5s | Holes over +0.5 | Spearman vs handicap |
 |---|---|---|---|---|---|---|---|---|---|
-| NES Japan | 36.62 | 36.87 | 73.49 | +1.49 | -0.01 | +0.18 | -0.06 | 1 | 0.69 |
-| NES US | 35.89 | 37.88 | 73.77 | +1.77 | +0.22 | +0.05 | +0.11 | 1 | 0.62 |
-| NES U.K. | 35.96 | 37.30 | 73.27 | +1.27 | -0.01 | +0.18 | -0.13 | 1 | 0.55 |
+| NES Japan | 36.57 | 36.81 | 73.38 | +1.38 | -0.01 | +0.17 | -0.07 | 1 | 0.68 |
+| NES US | 35.82 | 38.20 | 74.01 | +2.01 | +0.20 | +0.04 | +0.20 | 2 | 0.61 |
+| NES U.K. | 35.93 | 37.26 | 73.19 | +1.19 | -0.00 | +0.17 | -0.13 | 1 | 0.54 |
 | Mario Japan | 36.57 | 36.84 | 73.41 | +1.41 | -0.06 | +0.16 | +0.02 | 0 | 0.13 |
 | Mario Australia | 36.89 | 38.82 | 75.71 | +3.71 | +0.10 | +0.24 | +0.22 | 3 | 0.45 |
 | Mario France | 37.88 | 39.75 | 77.63 | +5.63 | +0.26 | +0.22 | +0.59 | 3 | 0.53 |
@@ -727,131 +727,131 @@ visits were not kept (**Earlier NES Open solves**).
 
 | # | Hole | Par | Yards | Handicap | Expected | Over par | Rare visits |
 |---|---|---|---|---|---|---|---|
-| 1 | NES US 2 | 5 | 481 | 13 | 4.460 | -0.540 |  |
-| 2 | NES Japan 12 | 5 | 535 | 6 | 4.640 | -0.360 |  |
-| 3 | NES US 1 | 4 | 328 | 17 | 3.660 | -0.340 |  |
-| 4 | Mario France 5 | 4 | 350 | 16 | 3.696 | -0.304 | 0.048 |
-| 5 | NES U.K. 6 | 4 | 357 | 7 | 3.730 | -0.270 |  |
-| 6 | Mario Japan 8 | 5 | 524 | 6 | 4.737 | -0.263 | 0.122 |
-| 7 | NES U.K. 9 | 5 | 528 | 13 | 4.737 | -0.263 |  |
-| 8 | NES U.K. 2 | 4 | 393 | 12 | 3.760 | -0.240 |  |
+| 1 | NES US 2 | 5 | 481 | 13 | 4.454 | -0.546 | 0.078 |
+| 2 | NES Japan 12 | 5 | 535 | 6 | 4.637 | -0.363 | 0.098 |
+| 3 | NES US 1 | 4 | 328 | 17 | 3.670 | -0.330 | 0.036 |
+| 4 | NES U.K. 6 | 4 | 357 | 7 | 3.696 | -0.304 | 0.048 |
+| 5 | Mario France 5 | 4 | 350 | 16 | 3.696 | -0.304 | 0.048 |
+| 6 | NES U.K. 9 | 5 | 528 | 13 | 4.737 | -0.263 | 0.122 |
+| 7 | Mario Japan 8 | 5 | 524 | 6 | 4.737 | -0.263 | 0.122 |
+| 8 | NES U.K. 2 | 4 | 393 | 12 | 3.760 | -0.240 | 0.053 |
 | 9 | Mario Australia 6 | 4 | 386 | 14 | 3.760 | -0.240 | 0.053 |
-| 10 | NES Japan 10 | 4 | 350 | 15 | 3.770 | -0.230 |  |
-| 11 | NES U.K. 10 | 4 | 325 | 11 | 3.802 | -0.198 |  |
-| 12 | NES U.K. 13 | 5 | 571 | 18 | 4.820 | -0.180 |  |
-| 13 | NES US 4 | 3 | 154 | 16 | 2.850 | -0.150 |  |
+| 10 | NES Japan 10 | 4 | 350 | 15 | 3.763 | -0.237 | 0.042 |
+| 11 | NES U.K. 10 | 4 | 325 | 11 | 3.802 | -0.198 | 0.021 |
+| 12 | NES U.K. 13 | 5 | 571 | 18 | 4.827 | -0.173 | 0.120 |
+| 13 | NES US 4 | 3 | 154 | 16 | 2.843 | -0.157 | 0.005 |
 | 14 | Mario Japan 13 | 5 | 581 | 1 | 4.860 | -0.140 | 0.111 |
-| 15 | NES Japan 3 | 5 | 534 | 16 | 4.870 | -0.130 |  |
-| 16 | NES Japan 6 | 3 | 166 | 11 | 2.870 | -0.130 |  |
+| 15 | NES Japan 3 | 5 | 534 | 16 | 4.863 | -0.137 | 0.089 |
+| 16 | NES Japan 6 | 3 | 166 | 11 | 2.871 | -0.129 | 0.014 |
 | 17 | Mario Japan 5 | 3 | 171 | 14 | 2.874 | -0.126 | 0.010 |
-| 18 | Mario Japan 15 | 4 | 424 | 13 | 3.878 | -0.122 | 0.053 |
-| 19 | NES U.K. 16 | 5 | 571 | 16 | 4.879 | -0.121 |  |
-| 20 | NES US 17 | 4 | 435 | 12 | 3.880 | -0.120 |  |
+| 18 | NES US 17 | 4 | 435 | 12 | 3.878 | -0.122 | 0.053 |
+| 19 | Mario Japan 15 | 4 | 424 | 13 | 3.878 | -0.122 | 0.053 |
+| 20 | NES U.K. 16 | 5 | 571 | 16 | 4.879 | -0.121 | 0.093 |
 | 21 | Mario France 10 | 5 | 566 | 5 | 4.881 | -0.119 | 0.113 |
 | 22 | Mario Australia 9 | 5 | 573 | 6 | 4.902 | -0.098 | 0.096 |
 | 23 | Mario Hawaii 7 | 3 | 212 | 18 | 2.922 | -0.078 | 0.013 |
-| 24 | Mario France 9 | 4 | 338 | 14 | 3.937 | -0.063 | 0.038 |
-| 25 | NES Japan 7 | 5 | 535 | 10 | 4.940 | -0.060 |  |
-| 26 | Mario Japan 3 | 3 | 220 | 8 | 2.954 | -0.046 | 0.022 |
-| 27 | NES U.K. 4 | 3 | 221 | 10 | 2.960 | -0.040 |  |
-| 28 | NES U.K. 12 | 3 | 162 | 14 | 2.960 | -0.040 |  |
+| 24 | NES Japan 7 | 5 | 535 | 10 | 4.929 | -0.071 | 0.130 |
+| 25 | Mario France 9 | 4 | 338 | 14 | 3.937 | -0.063 | 0.038 |
+| 26 | NES U.K. 4 | 3 | 221 | 10 | 2.954 | -0.046 | 0.022 |
+| 27 | Mario Japan 3 | 3 | 220 | 8 | 2.954 | -0.046 | 0.022 |
+| 28 | NES U.K. 12 | 3 | 162 | 14 | 2.961 | -0.039 | 0.006 |
 | 29 | Mario Japan 11 | 3 | 164 | 9 | 2.961 | -0.039 | 0.006 |
 | 30 | Mario Japan 16 | 3 | 174 | 17 | 2.964 | -0.036 | 0.013 |
 | 31 | Mario France 8 | 3 | 198 | 10 | 2.966 | -0.034 | 0.005 |
-| 32 | NES Japan 13 | 3 | 160 | 18 | 2.970 | -0.030 |  |
-| 33 | NES US 3 | 4 | 446 | 7 | 3.980 | -0.020 |  |
-| 34 | NES U.K. 8 | 3 | 201 | 17 | 2.980 | -0.020 |  |
-| 35 | Mario Japan 12 | 4 | 433 | 15 | 3.980 | -0.020 | 0.069 |
-| 36 | NES Japan 4 | 3 | 202 | 13 | 2.990 | -0.010 |  |
-| 37 | NES US 14 | 4 | 400 | 4 | 4.010 | +0.010 |  |
-| 38 | NES US 13 | 4 | 420 | 15 | 4.020 | +0.020 |  |
+| 32 | NES Japan 13 | 3 | 160 | 18 | 2.971 | -0.029 | 0.006 |
+| 33 | NES US 3 | 4 | 446 | 7 | 3.980 | -0.020 | 0.069 |
+| 34 | Mario Japan 12 | 4 | 433 | 15 | 3.980 | -0.020 | 0.069 |
+| 35 | NES Japan 4 | 3 | 202 | 13 | 2.982 | -0.018 | 0.013 |
+| 36 | NES U.K. 8 | 3 | 201 | 17 | 2.994 | -0.006 | 0.011 |
+| 37 | NES US 14 | 4 | 400 | 4 | 4.008 | +0.008 | 0.067 |
+| 38 | NES US 13 | 4 | 420 | 15 | 4.011 | +0.011 | 0.079 |
 | 39 | Mario Australia 4 | 4 | 417 | 8 | 4.025 | +0.025 | 0.060 |
 | 40 | Mario Australia 8 | 4 | 397 | 18 | 4.031 | +0.031 | 0.058 |
 | 41 | Mario Hawaii 6 | 4 | 400 | 8 | 4.033 | +0.033 | 0.033 |
-| 42 | NES U.K. 3 | 5 | 550 | 6 | 5.050 | +0.050 |  |
-| 43 | Mario Japan 4 | 5 | 547 | 4 | 5.058 | +0.058 | 0.082 |
-| 44 | NES Japan 2 | 4 | 392 | 14 | 4.060 | +0.060 |  |
-| 45 | NES US 6 | 4 | 400 | 11 | 4.060 | +0.060 |  |
-| 46 | Mario Australia 2 | 3 | 171 | 16 | 3.066 | +0.066 | 0.004 |
-| 47 | NES Japan 1 | 4 | 400 | 17 | 4.070 | +0.070 |  |
-| 48 | NES US 5 | 4 | 392 | 8 | 4.070 | +0.070 |  |
+| 42 | NES U.K. 3 | 5 | 550 | 6 | 5.043 | +0.043 | 0.056 |
+| 43 | NES US 6 | 4 | 400 | 11 | 4.045 | +0.045 | 0.054 |
+| 44 | NES Japan 2 | 4 | 392 | 14 | 4.050 | +0.050 | 0.082 |
+| 45 | Mario Japan 4 | 5 | 547 | 4 | 5.058 | +0.058 | 0.082 |
+| 46 | NES Japan 1 | 4 | 400 | 17 | 4.062 | +0.062 | 0.108 |
+| 47 | NES US 5 | 4 | 392 | 8 | 4.063 | +0.063 | 0.056 |
+| 48 | Mario Australia 2 | 3 | 171 | 16 | 3.066 | +0.066 | 0.004 |
 | 49 | Mario Australia 15 | 3 | 194 | 17 | 3.071 | +0.071 | 0.013 |
-| 50 | NES U.K. 17 | 3 | 196 | 5 | 3.080 | +0.080 |  |
-| 51 | Mario Japan 6 | 4 | 397 | 12 | 4.098 | +0.098 | 0.076 |
-| 52 | NES U.K. 15 | 4 | 410 | 8 | 4.098 | +0.098 |  |
-| 53 | NES US 10 | 3 | 217 | 14 | 3.100 | +0.100 |  |
+| 50 | NES U.K. 17 | 3 | 196 | 5 | 3.082 | +0.082 | 0.012 |
+| 51 | NES US 10 | 3 | 217 | 14 | 3.084 | +0.084 | 0.018 |
+| 52 | NES U.K. 15 | 4 | 410 | 8 | 4.098 | +0.098 | 0.076 |
+| 53 | Mario Japan 6 | 4 | 397 | 12 | 4.098 | +0.098 | 0.076 |
 | 54 | Mario Australia 10 | 3 | 216 | 7 | 3.111 | +0.111 | 0.005 |
-| 55 | Mario Australia 13 | 5 | 566 | 5 | 5.125 | +0.125 | 0.106 |
-| 56 | Mario France 17 | 4 | 440 | 17 | 4.125 | +0.125 | 0.041 |
-| 57 | NES Japan 5 | 4 | 410 | 8 | 4.130 | +0.130 |  |
-| 58 | NES Japan 8 | 4 | 464 | 12 | 4.130 | +0.130 |  |
-| 59 | Mario Japan 9 | 4 | 393 | 18 | 4.137 | +0.137 | 0.080 |
-| 60 | Mario Australia 14 | 4 | 388 | 15 | 4.140 | +0.140 | 0.036 |
-| 61 | NES US 18 | 5 | 571 | 5 | 5.140 | +0.140 |  |
-| 62 | NES Japan 16 | 3 | 192 | 9 | 3.140 | +0.140 |  |
+| 55 | NES US 18 | 5 | 571 | 5 | 5.125 | +0.125 | 0.106 |
+| 56 | Mario Australia 13 | 5 | 566 | 5 | 5.125 | +0.125 | 0.106 |
+| 57 | Mario France 17 | 4 | 440 | 17 | 4.125 | +0.125 | 0.041 |
+| 58 | NES Japan 5 | 4 | 410 | 8 | 4.127 | +0.127 | 0.060 |
+| 59 | NES Japan 16 | 3 | 192 | 9 | 3.136 | +0.136 | 0.011 |
+| 60 | Mario Japan 9 | 4 | 393 | 18 | 4.137 | +0.137 | 0.080 |
+| 61 | Mario Australia 14 | 4 | 388 | 15 | 4.140 | +0.140 | 0.036 |
+| 62 | NES Japan 8 | 4 | 464 | 12 | 4.140 | +0.140 | 0.082 |
 | 63 | Mario Australia 16 | 4 | 459 | 9 | 4.142 | +0.142 | 0.069 |
 | 64 | Mario Australia 7 | 3 | 200 | 10 | 3.146 | +0.146 | 0.027 |
-| 65 | NES Japan 15 | 4 | 410 | 5 | 4.150 | +0.150 |  |
-| 66 | Mario France 4 | 3 | 200 | 18 | 3.157 | +0.157 | 0.012 |
-| 67 | Mario Australia 11 | 4 | 405 | 11 | 4.162 | +0.162 | 0.075 |
-| 68 | NES US 7 | 3 | 167 | 18 | 3.180 | +0.180 |  |
-| 69 | Mario Australia 1 | 4 | 400 | 12 | 4.180 | +0.180 | 0.057 |
-| 70 | NES U.K. 14 | 4 | 403 | 4 | 4.187 | +0.187 |  |
-| 71 | NES US 9 | 4 | 410 | 10 | 4.190 | +0.190 |  |
+| 65 | NES Japan 15 | 4 | 410 | 5 | 4.152 | +0.152 | 0.065 |
+| 66 | NES US 7 | 3 | 167 | 18 | 3.153 | +0.153 | 0.009 |
+| 67 | Mario France 4 | 3 | 200 | 18 | 3.157 | +0.157 | 0.012 |
+| 68 | Mario Australia 11 | 4 | 405 | 11 | 4.162 | +0.162 | 0.075 |
+| 69 | NES US 9 | 4 | 410 | 10 | 4.180 | +0.180 | 0.057 |
+| 70 | Mario Australia 1 | 4 | 400 | 12 | 4.180 | +0.180 | 0.057 |
+| 71 | NES U.K. 14 | 4 | 403 | 4 | 4.187 | +0.187 | 0.008 |
 | 72 | Mario Japan 10 | 4 | 417 | 11 | 4.196 | +0.196 | 0.063 |
 | 73 | Mario Japan 1 | 4 | 412 | 16 | 4.213 | +0.213 | 0.079 |
-| 74 | NES U.K. 1 | 4 | 418 | 15 | 4.216 | +0.216 |  |
+| 74 | NES U.K. 1 | 4 | 418 | 15 | 4.216 | +0.216 | 0.076 |
 | 75 | Mario France 14 | 4 | 421 | 11 | 4.231 | +0.231 | 0.127 |
-| 76 | Mario Japan 17 | 4 | 445 | 5 | 4.235 | +0.235 | 0.099 |
-| 77 | Mario France 15 | 4 | 424 | 13 | 4.238 | +0.238 | 0.069 |
-| 78 | Mario Japan 7 | 4 | 414 | 2 | 4.239 | +0.239 | 0.024 |
-| 79 | NES U.K. 7 | 4 | 428 | 1 | 4.239 | +0.239 |  |
-| 80 | NES US 11 | 4 | 421 | 9 | 4.240 | +0.240 |  |
-| 81 | Mario France 7 | 5 | 645 | 2 | 5.258 | +0.258 | 0.200 |
-| 82 | Mario Japan 2 | 4 | 405 | 10 | 4.259 | +0.259 | 0.060 |
-| 83 | NES Japan 14 | 4 | 464 | 4 | 4.260 | +0.260 |  |
-| 84 | Mario France 6 | 4 | 357 | 12 | 4.287 | +0.287 | 0.051 |
-| 85 | NES Japan 11 | 4 | 368 | 7 | 4.290 | +0.290 |  |
-| 86 | NES U.K. 5 | 4 | 431 | 2 | 4.290 | +0.290 |  |
-| 87 | NES Japan 18 | 5 | 605 | 2 | 5.300 | +0.300 |  |
+| 76 | NES US 11 | 4 | 421 | 9 | 4.231 | +0.231 | 0.069 |
+| 77 | NES Japan 14 | 4 | 464 | 4 | 4.235 | +0.235 | 0.099 |
+| 78 | Mario Japan 17 | 4 | 445 | 5 | 4.235 | +0.235 | 0.099 |
+| 79 | Mario France 15 | 4 | 424 | 13 | 4.238 | +0.238 | 0.069 |
+| 80 | NES U.K. 7 | 4 | 428 | 1 | 4.239 | +0.239 | 0.024 |
+| 81 | Mario Japan 7 | 4 | 414 | 2 | 4.239 | +0.239 | 0.024 |
+| 82 | Mario France 7 | 5 | 645 | 2 | 5.258 | +0.258 | 0.200 |
+| 83 | Mario Japan 2 | 4 | 405 | 10 | 4.259 | +0.259 | 0.060 |
+| 84 | NES Japan 18 | 5 | 605 | 2 | 5.286 | +0.286 | 0.115 |
+| 85 | NES Japan 11 | 4 | 368 | 7 | 4.287 | +0.287 | 0.051 |
+| 86 | Mario France 6 | 4 | 357 | 12 | 4.287 | +0.287 | 0.051 |
+| 87 | NES U.K. 5 | 4 | 431 | 2 | 4.290 | +0.290 | 0.076 |
 | 88 | Mario U.K. 7 | 3 | 227 | 10 | 3.326 | +0.326 | 0.019 |
-| 89 | Mario Japan 14 | 4 | 404 | 7 | 4.341 | +0.341 | 0.114 |
-| 90 | NES Japan 17 | 4 | 432 | 3 | 4.350 | +0.350 |  |
-| 91 | NES US 15 | 4 | 428 | 6 | 4.350 | +0.350 |  |
+| 89 | NES Japan 17 | 4 | 432 | 3 | 4.341 | +0.341 | 0.114 |
+| 90 | Mario Japan 14 | 4 | 404 | 7 | 4.341 | +0.341 | 0.114 |
+| 91 | NES US 15 | 4 | 428 | 6 | 4.348 | +0.348 | 0.056 |
 | 92 | Mario Hawaii 2 | 4 | 440 | 14 | 4.352 | +0.352 | 0.083 |
 | 93 | Mario Australia 3 | 5 | 609 | 2 | 5.359 | +0.359 | 0.098 |
 | 94 | Mario Hawaii 3 | 3 | 240 | 12 | 3.360 | +0.360 | 0.017 |
 | 95 | Mario France 11 | 4 | 440 | 9 | 4.385 | +0.385 | 0.092 |
 | 96 | Mario France 1 | 4 | 438 | 8 | 4.400 | +0.400 | 0.077 |
-| 97 | NES US 12 | 5 | 642 | 3 | 5.410 | +0.410 |  |
-| 98 | Mario France 16 | 3 | 235 | 7 | 3.417 | +0.417 | 0.009 |
-| 99 | Mario Australia 5 | 4 | 440 | 4 | 4.424 | +0.424 | 0.064 |
+| 97 | Mario France 16 | 3 | 235 | 7 | 3.417 | +0.417 | 0.009 |
+| 98 | Mario Australia 5 | 4 | 440 | 4 | 4.424 | +0.424 | 0.064 |
+| 99 | NES US 8 | 5 | 560 | 1 | 5.426 | +0.426 | 0.101 |
 | 100 | Mario Japan 18 | 5 | 564 | 3 | 5.426 | +0.426 | 0.101 |
 | 101 | Mario France 2 | 4 | 452 | 4 | 4.440 | +0.440 | 0.117 |
-| 102 | NES US 8 | 5 | 560 | 1 | 5.440 | +0.440 |  |
-| 103 | Mario U.K. 3 | 4 | 452 | 12 | 4.465 | +0.465 | 0.155 |
-| 104 | Mario Hawaii 15 | 4 | 452 | 13 | 4.475 | +0.475 | 0.126 |
-| 105 | NES U.K. 18 | 4 | 460 | 9 | 4.489 | +0.489 |  |
-| 106 | Mario France 13 | 4 | 440 | 3 | 4.491 | +0.491 | 0.074 |
-| 107 | Mario Hawaii 8 | 5 | 678 | 4 | 5.495 | +0.495 | 0.207 |
-| 108 | Mario Australia 17 | 5 | 619 | 1 | 5.507 | +0.507 | 0.106 |
-| 109 | Mario France 12 | 3 | 224 | 15 | 3.513 | +0.513 | 0.010 |
-| 110 | NES Japan 9 | 4 | 418 | 1 | 4.560 | +0.560 |  |
-| 111 | Mario Hawaii 16 | 4 | 455 | 3 | 4.564 | +0.564 | 0.117 |
-| 112 | Mario U.K. 15 | 3 | 251 | 17 | 3.588 | +0.588 | 0.015 |
-| 113 | Mario Hawaii 17 | 3 | 238 | 7 | 3.600 | +0.600 | 0.008 |
-| 114 | Mario Australia 18 | 4 | 468 | 3 | 4.626 | +0.626 | 0.059 |
-| 115 | Mario Hawaii 9 | 4 | 412 | 6 | 4.643 | +0.643 | 0.092 |
-| 116 | Mario Hawaii 4 | 4 | 405 | 10 | 4.662 | +0.662 | 0.063 |
-| 117 | NES US 16 | 3 | 230 | 2 | 3.730 | +0.730 |  |
-| 118 | Mario France 3 | 5 | 624 | 6 | 5.737 | +0.737 | 0.108 |
+| 102 | Mario U.K. 3 | 4 | 452 | 12 | 4.465 | +0.465 | 0.155 |
+| 103 | Mario Hawaii 15 | 4 | 452 | 13 | 4.475 | +0.475 | 0.126 |
+| 104 | NES U.K. 18 | 4 | 460 | 9 | 4.489 | +0.489 | 0.086 |
+| 105 | Mario France 13 | 4 | 440 | 3 | 4.491 | +0.491 | 0.074 |
+| 106 | Mario Hawaii 8 | 5 | 678 | 4 | 5.495 | +0.495 | 0.207 |
+| 107 | Mario Australia 17 | 5 | 619 | 1 | 5.507 | +0.507 | 0.106 |
+| 108 | Mario France 12 | 3 | 224 | 15 | 3.513 | +0.513 | 0.010 |
+| 109 | NES Japan 9 | 4 | 418 | 1 | 4.543 | +0.543 | 0.050 |
+| 110 | Mario Hawaii 16 | 4 | 455 | 3 | 4.564 | +0.564 | 0.117 |
+| 111 | Mario U.K. 15 | 3 | 251 | 17 | 3.588 | +0.588 | 0.015 |
+| 112 | Mario Hawaii 17 | 3 | 238 | 7 | 3.600 | +0.600 | 0.008 |
+| 113 | Mario Australia 18 | 4 | 468 | 3 | 4.626 | +0.626 | 0.059 |
+| 114 | Mario Hawaii 9 | 4 | 412 | 6 | 4.643 | +0.643 | 0.092 |
+| 115 | Mario Hawaii 4 | 4 | 405 | 10 | 4.662 | +0.662 | 0.063 |
+| 116 | NES US 16 | 3 | 230 | 2 | 3.721 | +0.721 | 0.010 |
+| 117 | Mario France 3 | 5 | 624 | 6 | 5.737 | +0.737 | 0.108 |
+| 118 | NES US 12 | 5 | 642 | 3 | 5.793 | +0.793 | 0.136 |
 | 119 | Mario Hawaii 1 | 4 | 435 | 16 | 4.846 | +0.846 | 0.071 |
 | 120 | Mario Hawaii 12 | 3 | 231 | 15 | 3.854 | +0.854 | 0.011 |
 | 121 | Mario U.K. 11 | 4 | 471 | 5 | 4.922 | +0.922 | 0.097 |
-| 122 | Mario Australia 12 | 4 | 424 | 13 | 4.936 | +0.936 | 0.046 |
-| 123 | Mario U.K. 17 | 4 | 450 | 7 | 4.938 | +0.938 | 0.089 |
-| 124 | Mario U.K. 12 | 4 | 464 | 11 | 4.985 | +0.985 | 0.031 |
-| 125 | NES U.K. 11 | 4 | 424 | 3 | 4.990 | +0.990 |  |
+| 122 | NES U.K. 11 | 4 | 424 | 3 | 4.936 | +0.936 | 0.046 |
+| 123 | Mario Australia 12 | 4 | 424 | 13 | 4.936 | +0.936 | 0.046 |
+| 124 | Mario U.K. 17 | 4 | 450 | 7 | 4.938 | +0.938 | 0.089 |
+| 125 | Mario U.K. 12 | 4 | 464 | 11 | 4.985 | +0.985 | 0.031 |
 | 126 | Mario U.K. 16 | 4 | 464 | 13 | 5.005 | +1.005 | 0.060 |
 | 127 | Mario U.K. 4 | 5 | 576 | 6 | 6.019 | +1.019 | 0.067 |
 | 128 | Mario U.K. 2 | 3 | 226 | 16 | 4.022 | +1.022 | 0.004 |
@@ -874,7 +874,7 @@ visits were not kept (**Earlier NES Open solves**).
 
 ### Expert holes
 
-The 19 Mario Open holes that play worse against par than every NES Open hole (the worst is NES U.K. 11, +0.990), hardest first.
+The 21 Mario Open holes that play worse against par than every NES Open hole (the worst is NES U.K. 11, +0.936), hardest first.
 
 | Hole | Par | Yards | Expected | Over par |
 |---|---|---|---|---|
@@ -897,10 +897,12 @@ The 19 Mario Open holes that play worse against par than every NES Open hole (th
 | Mario U.K. 2 | 3 | 226 | 4.022 | +1.022 |
 | Mario U.K. 4 | 5 | 576 | 6.019 | +1.019 |
 | Mario U.K. 16 | 4 | 464 | 5.005 | +1.005 |
+| Mario U.K. 12 | 4 | 464 | 4.985 | +0.985 |
+| Mario U.K. 17 | 4 | 450 | 4.938 | +0.938 |
 
 ### New holes at NES Open level
 
-The 36 Mario Open holes that are not expert holes and share no family with a NES Open hole (`data/catalog/curation.json`), easiest first.
+The 34 Mario Open holes that are not expert holes and share no family with a NES Open hole (`data/catalog/curation.json`), easiest first.
 
 | Hole | Par | Yards | Expected | Over par |
 |---|---|---|---|---|
@@ -938,32 +940,31 @@ The 36 Mario Open holes that are not expert holes and share no family with a NES
 | Mario Hawaii 1 | 4 | 435 | 4.846 | +0.846 |
 | Mario Hawaii 12 | 3 | 231 | 3.854 | +0.854 |
 | Mario U.K. 11 | 4 | 471 | 4.922 | +0.922 |
-| Mario U.K. 17 | 4 | 450 | 4.938 | +0.938 |
-| Mario U.K. 12 | 4 | 464 | 4.985 | +0.985 |
 
 ### Findings
 
 - **Mario Open's Japan plays like a NES Open course; Australia and France play 2-4
   strokes harder; Hawaii and the U.K. far harder.** 28 of those two courses' 36 holes
-  play more than half a stroke over par, where the 54 NES Open holes have 3. Holes differ
-  far more than courses: the three NES Open rounds come out within half a stroke of one
-  another, where the expected order is Japan, US, U.K.
-- **19 expert holes**: Mario Open holes that play worse than every NES Open hole. Twelve
-  are on the U.K. course, six on Hawaii, one on France, and all seven par 5s over 48 rows
-  are among them. The hardest are the U.K. 10th (+3.52), a par 3 from an island tee to
-  an island green, where every shot into the water drops back at the tee island's edge
-  (the game's own drop rule, **Penalties and drops**), the Hawaii 14th (+3.40) and the
-  U.K. 18th (+2.12). The line between expert and not is close: the worst NES Open hole,
-  U.K. 11th, is +0.99, and the Mario U.K. 12th (+0.985) and 16th (+1.005) sit either
-  side of it.
-- **36 new holes at NES Open level**: Mario Open holes neither expert nor in a family
+  play more than half a stroke over par, where the 54 NES Open holes have 4. Holes differ
+  far more than courses: the three NES Open rounds come out within a stroke of one
+  another (U.K. 73.19, Japan 73.38, US 74.01), where the expected order is Japan, US,
+  U.K.
+- **21 expert holes**: Mario Open holes that play worse than every NES Open hole.
+  Fourteen are on the U.K. course, six on Hawaii, one on France, and all seven par 5s
+  over 48 rows are among them. The hardest are the U.K. 10th (+3.52), a par 3 from an
+  island tee to an island green, where every shot into the water drops back at the tee
+  island's edge (the game's own drop rule, **Penalties and drops**), the Hawaii 14th
+  (+3.40) and the U.K. 18th (+2.12). The line between expert and not is close: the worst
+  NES Open hole, U.K. 11th, is +0.936 (as is its twin, the Mario Australia 12th), and
+  the Mario U.K. 11th (+0.922) and 17th (+0.938) sit either side of it.
+- **34 new holes at NES Open level**: Mario Open holes neither expert nor in a family
   with a NES Open hole. 4 play under par, 20 within +0.49 (where most NES Open holes
-  are), and 12 from +0.5 to +0.99, as only NES Open's 3 hardest do. France (13) and
-  Hawaii (12) give most of them, then the U.K. (6), Australia (4) and Japan (1): nearly
+  are), and 10 from +0.5 to +0.93, as only NES Open's 4 hardest do. France (13) and
+  Hawaii (12) give most of them, then the U.K. (4), Australia (4) and Japan (1): nearly
   every Mario Japan hole is a NES Open hole's twin.
 - **Length predicts difficulty within a par**: over all 144 holes, the Spearman
-  correlation of yards with strokes over par is 0.65 for par 3s, 0.66 for par 4s and 0.84
-  for par 5s. **The game's handicaps predict it less well**: 0.55-0.69 on the NES Open
+  correlation of yards with strokes over par is 0.65 for par 3s, 0.66 for par 4s and 0.85
+  for par 5s. **The game's handicaps predict it less well**: 0.54-0.68 on the NES Open
   courses, 0.13-0.53 on Mario Open's.
 - **The long par 5s lean most on borrowed values**: the U.K. 14th visits spots too rare
   to value 0.27 times a hole, the Hawaii 5th 0.26 and 8th 0.21, where most holes visit
@@ -971,7 +972,7 @@ The 36 Mario Open holes that are not expert holes and share no family with a NES
 
 ### NES US 16th and Mario U.K. 2nd
 
-The U.K. 2nd (+1.02) is the US 16th changed (+0.72, solved again with the current solver), with the same tee, green box and
+The U.K. 2nd (+1.02) is the US 16th changed (+0.72), with the same tee, green box and
 pins and the same river carry. It plays about 0.4 strokes harder for two reasons:
 
 - **Less land around the green.** The rough between the green and water or out of
@@ -1012,92 +1013,10 @@ Five Mario Open holes ended with every visit from the tee on such spots (rare vi
 | Mario U.K. 14th | 6.498 | 6.499 | unchanged |
 | Mario U.K. 13th | 5.137 | 5.137 | unchanged |
 
-
-### Earlier NES Open solves
-
-The NES Open holes in the tables above were solved before the fringe screen, the loops
-fix and the cleanup-round fix, and their solve files were not kept; the tables were made
-from these numbers.
-
-At skill 3, pin 0, before the fringe screen and the loops were fixed, the default settings
-otherwise:
-
-| Course | Out | In | Round |
-|--------|-----|----|-------|
-| U.K. | 36.01 | 37.35 | 73.36 |
-| US | 35.89 | 38.28 | 74.17; 73.77 with the 12th's loops fixed |
-| Japan | 36.61 | 36.86 | 73.47 |
-
-By hole, U.K.: 4.22, 3.76, 5.05, 2.96, 4.30, 3.73, 4.27, 2.98, 4.75; 3.81, 4.99, 2.96,
-4.82, 4.19, 4.10, 4.89, 3.08, 4.53. US: 3.66, 4.46, 3.98, 2.85, 4.07, 4.06, 3.18, 5.44,
-4.19; 3.10, 4.24, 5.41, 4.02, 4.01, 4.35, 3.73, 3.88, 5.14. Japan: 4.07, 4.06, 4.87,
-2.99, 4.13, 2.87, 4.94, 4.13, 4.56; 3.77, 4.29, 4.64, 2.97, 4.26, 4.15, 3.14, 4.35,
-5.30. The three rounds come out within half a stroke of one another, where the
-expected order is Japan, US, U.K. (**Future work**); holes differ far more than courses.
-The hardest against par: U.K. 11th (+0.99), US 8th and 16th (+0.44, +0.73), Japan 9th
-(+0.56).
-
-Solved again with both fixes, ten U.K. holes moved by 0.04 or less: 1st 4.216, 2nd
-3.760, 5th 4.290, 7th 4.239, 9th 4.737, 10th 3.802, 14th 4.187, 15th 4.098, 16th 4.879,
-18th 4.489; the tables above use these.
-Against the game's own hole handicaps (the `handicap` in each hole's JSON), expected
-strokes over par rank the holes with a Spearman correlation of 0.55 (U.K.), 0.62 (US)
-and 0.69 (Japan).
-
-## Hand-off: the NES Open re-solves (delete this section when done)
-
-The NES Open numbers in **Results** are from solves made before three fixes, and their
-files were not kept (**Earlier NES Open solves**). The 54 NES Open holes are being solved
-again with the current solver, so that all 144 holes come from one solver and one
-archive. Everything else in this document is final.
-
-**jdharms runs this overnight**: 6-8 hours on 16 workers, from the repository root, with
-the PyPy environment (**Running under PyPy**) and `nes_open_us.nes`. It keeps running if
-the terminal closes; follow it with `tail -f .cache/difficulty/solves/nes_us.log` and so
-on.
-
-```bash
-nohup bash -c 'for c in us uk japan; do
-  mkdir -p .cache/difficulty/solves/nes_$c
-  PYTHONPATH=. .cache/pypy/bin/python -u -m tools.research.difficulty \
-      nes_open_us.nes --course $c --hole 1-18 --skill 3 --workers 16 \
-      --output .cache/difficulty/solves/nes_$c/ > .cache/difficulty/solves/nes_$c.log 2>&1
-done' > /dev/null 2>&1 &
-```
-
-**The agent finishing this**, in a new session, once the run is done:
-
-1. **Check the run.** `nes_us`, `nes_uk` and `nes_japan` under `.cache/difficulty/solves/`
-   each hold 18 `hole_NN.json`, and each log ends with its course's table and has no
-   traceback. Every hole's "visits to spots too rare to value" should be under about 0.3
-   a hole: 1.0 means the failure in **The cleanup-round fix** is back, and needs fixing
-   and that hole solving again before going on. "warning:" lines should report under
-   about 0.01 a hole. If anything is wrong, report it to jdharms and stop.
-2. **Check the Mario Open solves are there**: `jp_japan`, `jp_australia`, `jp_france`,
-   `jp_hawaii` and `jp_uk` with 18 holes each, and their logs, in the same directory. If
-   they are not, extract the archive there (**Data**); its slim solves serve as well.
-3. **Rebuild the data and tables** (it should report 144 holes):
-
-   ```bash
-   uv run golf-difficulty-report .cache/difficulty/solves --summary data/difficulty/holes.json \
-       --archive data/difficulty/solves-skill3-pin0.tar.xz --markdown <scratch>/tables.md
-   ```
-
-4. **Replace the tables** in **Results**, from "### Courses" up to "### Findings", with
-   `tables.md`.
-5. **Bring the prose up to date with the new NES Open numbers**, and check every number
-   that compares against NES Open:
-   - **Findings**: the NES Open courses' spread and order, the count of NES Open holes
-     over +0.5, the expert holes (how many, which courses, the worst NES Open hole and
-     the holes either side of the line), the new holes at NES Open level (how many, and
-     in which bands and courses), and the handicap correlations.
-   - **NES US 16th and Mario U.K. 2nd**: the US 16th's value and whether its new solve
-     finds a drive as good as 3.619.
-   - **Decisions**, "Skill 3 for placing the Mario Open holes": the U.K. round at skill 3.
-   - **Results**' first paragraph: drop its last sentence, on the earlier NES Open solves.
-   - Delete **Earlier NES Open solves**.
-6. **Tell jdharms what changed**: which holes joined or left the expert holes and the
-   new holes at NES Open level (`git diff` on this document shows them). jdharms's
-   league-mates have reviewed the list of 19 expert holes.
-7. Run `uv run pytest` (not the physics tests) and `uv run golf-check`, and delete this
-   section.
+The NES US 12th is the one NES Open hole that runs past round 12 (15 rounds). It solves
+to 5.793, where a solve before the fix gave 5.412 in 16 rounds (**Loops the solver
+builds**); that solve's file was not kept, so what its tee shot was is not known. The
+Mario France 3rd is the same hole changed (`data/catalog/curation.json`), and the two
+now agree: 5.793 and 5.737, both with a medium wood from the tee aimed well left of the
+pin (aims 224 and 220). The 12th's play still visits 23 never-valued spots 0.027 times
+a hole, the most of any hole (**Data**).
