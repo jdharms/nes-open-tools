@@ -30,7 +30,7 @@ from golf.physics.tables import PhysicsTables
 VIEW_RANGE = 0x80
 """The ball must be within this many pixels of the origin on each axis."""
 DEPTH_OFFSET = 0x0F
-SCREEN_CENTRE_X = 0x90
+SCREEN_CENTER_X = 0x90
 DEPTH_DIVISOR = 0x0D
 
 
@@ -122,11 +122,11 @@ def project(
     if offset > 0x7F:
         return OUT_OF_VIEW
     if left and offset:
-        screen_x = SCREEN_CENTRE_X - offset
+        screen_x = SCREEN_CENTER_X - offset
         if screen_x < 0:
             return OUT_OF_VIEW
     else:
-        screen_x = SCREEN_CENTRE_X + offset
+        screen_x = SCREEN_CENTER_X + offset
         if screen_x > MASK8:
             return OUT_OF_VIEW
 
@@ -166,7 +166,7 @@ SCENE_DEPTH_MAP = 0x7AE6
 SCENE_TILE_MAP = 0x77E6
 """The scene's tile map, same layout."""
 TILE_MAP_ROW_OFFSETS = 0xE789
-TREE_COLOUR_MASKS = 0xEAAC
+TREE_COLOR_MASKS = 0xEAAC
 """2 bits a pixel, for scene tiles $CF and up."""
 OBJECT_MASKS = 0xEA7C
 """1 bit a pixel, for scene tiles $C0-$CB."""
@@ -251,8 +251,8 @@ def _covers(pixel: int, row: int, column: int, scene, pointers) -> bool:
     """
     tile = scene.read(pointers["tiles"] + column)
     if tile >= FIRST_TREE_TILE:
-        pointers["depth"] = TREE_COLOUR_MASKS
-        base = TREE_COLOUR_MASKS + (((tile - FIRST_TREE_TILE) << 4 | row) & MASK16)
+        pointers["depth"] = TREE_COLOR_MASKS
+        base = TREE_COLOR_MASKS + (((tile - FIRST_TREE_TILE) << 4 | row) & MASK16)
         low = scene.read(base) >> (7 - pixel) & 1
         high = scene.read(base + 8) >> (7 - pixel) & 1
         return (low | high << 1) < 3

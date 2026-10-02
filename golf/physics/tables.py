@@ -87,7 +87,7 @@ class PhysicsTables:
     cup_top: bytes
     """
     Bank 9 $83D5: the cup's outline in the cup view, as the first screen row
-    inside it for each of the 40 columns from its left edge to its centre
+    inside it for each of the 40 columns from its left edge to its center
     (the right half mirrors the left).
     """
     cup_bottom: bytes

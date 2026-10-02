@@ -37,7 +37,7 @@ from golf.physics.state import (
 )
 from golf.physics.tables import PhysicsTables
 
-#: Errors are drawn out to this many standard deviations, and renormalised.
+#: Errors are drawn out to this many standard deviations, and renormalized.
 ERROR_REACH = 2.0
 #: About this many distinct errors stand for each draw: a wider error is
 #: played at every few whole units, so a shot costs much the same at any skill.

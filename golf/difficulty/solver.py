@@ -40,7 +40,7 @@ intent goes, so it would be chosen on borrowed values and guesses alone, and
 `guess` is optimistic on long holes. Screening and playing are
 separate tasks, so even the first round, the tee alone, is spread over every
 core.
-A state not yet valued borrows from valued neighbours of the same lie class, or
+A state not yet valued borrows from valued neighbors of the same lie class, or
 failing those a guess from its distance to the pin (`guess`).
 """
 
@@ -341,8 +341,8 @@ def _green_pixel(
     context = _context
     assert context is not None
     started = time.perf_counter()
-    x, y, centre = task
-    rests, strokes = green.build_pixel(context.hole, Position(x, y), centre)
+    x, y, center = task
+    rests, strokes = green.build_pixel(context.hole, Position(x, y), center)
     return x, y, rests, strokes, time.perf_counter() - started
 
 
@@ -714,7 +714,7 @@ class HoleSolver:
     def _borrowed(self) -> Borrowed:
         """
         Per class, a grid of values: valued states' own, spread twice to
-        neighbouring cells of the same class, and NaN beyond (`value` guesses).
+        neighboring cells of the same class, and NaN beyond (`value` guesses).
         As lists, not arrays: `value` reads single cells, hundreds of thousands
         a sweep, and under PyPy a read from an array costs microseconds.
         """
@@ -743,8 +743,8 @@ class HoleSolver:
         value = borrowed[klass][y][x]
         if math.isnan(value):
             grid = 1 if klass == GREEN else self.settings.grid
-            centre = Position(x * grid + grid // 2, y * grid + grid // 2)
-            value = guess(self.distance(centre), klass)
+            center = Position(x * grid + grid // 2, y * grid + grid // 2)
+            value = guess(self.distance(center), klass)
         return value
 
     def value_map(self) -> np.ndarray:
@@ -1161,7 +1161,7 @@ class HoleSolver:
         }
         table = green.GreenTable(
             np.array(pixels, dtype=np.int16).reshape(-1, 2),
-            np.array([centre for _, _, centre in tasks], dtype=np.int16),
+            np.array([center for _, _, center in tasks], dtype=np.int16),
             np.stack([built[p][0] for p in pixels]),
             np.stack([built[p][1] for p in pixels]),
         )
@@ -1204,7 +1204,7 @@ class HoleSolver:
 
 
 def _spread(cells: np.ndarray, times: int) -> np.ndarray:
-    """Fill empty cells with the mean of their filled neighbours, `times` over."""
+    """Fill empty cells with the mean of their filled neighbors, `times` over."""
     cells = cells.copy()
     for _ in range(times):
         empty = np.isnan(cells)

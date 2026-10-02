@@ -69,7 +69,7 @@ def contact(ball: Ball, shot: ShotInput, tables: PhysicsTables, hi_lo: int) -> N
     elif ball.lie == Lie.OUT_OF_BOUNDS:
         _roll(ball, 6, 0x70 if first else 0x14, hi_lo, spend=8)
     else:
-        raise ValueError(f"no landing behaviour for lie {ball.lie}")
+        raise ValueError(f"no landing behavior for lie {ball.lie}")
 
 
 def _first_contact(ball: Ball, shot: ShotInput, tables: PhysicsTables) -> None:

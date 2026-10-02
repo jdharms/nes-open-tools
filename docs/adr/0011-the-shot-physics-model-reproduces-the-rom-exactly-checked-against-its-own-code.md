@@ -1,6 +1,6 @@
 +++
-status = "proposed"
-date = 2026-09-24
+status = "accepted"
+date = 2026-10-02
 area = "rom"
 permanent = false
 revisit_when = "Course-wide difficulty maps need more shots per second than the exact model gives, or a patch changes bank 13's physics code rather than its tables"
@@ -52,7 +52,7 @@ register after every frame, for hundreds of randomized shots.
 
 - Any disagreement with the ROM's code is a test failure with the frame and register
   named. Planting deliberate bugs in the model showed the test catches every change to
-  reachable behaviour.
+  reachable behavior.
 - The model runs about 2 ms a shot on one core. A difficulty map with around 10,000
   points and 100 shots each is about half an hour per hole, so maps may need parallelism,
   or a vectorized second implementation checked against this one.
@@ -65,6 +65,6 @@ register after every frame, for hundreds of randomized shots.
 
 ## Sources
 
-- `docs/shot_physics.md`: how a shot works, and what is not modelled yet.
+- `docs/shot_physics.md`: how a shot works, and what is not modeled yet.
 - `golf/physics/`, `tests/physics/test_shot_rom.py`.
 - Session of 2026-09-24 (session_01WUdmVYMPc81NbQ2YyroK9x).

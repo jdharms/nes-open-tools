@@ -3,7 +3,7 @@ A Python model of the game's ball physics: launch, flight, bounce and roll.
 
 A port of bank 13's shot loop that reproduces the ROM frame for frame, checked
 against the ROM's own code by `golf.physics.rom_oracle` (tests in `tests/physics/`). See
-`docs/shot_physics.md` for how a shot works and what is not modelled yet.
+`docs/shot_physics.md` for how a shot works and what is not modeled yet.
 """
 
 from golf.physics import meter, wind

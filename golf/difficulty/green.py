@@ -102,7 +102,7 @@ class GreenTable:
 
     pixels: np.ndarray
     """(pixels, 2): x, y."""
-    centres: np.ndarray
+    centers: np.ndarray
     """(pixels,): the aim at the pin from each, the middle of its window."""
     rests: np.ndarray
     """(pixels, speeds, stops, aims, 3): x, y and bunker depth where each putt leaves the ball."""
@@ -111,7 +111,7 @@ class GreenTable:
 
 
 def build_pixel(
-    hole: Hole, position: Position, centre: int
+    hole: Hole, position: Position, center: int
 ) -> tuple[np.ndarray, np.ndarray]:
     """One pixel's rows of a `GreenTable`: (rests, strokes)."""
     rests = np.zeros((SPEEDS, STOPS, AIMS, 3), dtype=np.int16)
@@ -125,7 +125,7 @@ def build_pixel(
                     power_stop=stop,
                     accuracy_stop=stop,
                     spin=Spin.TOP_2,
-                    aim=(centre - AIM_WINDOW + column) & 0xFF,
+                    aim=(center - AIM_WINDOW + column) & 0xFF,
                     rng_state=RNG_STATES[0],
                     x=position.x,
                     y=position.y,
@@ -154,7 +154,7 @@ def save(table: GreenTable, path: Path) -> None:
     np.savez_compressed(
         path,
         pixels=table.pixels,
-        centres=table.centres,
+        centers=table.centers,
         rests=table.rests,
         strokes=table.strokes,
     )
@@ -162,7 +162,7 @@ def save(table: GreenTable, path: Path) -> None:
 
 def load(path: Path) -> GreenTable:
     data = np.load(path)
-    return GreenTable(data["pixels"], data["centres"], data["rests"], data["strokes"])
+    return GreenTable(data["pixels"], data["centers"], data["rests"], data["strokes"])
 
 
 class GreenSolver:
@@ -297,7 +297,7 @@ class GreenSolver:
 
     def intent(self, pixel: int, speed: int, row: int, column: int) -> Intent:
         frame = self.frames[speed][row]
-        aim = int(self.table.centres[pixel]) + int(self.offsets[column])
+        aim = int(self.table.centers[pixel]) + int(self.offsets[column])
         return Intent(
             PUTTER, aim & 0xFF, self.stop_of[speed][frame - 1], swing_speed=speed
         )

@@ -44,7 +44,7 @@ PUTTER = 0x0F
 
 #: `SwingPowerBarPos` range: the meter starts at $30 and a stop of 0 is full power.
 FULL_POWER = 0x00
-#: The accuracy-meter stop that is dead centre.
+#: The accuracy-meter stop that is dead center.
 PERFECT_ACCURACY = 0x30
 
 
@@ -57,7 +57,7 @@ class ShotInput:
     power_stop: int = FULL_POWER
     """Where the power meter stopped ($D6): 0 is full power, $30 is none."""
     accuracy_stop: int = PERFECT_ACCURACY
-    """Where the accuracy meter stopped ($D7): $30 is centre, either side curves."""
+    """Where the accuracy meter stopped ($D7): $30 is center, either side curves."""
     hi_lo: int = 0
     """-1 for a low shot (Up held), +1 for high (Down), 0 for neither."""
     spin: Spin = Spin.NORMAL
@@ -117,7 +117,7 @@ class Terrain:
     """$CA on the green: bit 6 picks the slope scale, bit 7 adds roll friction."""
     slope: Slope = FLAT
     tree_trunk: bool = False
-    """$0597: the probe hit the solid (colour 2) part of a tree tile."""
+    """$0597: the probe hit the solid (color 2) part of a tree tile."""
     tree_edge: bool = False
     """$0598: the probe hit a clear pixel of a tree tile next to a leafy one."""
     in_green_box: bool = False
@@ -231,7 +231,7 @@ class Ball:
     # Zero-page bytes that other code reuses as scratch outside the cup view,
     # so they are not compared; what they decide lands in the registers below.
     cup_x: int = field(default=0, compare=False)
-    """$63: the ball's screen x in the cup view, $80 at the cup's centre."""
+    """$63: the ball's screen x in the cup view, $80 at the cup's center."""
     cup_y: int = field(default=0, compare=False)
     """$64: the ball's screen y in the cup view, or $F0 when out of the cup's reach."""
     cup_bob: int = field(default=0, compare=False)

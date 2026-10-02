@@ -52,7 +52,7 @@ class SwingTiming:
     power_stop: int
     """`$D6`: 0 is full power, $30 none."""
     accuracy_stop: int
-    """`$D7`: $30 is dead centre. A putt's is its power stop, which the launch ignores."""
+    """`$D7`: $30 is dead center. A putt's is its power stop, which the launch ignores."""
     frames_to_impact: int | None
     """As `ShotInput.frames_to_impact`; None for a putt, which never reaches impact."""
 

@@ -56,7 +56,7 @@ LIGHT_SLOPE_TILES = range(0x88, 0xA0)
 GREEN_FLAG_SLOW = 0x80
 GREEN_FLAG_LIGHT_SLOPE = 0x40
 
-TREE_TRUNK_COLOUR = 2
+TREE_TRUNK_COLOR = 2
 
 TERRAIN_COLUMNS = 22
 """Tiles in a row of the terrain buffer."""
@@ -247,18 +247,18 @@ class HoleGround:
         `LEF59`: (trunk, edge) for a tree tile. A clear pixel looks one row
         down (up, on the tile's last row); clear there too still counts as edge.
         """
-        colour = self._tree_colour(index, row, column)
-        if colour == TREE_TRUNK_COLOUR:
+        color = self._tree_color(index, row, column)
+        if color == TREE_TRUNK_COLOR:
             return True, False
-        if colour:
+        if color:
             return False, False
-        neighbour = row - 1 if row >= 7 else row + 1
-        if self._tree_colour(index, neighbour, column) == TREE_TRUNK_COLOUR:
+        neighbor = row - 1 if row >= 7 else row + 1
+        if self._tree_color(index, neighbor, column) == TREE_TRUNK_COLOR:
             return True, False
         return False, True
 
-    def _tree_colour(self, index: int, row: int, column: int) -> int:
-        """`LF632`: the tree tile's 2-bit colour at a pixel."""
+    def _tree_color(self, index: int, row: int, column: int) -> int:
+        """`LF632`: the tree tile's 2-bit color at a pixel."""
         base = index * 16 + row
         low = _pixel(self.tables.tree_masks[base], column)
         high = _pixel(self.tables.tree_masks[base + 8], column)

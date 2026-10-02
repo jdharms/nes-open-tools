@@ -56,14 +56,14 @@ def table(hole) -> GreenTable:
         patch.setattr(green, "AIM_WINDOW", 12)
         patch.setattr(green, "AIMS", 25)
         rows = []
-        centres = []
+        centers = []
         for x, y in pixels:
-            centre = aim_at(Position(x, y), _pin(hole))
-            rows.append(build_pixel(hole, Position(x, y), centre))
-            centres.append(centre)
+            center = aim_at(Position(x, y), _pin(hole))
+            rows.append(build_pixel(hole, Position(x, y), center))
+            centers.append(center)
     return GreenTable(
         np.array(pixels, dtype=np.int16),
-        np.array(centres, dtype=np.int16),
+        np.array(centers, dtype=np.int16),
         np.stack([r for r, _ in rows]),
         np.stack([s for _, s in rows]),
     )

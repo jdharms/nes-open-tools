@@ -89,7 +89,7 @@ site.
 - **No wind** (jdharms, for now): every shot is played at wind speed 0. The game deals
   wind to every hole and every player alike, headwind as often as tailwind, so its effect
   is taken to average out across holes, and the calibration absorbs what is left. Calm is
-  rare in the game (a speed-0 anchor is 4 in 64), so this is a modelling choice, not the
+  rare in the game (a speed-0 anchor is 4 in 64), so this is a modeling choice, not the
   typical case. Revisit if the hole rankings disagree with real scores; the machinery for
   it is `golf/physics/wind.py`. Wind changes the best strategy on some holes (**Wind on
   two holes**, phase 3), which the average hides.
@@ -161,7 +161,7 @@ the addresses in the docs still work but disassembly will be less annotated.
 | `rom_oracle.py` | Single-routine oracles: `RomShot`, `RomTerrainProbe`, `read_ball()` |
 | `nes.py`, `rom_game.py` | The mini-NES, and a shot played through the whole game |
 
-`golf/difficulty/` (our own modelling, built on the physics):
+`golf/difficulty/` (our own modeling, built on the physics):
 
 | File | What |
 |------|------|
@@ -338,7 +338,7 @@ Done:
   loop, and every shot in `test_game_rom.py` checks where the game puts the ball next,
   and the strokes it counts, against `play_on`.
 - **Wind generation** as probabilities, in `golf/physics/wind.py`: 64 equally likely
-  anchor pairs (not 176, because neighbouring draws share bits), an independent pin, and
+  anchor pairs (not 176, because neighboring draws share bits), an independent pin, and
   an independent jitter per shot. `test_wind_rom.py` checks `InitHole` and
   `WindAdjustmentRoutine` against it.
 - **Meter timing**, in `golf/physics/meter.py` (`docs/shot_physics.md`, **The swing**):
@@ -426,7 +426,7 @@ Done:
     the shortlists (all of it for a new state, the top 4, `refresh`, for one screened
     before); value iteration from the green outward; then follow the best play forward
     from the tee and add every state it visits at least 0.001 times a hole. A state not
-    yet valued borrows from valued neighbours of its class, or a guess from its distance
+    yet valued borrows from valued neighbors of its class, or a guess from its distance
     (`guess`). A state whose value has moved half a stroke since it was screened is
     screened again however rarely play reaches it (`rescreen_move`, **Loops** below).
     Value iteration stops at 300 sweeps a round (`ROUND_SWEEPS`), as values carry over,
@@ -530,10 +530,10 @@ Done:
     Playing only the straight ones on the hole kept 0.022 of the 18th's 0.038.
 - **Loops the solver builds.** The US 12th would not settle: over 12 rounds the tee
   swung between 4.9 and 5.8, and one round took 20 minutes of value iteration. Spots
-  first screened against their neighbours' borrowed values chose short hops onto one
+  first screened against their neighbors' borrowed values chose short hops onto one
   another, and once played, each spot's value was a stroke more than the next's: no
   finite answer, so value iteration climbed to its cap, 44 spots reached 24 strokes,
-  and their neighbours borrowed from them. Such spots are rarely visited, so they were
+  and their neighbors borrowed from them. Such spots are rarely visited, so they were
   never screened again. Screening a spot again once its value moves, and not stopping
   while any is due, settled the 12th at 5.412 in 16 rounds, highest value 6.5 (5.793
   since **The cleanup-round fix**). No
@@ -674,7 +674,7 @@ None of this is scheduled (ADR 0012).
   shot.
 - **The scene builder** (bank 9 `$8829`), ported, so the solver sees behind-the-golfer
   trees and chooses the right drive on holes like the U.K. 14th. It samples a 20 × 64
-  grid (`docs/shot_physics.md`, **Not modelled yet**) and builds the maps in `$9C1C`,
+  grid (`docs/shot_physics.md`, **Not modeled yet**) and builds the maps in `$9C1C`,
   `$8EE4`, `$9CB8`, `$A30B`, `$8FE4`, `$99B2`, `$91C9` (282 instructions, and the RNG)
   and `$9A79`, some of which only draw. The scenes `RomGameShot` captures are the oracle.
   Shared flights assume no scene; with one, `Flight` would have to check the scene's
@@ -982,10 +982,10 @@ pins and the same river carry. It plays about 0.4 strokes harder for two reasons
   US 16th go in the water: 38% of drives are dropped beside the green, against 25%.
   The new bunker short of the river is never reached.
 - **The green is a crown, where the US 16th's is a bowl.** Both greens are four
-  quadrants around a flat cross. The US 16th's quadrants slope gently toward the centre
+  quadrants around a flat cross. The US 16th's quadrants slope gently toward the center
   (light tiles `$90-$93`, slope 40.40). The U.K. 2nd's slope away from it, about three
   times as steeply (`$40`/`$42` north and south, dark, scaled ×2.5; `$89`/`$8B` east and
-  west, light, ×2; slope 120.C0). From the same spot a putt drifts toward the centre on
+  west, light, ×2; slope 120.C0). From the same spot a putt drifts toward the center on
   one and toward the edge on the other. Putting from the east and north quadrants is
   worth about 0.15 more a hole, and the chip from the drop beside the green 2.86 against
   2.53.

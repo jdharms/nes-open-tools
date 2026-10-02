@@ -6,7 +6,7 @@ The wind the game deals, as probabilities: what `InitHole` ($DA90) and
 `WindDirectionAnchor` and `WindSpeedAnchor`, which hold for the whole hole.
 Each shot's setup then draws once more for a speed jitter around the anchor.
 
-The RNG is a 16-bit shift register that moves 11 bits a draw, so neighbouring
+The RNG is a 16-bit shift register that moves 11 bits a draw, so neighboring
 draws share bits. That leaves only 64 of the 176 pairs of anchors possible,
 each direction with four speeds (`hole_winds`). The pin is independent of the
 anchors, and the jitter is independent of both and of every other shot's.

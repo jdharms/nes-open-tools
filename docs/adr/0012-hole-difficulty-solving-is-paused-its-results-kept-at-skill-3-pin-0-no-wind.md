@@ -1,6 +1,6 @@
 +++
-status = "proposed"
-date = 2026-10-01
+status = "accepted"
+date = 2026-10-02
 area = "tooling"
 permanent = false
 revisit_when = "jdharms takes the solver up again, or something the results rest on changes: the physics model or the solver, the randomizer wanting the other pins or wind, or the randomizer depending on exact expected scores rather than rough rankings"

@@ -162,7 +162,7 @@ class Cup:
 
     @staticmethod
     def _column(x: int) -> int | None:
-        """$82C3: the outline's column for screen x, mirrored about the centre."""
+        """$82C3: the outline's column for screen x, mirrored about the center."""
         column = x - 0x58
         if column < 0 or column >= 0x50:
             return None

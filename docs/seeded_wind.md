@@ -45,7 +45,7 @@ them. The cycle is 65,534 states long. `$5555` and `$AAAA` form a second cycle o
 own, which play never enters.
 
 - **Only 64 of the 176 anchor pairs occur**, each with probability 1/64. The direction
-  and speed anchors come from neighbouring draws, which share 5 of their bits, so each
+  and speed anchors come from neighboring draws, which share 5 of their bits, so each
   direction comes with four speed anchors. Directions pair up (`$00`/`$10`, `$20`/`$30`,
   and so on), and each opposite direction has the same speeds:
 

@@ -71,7 +71,7 @@ each is a fraction of 256:
 
 1. **Timing**: `TimingPowerCurve[$38 − stop]`, where `stop` is where the power meter
    stopped (`$D6`). 0 is full power. Every shot loses 4 from this, except a *perfect
-   drive*: 1W, full power, dead-centre accuracy, from tee or fairway. `$0592` flags that
+   drive*: 1W, full power, dead-center accuracy, from tee or fairway. `$0592` flags that
    case; the label file had it as part of `BallSpeedMagnitude`.
 2. **Club**: `ClubDistanceBaseTable`. The putter uses `PutterDistanceBySpeedTable` on the
    green, and `PutterDistAltTable` plus up to ±16 steps of random aim anywhere else.
@@ -92,7 +92,7 @@ into X and Y velocity.
 air it gives lift; on the ground it brakes the roll until it is spent. Despite the name
 `VelocityScale`, it is not a scale.
 
-**Curve**: how far the accuracy meter stopped from centre (`$D7` against `$30`), capped at
+**Curve**: how far the accuracy meter stopped from center (`$D7` against `$30`), capped at
 `$18`, minus the club's `ClubAimForgivenessTable` entry, times 8, is `AimDeviationMag`. The
 side it stopped on is `AimDeviationDir`. Only the air frames use it, and first contact
 clears it.
@@ -183,7 +183,7 @@ to the left (`$C0`), as far as a diagonal tailwind (`$20`) takes it.
 
 - **Green**: the slope pushes the ball too. That model, and why it feels weak, is in
   [green_slope_physics.md](green_slope_physics.md).
-- **Bunker**: the bounce and the spin are cancelled on contact. How hard the ball hit
+- **Bunker**: the bounce and the spin are canceled on contact. How hard the ball hit
   (`$0C` and `$19` in the vertical speed's top byte) and the RNG decide `BunkerDepth` 0-2.
   Any landing harder than the softest one plugs the ball on the spot.
 - **Water**: the ball sinks, unless it arrives shallow (below `$30`) and the RNG draws
@@ -238,7 +238,7 @@ surface is: 1 fairway, 2 sand, anything else water. The tile then decides:
 | `$DF` | deep rough |
 | everything else | out of bounds |
 
-Tree tiles also report whether the pixel is trunk (colour 2 of a 2-bit mask at `$F3E2`,
+Tree tiles also report whether the pixel is trunk (color 2 of a 2-bit mask at `$F3E2`,
 flag `$0597`) or clear next to foliage (`$0598`).
 
 Inside the green's 24x24-pixel box (`GreenX/Y`), each pixel is one tile of the green's own
@@ -292,7 +292,7 @@ reach, a cup view closes. Unless a lip-out is playing, the ball's velocity is ha
 (twice on a putt, `LD_A8B6`), its height is halved, and the green view is redrawn.
 
 The hole is an outline of screen pixels: for each of 40 columns from the left edge to the
-centre, mirrored for the right half, rows `$83D5[x]` to `$83FD[x]`. `$0594` counts frames
+center, mirrored for the right half, rows `$83D5[x]` to `$83FD[x]`. `$0594` counts frames
 the ball is over it at height 0. `$0580/$0581` keep the last screen position there, and
 `$0582` the first row. Each frame over the cup:
 
@@ -304,7 +304,7 @@ When a landed ball leaves the outline after being over it, and it left through t
 side (`$64` of `$B5` or more), one of these happens. It does not if the ball has already
 bounced off the flagstick and is moving at `$18` or more.
 
-- **Rim-in**, below speed `$28`: it drops in anyway. Off to one side of the centre (`$63`
+- **Rim-in**, below speed `$28`: it drops in anyway. Off to one side of the center (`$63`
   outside `$6A-$94`), `$05C2` records how fast, for the drop animation.
 - **Lip-out**, at `$28` or more with `$63` in `$60-$9F`: `$0593` becomes `$FF`, and its
   velocity is halved (twice on a putt). While `$0593` is `$FF`, the physics runs only every
@@ -399,7 +399,7 @@ Three references check it (`tests/physics/`, run with `--physics`):
 - `test_scene_rom.py` calls the projection, the distance and the scene collision directly,
   with thousands of random inputs, over scenes the game's builder made.
 
-## Not modelled yet
+## Not modeled yet
 
 - **The scene builder** (bank 9 `$8829`, from `ShotSetupSequence`): it probes 64 × 20
   points ahead along the aim and draws the scene into the maps. The model takes a
@@ -419,7 +419,7 @@ Three references check it (`tests/physics/`, run with `--physics`):
 check on a console is that machine: that nothing it does not emulate (the PPU, sprite 0,
 IRQs) changes a shot. Two cheap checks in Mesen:
 
-- **A perfect 1W drive from the tee** (full power, dead-centre accuracy, medium speed, no
+- **A perfect 1W drive from the tee** (full power, dead-center accuracy, medium speed, no
   wind) onto fairway should carry 235 yards and finish at 268 (`golf-shots` shows the
   same). Run in practice mode with the wind set to 0.
 - **The wind distortion**: in practice mode set the wind to `$40` and hit a high wedge

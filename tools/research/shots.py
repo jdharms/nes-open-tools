@@ -52,7 +52,7 @@ def main() -> None:
         "--accuracy",
         type=int,
         default=0x30,
-        help="accuracy-meter stop, 48 is dead centre; default 48",
+        help="accuracy-meter stop, 48 is dead center; default 48",
     )
     parser.add_argument("--hi-lo", choices=HI_LO, default="normal")
     parser.add_argument("--spin", choices=SPINS, default="normal")

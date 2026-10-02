@@ -152,7 +152,7 @@ def test_pixel_classes():
     assert pixel_class(Lie.BUNKER, 0, 2) == LIE_CLASSES.index(LieClass(Lie.BUNKER, 2))
 
 
-def test_spread_fills_from_neighbours_only():
+def test_spread_fills_from_neighbors_only():
     cells = np.full((5, 5), np.nan)
     cells[2, 2] = 4.0
     once = _spread(cells, 1)
