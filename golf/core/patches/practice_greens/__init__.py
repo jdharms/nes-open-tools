@@ -15,6 +15,7 @@ from golf.formats.putting_surface import PUTTING_SURFACE_TILES
 from ..mercy_tap_in import mercy_tap_in_patches
 from ..signpost_banner import remove_course_banner_patches
 from ..skip_hole_celebrations import skip_hole_celebrations_patch
+from ..skip_hole_signpost import skip_hole_signpost_patch
 
 CODE_BANK = 2
 CODE_START = 0x8400
@@ -85,7 +86,9 @@ class PracticeBuild:
     manifest: dict
 
 
-def build_practice_greens(base: bytes, courses_root: Path) -> PracticeBuild:
+def build_practice_greens(
+    base: bytes, courses_root: Path, *, skip_signposts: bool = True
+) -> PracticeBuild:
     """Build on a verified vanilla USA ROM, rejecting every overlapping write."""
     if hashlib.sha1(base).hexdigest() != US_ROM_SHA1:
         raise ValueError("Practice Greens requires the unmodified NES Open USA ROM")
@@ -215,6 +218,8 @@ def build_practice_greens(base: bytes, courses_root: Path) -> PracticeBuild:
     for patch in mercy_tap_in_patches(255, 255)[2:]:
         existing(patch)
     existing(skip_hole_celebrations_patch())
+    if skip_signposts:
+        existing(skip_hole_signpost_patch())
     existing(remove_course_banner_patches())
 
     # Two menus only: start Practice Greens, then choose putting speed.
@@ -259,6 +264,7 @@ def build_practice_greens(base: bytes, courses_root: Path) -> PracticeBuild:
         bytes(writer.rom_data),
         {
             "version": 1,
+            "skip_signposts": skip_signposts,
             "vanilla_holes": sum(len(g.sources) for g in greens),
             "unique_greens": count,
             "compressed_green_bytes": sum(len(g.compressed) for g in greens),

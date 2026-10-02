@@ -204,14 +204,20 @@ class _MenuMachine(NesMachine):
         super().step()
 
 
-def test_boot_real_putts_18_hole_progression_and_new_round(build):
+@pytest.mark.parametrize("skip_signposts", [True, False])
+def test_boot_real_putts_18_hole_progression_and_new_round(build, skip_signposts):
     """Play hole 1 normally, then inject aces to exercise all score/advance paths."""
+    if not skip_signposts:
+        build = build_practice_greens(
+            Path("nes_open_us.nes").read_bytes(), Path("courses"), skip_signposts=False
+        )
     m = _MenuMachine(RomReader.from_bytes(build.rom))
     m.on_frame = lambda frame: setattr(m, "buttons", 0x80 if frame % 30 < 8 else 0)
     completed = []
     first_ids = []
     entered_putting = []
     replay_checks = []
+    signposts = []
 
     class FinishedError(Exception):
         pass
@@ -244,6 +250,11 @@ def test_boot_real_putts_18_hole_progression_and_new_round(build):
     m.add_breakpoint(0x886E, putting, bank=13)
     m.add_breakpoint(0x82AD, quick_ace, bank=13)
     m.add_breakpoint(0x8529, scorecard_drawn, bank=13)
+    m.add_breakpoint(
+        0xABA5,
+        forbidden if skip_signposts else lambda: signposts.append(m.memory[0x94]),
+        bank=12,
+    )
     m.add_breakpoint(0xB094, forbidden, bank=12)
     m.add_breakpoint(0xB7D9, forbidden, bank=12)
     m.add_breakpoint(0x87C3, forbidden, bank=13)
@@ -254,6 +265,8 @@ def test_boot_real_putts_18_hole_progression_and_new_round(build):
     assert 1 <= completed[0] <= 50
     assert completed[1:] == [1] * 17
     assert set(replay_checks) == set(range(18))
+    if not skip_signposts:
+        assert set(signposts) == set(range(18))
     assert len(set(first_ids)) == 18
     assert list(m.memory[0x7100:0x7112]) != first_ids
     assert m.memory[0x100] == m.memory[0x101] == m.memory[0x102] == 0
@@ -314,3 +327,22 @@ def test_post_hole_scene_is_reachable_in_vanilla_and_skipped_with_totals_intact(
     # The old, mistaken removal site must remain the vanilla replay-saving call.
     assert writer.read_prg(0x3434A, 6) == bytes.fromhex("20 72 D3 08 21 9B")
     assert build.rom[16 + 0x3434A : 16 + 0x34350] == bytes.fromhex("20 72 D3 08 21 9B")
+
+
+def test_signpost_option_changes_only_the_six_byte_call(build):
+    from golf.core.patches.skip_hole_signpost import skip_hole_signpost_patch
+    from golf.core.rom_writer import RomWriter
+
+    base = Path("nes_open_us.nes").read_bytes()
+    kept = build_practice_greens(base, Path("courses"), skip_signposts=False)
+    offset = 16 + 0x341AB
+    assert kept.rom[offset : offset + 6] == bytes.fromhex("20 72 D3 0C A5 AB")
+    assert build.rom[offset : offset + 6] == bytes([0xEA]) * 6
+    assert kept.rom[:offset] == build.rom[:offset]
+    assert kept.rom[offset + 6 :] == build.rom[offset + 6 :]
+    writer = RomWriter.from_bytes(base)
+    patch = skip_hole_signpost_patch()
+    patch.apply(writer)
+    patch.apply(writer)
+    assert writer.read_prg(0x341AB, 6) == bytes([0xEA]) * 6
+    assert writer.read_prg(0x34064, 6) == bytes.fromhex("20 72 D3 0C 87 AB")

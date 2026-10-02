@@ -14,8 +14,15 @@ def main() -> None:
     parser.add_argument(
         "-o", "--output", type=Path, default=Path("practice_greens.nes")
     )
+    parser.add_argument(
+        "--keep-signposts",
+        action="store_true",
+        help="Keep the per-hole signpost cards instead of skipping them",
+    )
     args = parser.parse_args()
-    result = build_practice_greens(args.rom.read_bytes(), args.courses)
+    result = build_practice_greens(
+        args.rom.read_bytes(), args.courses, skip_signposts=not args.keep_signposts
+    )
     args.output.write_bytes(result.rom)
     manifest_path = args.output.with_suffix(".build.json")
     manifest_path.write_text(json.dumps(result.manifest, indent=2) + "\n")

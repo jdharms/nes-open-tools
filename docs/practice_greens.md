@@ -8,6 +8,8 @@ Build with both games' vanilla courses already unpacked:
 
 ```sh
 uv run golf-practice-greens
+# Restore the per-hole cards for comparison:
+uv run golf-practice-greens --keep-signposts -o practice_greens_signposts.nes
 # Equivalent without refreshing the installed command:
 .venv/bin/python -m tools.practice_greens
 ```
@@ -29,8 +31,9 @@ load flag; previous saves cannot resume a round with a mismatched green selectio
 
 Every new round draws 18 distinct greens at runtime. There is no cross-round exclusion
 state. All holes are par 2 and display distance 020; the scorecard totals are par 36
-and 360 yards. The signpost retains hole number, par and distance but drops the old
-country banner. The scorecard uses the exact name PRACTICE GREENS.
+and 360 yards. By default, each hole starts directly in gameplay without its signpost card or A/B
+wait. With `--keep-signposts`, the card retains hole number, par and distance but
+drops the old country banner. The scorecard uses the exact name PRACTICE GREENS.
 
 The ball starts on a randomly chosen putting-surface tile, at a randomly chosen one
 of its 8 by 8 green-view pixel locations. Fraction bytes are pixel centers rather than
@@ -44,8 +47,7 @@ and rolls back onto the green may continue. Genuine hole-outs retain their actua
 stroke count and cup animation. Forced failures skip the cup animation using the
 existing mercy patch's $FF completion sentinel. The subsequent ball-retrieval/wave/results
 scene and separate ace celebration are skipped for all holes; round totals are still
-updated before skipping the scene. Hole signposts and the
-ordinary end-of-round scorecard remain.
+updated before skipping the scene. The ordinary end-of-round scorecard remains; per-hole signposts are optional.
 
 ## Pool and deduplication
 
@@ -103,6 +105,26 @@ Replicating 448 bytes of decompression tables in banks 0 and 1 lets the original
 fixed-bank decompressor read its bank-relative tables and source bytes together.
 This is simpler than rewriting the decompressor or copying every compressed stream
 through RAM. Keeping all data in bank 3 would exceed its green region.
+
+## Optional signpost skipping
+
+The independent `skip_hole_signpost` patch is available through `golf-patch` and is
+enabled by default in Practice Greens. It replaces bank 13 $81AB's six-byte far call
+to bank 12 `DrawPreHoleSignpost` ($ABA5) with NOPs. Hole initialization and the following
+gameplay PPU setup still run, but the card drawing and its A/B wait never execute.
+No new code or RAM is required. Keeping signposts changes exactly those six ROM bytes.
+
+The separate bank 13 $8064 call to `InitPreHoleSignpostScene` ($AB87) remains. It runs
+the round-entry/exit golfer standee scene and participates in returning a finished
+round to the menu. Skipping that shared lifecycle routine was considered and avoided;
+the per-hole card has its own call site and can be disabled independently. Consequently
+this patch removes the 18 course signpost cards, not every appearance of the golfer
+standee around round entry/exit.
+
+Two local ROMs support comparison: `practice_greens.nes` skips cards, while
+`practice_greens_signposts.nes` keeps them. Both include the corrected celebration skip.
+The build manifest records `skip_signposts`; the CLI's `--keep-signposts` option restores
+the prior pacing without changing the other practice features.
 
 ## RAM and hooks
 
@@ -178,7 +200,10 @@ that its green and pin stay fixed: pin indices are selected once in round setup,
 than rerolled on every `InitHole` call. A boot test supplies controller presses through the actual menus and
 plays the first hole with real putting physics. It then injects
 17 aces to exercise every score-commit and hole-advance path, draws the round scorecard,
-and starts another round with a fresh green selection. Breakpoints reject entry to the
+and starts another round with a fresh green selection. This runs both with and without
+signposts; the skipped variant rejects entry to $ABA5, while the retained variant must
+visit it for every hole. A byte comparison verifies that the option changes exactly
+the six-byte call site. Breakpoints reject entry to the
 removed retrieval/results scene at bank 12 $B094, the ace cutscene, or the normal
 tee view. The original replay-saving routine must remain reachable for all 18 holes. The menu harness supplies sprite-zero
 status edges and NMIs for menu/scorecard polling loops; it does not change ROM code.
