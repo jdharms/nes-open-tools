@@ -12,7 +12,7 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import UTC, datetime
 
-from golf.core.patches.seeded_wind import predict_hole
+from golf.core.rng import predict_hole
 from golf.randomizer.manifest import Manifest
 
 from . import audit

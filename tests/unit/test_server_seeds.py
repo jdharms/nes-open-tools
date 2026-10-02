@@ -4,7 +4,7 @@ import json
 
 import pytest
 
-from golf.core.patches.seeded_wind import predict_hole
+from golf.core.rng import predict_hole
 from golf.randomizer.catalog import Catalog
 from golf.randomizer.curation import CurationSnapshot
 from golf.randomizer.generate import generate

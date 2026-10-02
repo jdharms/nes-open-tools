@@ -37,8 +37,8 @@ wheels/
 !/courses/**/.gitkeep
 /rangefinder/
 
-# Built temporary results
-.cache/*
+# Caches built from a ROM (the difficulty solver's landing table)
+/.cache/
 
 # Developer scratch space
 scratch/
