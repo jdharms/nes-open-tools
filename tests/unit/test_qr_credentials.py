@@ -149,6 +149,7 @@ def test_the_patched_image_builds_a_verifiable_payload(credentials) -> None:
             [(hole.strokes, hole.putts) for hole in round_payload.holes],
             player=slot,
             player_count=1,
+            stats=round_payload.stats(),
         )
         machine.call("QrBuildPayload", a=slot)
         built = machine.read(layout.PAYLOAD, payload.PAYLOAD_LEN)
@@ -158,6 +159,8 @@ def test_the_patched_image_builds_a_verifiable_payload(credentials) -> None:
             player_id=credentials.player_ids[slot],
             holes=round_payload.holes,
             player_slot=slot,
+            fairways=round_payload.fairways,
+            penalty_strokes=round_payload.penalty_strokes,
         )
         assert built == expected.to_bytes(credentials.keys[slot])
         assert verify(built, credentials.keys[slot])

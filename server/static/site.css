@@ -306,6 +306,12 @@ article.collapsible > details > summary > h2 {
   margin-bottom: 0;
 }
 
+/* The download settings' over-max marker; download.js keeps data-over-max current as
+   clubs are checked. */
+details.download-settings[data-over-max="false"] .download-over-max {
+  display: none;
+}
+
 /* Seed page download form. download.js sets data-state: checking, missing, ready,
    building, done, error or unavailable. */
 article.download form > :last-child {
@@ -363,6 +369,28 @@ table.nine col.par {
 
 table.nine col.strokes {
   width: 34%;
+}
+
+/* A round that records fairways has a fifth column; the widths make room for it. */
+table.nine.with-fairways col.hole,
+table.nine.with-fairways col.putts {
+  width: 18%;
+}
+
+table.nine.with-fairways col.par {
+  width: 14%;
+}
+
+table.nine.with-fairways col.strokes {
+  width: 28%;
+}
+
+table.nine.with-fairways col.fairway {
+  width: 22%;
+}
+
+table.nine .fairway {
+  text-align: center;
 }
 
 /* Strokes against par: over par red, under par green, level par left as it is. Also sets

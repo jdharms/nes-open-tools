@@ -1,8 +1,8 @@
 """Unit tests for reading banner art back off an edited screen.
 
 The conversion is a chain of small, exact steps - downscale, attribute lookup,
-colour to 2-bit value, planar pack, pattern match - and every one of them has a
-silent failure mode: a colour resolved to the wrong bit pair still produces a
+color to 2-bit value, planar pack, pattern match - and every one of them has a
+silent failure mode: a color resolved to the wrong bit pair still produces a
 valid tile, just the wrong picture.  So each step is pinned on its own.
 """
 
@@ -15,13 +15,13 @@ from golf.core.signpost import (
     NAMETABLE,
     PATTERN_BASE,
     BannerDescriptor,
-    _colour_lookup,
+    _color_lookup,
     convert_banner,
     subpalette_at,
     tile_to_chr,
 )
 
-# Four colours on subpalette 0, and a second subpalette that shares none of
+# Four colors on subpalette 0, and a second subpalette that shares none of
 # them, so a mix-up between the two cannot pass unnoticed.
 PALETTE = bytes(
     [0x0F, 0x30, 0x21, 0x15]  # 0: black bg, white, blue, magenta
@@ -57,23 +57,23 @@ def test_tile_to_chr_round_trips_through_video_memory():
     assert vram.tile(0, PATTERN_BASE) == values
 
 
-def test_colour_lookup_treats_the_two_whites_as_one_colour():
+def test_color_lookup_treats_the_two_whites_as_one_color():
     """`$20` and `$30` are the same white; an artist may pick either swatch."""
-    lookup = _colour_lookup(PALETTE)
+    lookup = _color_lookup(PALETTE)
     assert rgb(0x20) == rgb(0x30)
     assert lookup[0][rgb(0x20)] == 1
     assert lookup[0][rgb(0x30)] == 1
 
 
-def test_colour_lookup_is_per_subpalette():
-    lookup = _colour_lookup(PALETTE)
+def test_color_lookup_is_per_subpalette():
+    lookup = _color_lookup(PALETTE)
     assert lookup[0][rgb(0x15)] == 3
     assert rgb(0x15) not in lookup[1]
     assert lookup[1][rgb(0x2A)] == 3
 
 
-def test_colour_lookup_maps_the_universal_background_to_zero():
-    lookup = _colour_lookup(PALETTE)
+def test_color_lookup_maps_the_universal_background_to_zero():
+    lookup = _color_lookup(PALETTE)
     for sub in range(4):
         assert lookup[sub][rgb(0x0F)] == 0
 
@@ -154,7 +154,7 @@ def test_art_with_no_matching_pattern_is_reported_as_new():
     assert result.nametable({result.tiles[0].chr_bytes: 0x42}) == bytes([0x42, 0x00])
 
 
-def test_a_colour_outside_the_cell_s_subpalette_is_an_error():
+def test_a_color_outside_the_cell_s_subpalette_is_an_error():
     blank = tile_to_chr([[0] * 8 for _ in range(8)])
     vram = make_reference([blank] * 256, {(0, 0): 0x00, (1, 0): 0x00})
 
@@ -167,7 +167,7 @@ def test_a_colour_outside_the_cell_s_subpalette_is_an_error():
     assert "(0, 0)" in result.errors[0]
 
 
-def test_the_attribute_table_decides_which_colours_a_cell_may_use():
+def test_the_attribute_table_decides_which_colors_a_cell_may_use():
     """The same pixel is legal or not depending on the attribute byte."""
     blank = tile_to_chr([[0] * 8 for _ in range(8)])
     vram = make_reference([blank] * 256, {(0, 0): 0x00, (1, 0): 0x00}, attribute=0x55)

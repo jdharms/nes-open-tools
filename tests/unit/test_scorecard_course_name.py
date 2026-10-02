@@ -47,7 +47,7 @@ class TestEncoding:
         assert course_name_text("random") == "RANDOM COURSE"
 
     def test_japan_reproduces_the_vanilla_descriptor_and_attributes(self):
-        """Checks the tile mapping, centring, header and colour rule against the ROM."""
+        """Checks the tile mapping, centering, header and color rule against the ROM."""
         assert descriptor_bytes("JAPAN COURSE") == _VANILLA_DESCRIPTOR_REGION[:16]
         assert attribute_bytes("JAPAN COURSE") == _VANILLA_ATTRIBUTES
 
@@ -128,7 +128,7 @@ class TestTitleEncoding:
         )
         assert title_descriptor_bytes("18H STROKE PLAY") == vanilla
 
-    def test_match_play_is_centred_like_vanilla(self):
+    def test_match_play_is_centered_like_vanilla(self):
         # $B085: PPU $2089, width 14
         assert title_descriptor_bytes("18H MATCH PLAY")[:3] == bytes([0x89, 0x20, 0x0E])
 

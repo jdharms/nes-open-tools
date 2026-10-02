@@ -18,6 +18,7 @@ import sys
 from pathlib import Path
 
 from golf.core.patches import PatchError, load_credentials
+from golf.core.patches.extended_sram_defaults import BallSpin, SwingSpeed
 from golf.core.patches.sram_defaults import VANILLA_CLUBS, VANILLA_NAME
 from golf.randomizer.build import (
     PlayerOptions,
@@ -173,7 +174,14 @@ def cmd_build(args: argparse.Namespace) -> int:
             if args.clubs
             else frozenset(VANILLA_CLUBS)
         )
-        options = PlayerOptions(args.name, clubs, bgm=not args.no_bgm)
+        options = PlayerOptions(
+            args.name,
+            clubs,
+            bgm=not args.no_bgm,
+            swing=SwingSpeed[args.swing.upper()],
+            putt=SwingSpeed[args.putt.upper()],
+            spin=BallSpin[args.spin.upper()],
+        )
         if args.credentials:
             credentials = load_credentials(args.credentials)
 
@@ -196,6 +204,10 @@ def cmd_build(args: argparse.Namespace) -> int:
         bag = " ".join(club.label for club in sorted(options.clubs))
         music = "on" if options.bgm else "off"
         print(f"player: {options.player_name}, bag {bag}, music {music}")
+        print(
+            f"defaults: swing {options.swing.name.lower()}, putt "
+            f"{options.putt.name.lower()}, spin {options.spin.name.lower()}"
+        )
     print(f"built: {stage}")
 
     if args.ips:
@@ -319,6 +331,25 @@ def build_parser() -> argparse.ArgumentParser:
     build.add_argument(
         "--no-bgm", action="store_true", help="new saves start with music off"
     )
+    speeds = [speed.name.lower() for speed in SwingSpeed]
+    build.add_argument(
+        "--swing",
+        choices=speeds,
+        default="off",
+        help="the new-save swing speed default; off keeps the last one chosen",
+    )
+    build.add_argument(
+        "--putt",
+        choices=speeds,
+        default="off",
+        help="the new-save putt speed default; off keeps the last one chosen",
+    )
+    build.add_argument(
+        "--spin",
+        choices=[spin.name.lower() for spin in BallSpin],
+        default="off",
+        help="the new-save ball spin default; off keeps the last one chosen",
+    )
     build.add_argument(
         "--catalog", type=Path, default=DEFAULT_INDEX, help="catalog index"
     )
@@ -351,10 +382,16 @@ def main() -> int:
     if (
         args.command == "build"
         and args.unfinished
-        and (args.clubs or args.no_bgm or args.name != VANILLA_NAME)
+        and (
+            args.clubs
+            or args.no_bgm
+            or args.name != VANILLA_NAME
+            or (args.swing, args.putt, args.spin) != ("off", "off", "off")
+        )
     ):
         parser.error(
-            "--name, --clubs and --no-bgm are finishing options; drop them with --unfinished"
+            "--name, --clubs, --no-bgm, --swing, --putt and --spin are finishing "
+            "options; drop them with --unfinished"
         )
     try:
         return args.func(args)

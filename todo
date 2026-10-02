@@ -1,25 +1,28 @@
-In-game/vanilla rom investigations:
+Now:
 
+Notes:
+Derived holes, something like:
+```json
+"nes_us/12-short": {
+  "source": {"base": "nes_us/12", "delta": "holes/derived/nes_us_12_short.json"},
+  "content_hash": "…", "par": 3, "distance": 190, "author": "jdharms"
+}
+```
+
+In-game/vanilla rom investigations:
 * Do bunker lips do anything?
 
-V3 todos:
+Randomizer site:
 * I think I want a variant of rom name in randomizer site pages w/o the region parens
 * Configuration backups to pw manager
 * robots.txt
 * Configure rDNS (reverse DNS)?
-* Full horizontal scorecards on Seeds page's "Completed Rounds" table
-* Changelog
-* Expand SRAM defaults on randomizer site (currently missing Enable BGM and more)
 * Sentry
 * healthchecks.io integration for litestream
 * Rangefinder: Esc also clears
-* hide scores for unplayed seeds by default!!!!
-
-Eventually:
-* deploy from github actions
 
 Randomizer, investigation needed:
-* Mirrored holes?
+* #6 Mirrored holes?
 * Randomize bunkers/water?
 * random green topography?
 * palette swaps (sprites, signs)
@@ -28,6 +31,10 @@ Randomizer, investigation needed:
 * Wind "profiles".  It might be neat to have different "flavors" of wind
   on courses.  Beyond the seeding, stuff like "wind is biased in one direction"
   or "an especially windy day".
+* Investigate higher wind values than 9
+
+Eventually:
+* deploy from github actions
 
 Editor Todos:
 * Invalid neighbor indicator should be a single border per pairing
@@ -42,7 +49,6 @@ Editor Todos:
   * Most of the complexity here is with the cycle tool
 
 * Add lie chart to rangefinder
-
 
 
 Bugs:
@@ -84,10 +90,11 @@ Done:
 * G should cycle through grid sizes, alter palette tool?
 * Add greens to rangefinder?
 * Add Mario Open holes to Rangefinder
-
 * Pre-chosen SRAM init edits
   * Club choices
   * Player name(s)
 * CLAUDE.md needs to be revisited
 * Music swap/shuffle
 * Does SuperShot! do anything? -- Yes, it gives essentially a 4 tick bonus to speed
+* #5 hide scores for unplayed seeds by default!!!!
+* #4 Expand SRAM defaults on randomizer site (currently missing Enable BGM and more)

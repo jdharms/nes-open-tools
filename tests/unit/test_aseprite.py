@@ -215,7 +215,7 @@ class TestReader:
         assert AsepriteFile.from_bytes(ase.to_bytes()).palette[1][4] == "$16 - red"
 
     def test_unknown_chunks_are_skipped_not_parsed(self, sample):
-        """Aseprite writes a colour-profile chunk this module knows nothing of."""
+        """Aseprite writes a color-profile chunk this module knows nothing of."""
         data = bytearray(sample.to_bytes())
         extra = struct.pack("<IH", 6 + 16, 0x2007) + bytes(16)
         insert = 128 + 16

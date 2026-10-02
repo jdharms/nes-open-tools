@@ -4,7 +4,7 @@
 > It reports a spike: rating how hard NES Open and Mario Open holes are from the game's
 > own physics. What was built and decided, how to pick it up, and what it found.
 
-**Status**: paused (ADR 0008). The physics model reproduces the game's shot loop exactly
+**Status**: paused (ADR 0012). The physics model reproduces the game's shot loop exactly
 (phases 1 and 2, apart from the Mesen spot checks), and `golf-difficulty` solves a hole
 for one pin with no wind, under PyPy (phase 3). Every NES Open and Mario Open hole is
 solved at skill 3 from its first pin: **Results** ranks all 144 against par, and
@@ -37,7 +37,7 @@ site.
 ## Terms
 
 - **Model**: `golf/physics/`, the Python port of the game's shot loop. It agrees with the
-  game on every register every frame (`docs/shot_physics.md`, ADR 0007).
+  game on every register every frame (`docs/shot_physics.md`, ADR 0011).
 - **Oracle**: the game's own code run under py65, to check the model against. There are
   two kinds (see **The mini-NES**): single routines (`rom_oracle.py`) and the whole game
   (`nes.py`, `rom_game.py`). Every new ported piece is checked against one before
@@ -116,7 +116,7 @@ site.
 2. `docs/shot_physics.md`: how a shot works in the game, with ROM addresses: the swing,
    the flight, the cup, penalties, and what the model does not cover.
 3. `golf/physics/CLAUDE.md`: how to test, and the rules for code in `golf/physics/`.
-4. ADR 0007 (`docs/adr/`): why the model is an exact port rather than idealized physics.
+4. ADR 0011 (`docs/adr/`): why the model is an exact port rather than idealized physics.
 5. `docs/seeded_wind.md`, **The vanilla wind as probabilities**.
 6. `golf/difficulty/player.py`: the player model, which the solver builds on.
 7. `golf/difficulty/landing.py`, `green.py` and `solver.py`: the module docstrings say
@@ -660,7 +660,7 @@ PYTHONPATH=. .cache/pypy/bin/python -u -m tools.research.difficulty nes_open_us.
 
 ## Future work
 
-None of this is scheduled (ADR 0008).
+None of this is scheduled (ADR 0012).
 
 - **The other three pins**, starting with the holes whose place against par is closest
   to a boundary the randomizer draws: half a stroke over par, and the expert holes'
@@ -705,7 +705,7 @@ None of this is scheduled (ADR 0008).
 ## Results
 
 Every hole at skill 3, from its first pin, with no wind and the default `Settings`, by
-the solver as it stood at ADR 0008: NES Open holes on the vanilla ROM, Mario Open holes on
+the solver as it stood at ADR 0012: NES Open holes on the vanilla ROM, Mario Open holes on
 `nes_open_wram.nes` (phase 1). The tables are `golf-difficulty-report`'s (**Data**).
 "Over par" is expected strokes from the tee minus par; "Rare visits" is how often a hole's
 best play visits spots too rare to value, which borrow their values (**The solver**).

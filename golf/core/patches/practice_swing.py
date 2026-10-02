@@ -1,7 +1,7 @@
 """
 Practice swing patch.
 
-Adds a practice-swing mode to the shot loop, modelled on the Famicom Disk
+Adds a practice-swing mode to the shot loop, modeled on the Famicom Disk
 System game *Golf - Japan Course*. From the "ready to swing" state, Select
 toggles practice mode: the golfer steps 8 pixels back from the ball and a
 full three-press swing can be taken without hitting the ball, counting a
@@ -207,7 +207,7 @@ _TOGGLE_PRACTICE_SWING = bytes(
         0x8D,
         _lo(PRACTICE_SWING_OFFSET),
         _hi(PRACTICE_SWING_OFFSET),  # STA PracticeSwingOffset
-        0x38,  # SEC                                 ; vanilla's "cancelled" return
+        0x38,  # SEC                                 ; vanilla's "canceled" return
         0x60,  # RTS                                 ; returns from SwingSequenceEntry
         # ToggleSelect:
         0xAD,

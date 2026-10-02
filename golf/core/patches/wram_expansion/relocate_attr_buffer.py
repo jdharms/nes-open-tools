@@ -5,7 +5,7 @@ and grow it from 72 bytes to 90.
 Vanilla copies each hole's attributes into `TerrainAttrs` at $0533-$057A
 when the hole loads (`LoadTerrainAndAttrs`, `LDY #$47` down to 0). That is
 6 bytes per attribute row x 12 rows, enough for 48 terrain rows; a 60-row
-hole needs 15 rows, 90 bytes, and the 11 unlabelled bytes after the buffer
+hole needs 15 rows, 90 bytes, and the 11 unlabeled bytes after the buffer
 aren't enough to grow it in place (`SwingPhaseState` is at $0586).
 
 The new buffer is WRAM $0F9C-$0FF5 (CPU $6F9C-$6FF5), at the start of the

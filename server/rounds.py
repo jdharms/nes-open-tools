@@ -1,7 +1,9 @@
 """Rounds: the only code that writes `rounds`, `round_holes` and `voided_rounds`.
 
-A round is a scan that `server/submissions.py` accepted: its 36-byte payload (which carries
-every hole), recorded against (entry, slot), one round per pair. Each round is drawn a
+A round is a scan that `server/submissions.py` accepted: its payload (which carries every
+hole), recorded against (entry, slot), one round per pair. A protocol version 2 payload also
+carries fairways hit and penalty strokes; a version 1 round has neither, which is stored as
+NULL rather than as a miss or a zero. Each round is drawn a
 `public_id` when it is recorded, the base62 id its `/r/<id>` permalink names it by
 (`server/ids.py`). No other round is ever given it, so a permalink always means one
 scorecard. See docs/randomizer_devplan.md, "Data model".
@@ -41,6 +43,10 @@ class RoundHole:
     position: int
     strokes: int
     putts: int
+    #: whether the tee shot of a par 4 or longer found the fairway or the green, or went in
+    #: (`fairway_hit`); always False on a par 3. None when the round did not record fairways
+    #: (protocol version 1).
+    fairway_hit: bool | None = None
 
 
 @dataclass(frozen=True)
@@ -60,6 +66,9 @@ class Round:
     #: an admin's note on the flag; never shown outside the admin pages
     flag_note: str | None
     holes: tuple[RoundHole, ...]
+    #: water and out-of-bounds strokes over the round; None when the round did not record
+    #: them (protocol version 1)
+    penalty_strokes: int | None = None
 
 
 @dataclass(frozen=True)
@@ -76,7 +85,8 @@ class VoidedRound:
 
 _ROUND_SELECT = """
     SELECT rounds.id, rounds.public_id, rounds.entry_id, entries.seed_id, entries.user_id, rounds.slot,
-           rounds.total_strokes, rounds.total_putts, rounds.received_at, rounds.flagged, rounds.flag_note
+           rounds.total_strokes, rounds.total_putts, rounds.penalty_strokes, rounds.received_at,
+           rounds.flagged, rounds.flag_note
     FROM rounds JOIN entries ON entries.id = rounds.entry_id
 """
 
@@ -86,7 +96,10 @@ def _load_round(conn: sqlite3.Connection, where: str, params: tuple) -> Round | 
     if row is None:
         return None
     holes = conn.execute(
-        "SELECT position, strokes, putts FROM round_holes WHERE round_id = ? ORDER BY position",
+        """
+        SELECT position, strokes, putts, fairway_hit FROM round_holes
+        WHERE round_id = ? ORDER BY position
+        """,
         (row["id"],),
     ).fetchall()
     return Round(
@@ -101,9 +114,15 @@ def _load_round(conn: sqlite3.Connection, where: str, params: tuple) -> Round | 
         flagged=bool(row["flagged"]),
         flag_note=row["flag_note"],
         holes=tuple(
-            RoundHole(hole["position"], hole["strokes"], hole["putts"])
+            RoundHole(
+                hole["position"],
+                hole["strokes"],
+                hole["putts"],
+                None if hole["fairway_hit"] is None else bool(hole["fairway_hit"]),
+            )
             for hole in holes
         ),
+        penalty_strokes=row["penalty_strokes"],
     )
 
 
@@ -128,6 +147,18 @@ def _draw_public_id(conn: sqlite3.Connection) -> str:
     raise RoundIdExhaustedError(f"no unused round id in {ID_ATTEMPTS} draws")
 
 
+def fairway_hit(sent: bool, par: int, strokes: int) -> bool:
+    """
+    A hole's fairway as stored, from the bit the ROM sent.
+
+    The ROM sets the bit for a tee shot that comes to rest on the fairway or the green of a
+    par 4 or longer. A tee shot that goes in never comes to rest, so the ROM leaves that
+    bit clear; one stroke on such a hole is stored as a hit, so stats count it. The
+    stored payload keeps the bit as sent.
+    """
+    return sent or (par >= 4 and strokes == 1)
+
+
 def _insert_round(
     conn: sqlite3.Connection,
     public_id: str,
@@ -140,11 +171,23 @@ def _insert_round(
 ) -> int:
     """Insert a round and its holes, the totals and holes read from the payload. Returns its row id."""
     round_payload, _mac = payload.RoundPayload.from_bytes(data)
+    fairways = round_payload.fairways
+    pars = [
+        row["par"]
+        for row in conn.execute(
+            """
+            SELECT seed_holes.par FROM seed_holes
+            JOIN entries ON entries.seed_id = seed_holes.seed_id
+            WHERE entries.id = ? ORDER BY seed_holes.position
+            """,
+            (entry_id,),
+        )
+    ]
     round_id = conn.execute(
         """
-        INSERT INTO rounds (public_id, entry_id, slot, payload, total_strokes, total_putts, received_at,
-                            flagged, flag_note)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+        INSERT INTO rounds (public_id, entry_id, slot, payload, total_strokes, total_putts,
+                            penalty_strokes, received_at, flagged, flag_note)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """,
         (
             public_id,
@@ -153,6 +196,7 @@ def _insert_round(
             data,
             round_payload.total_strokes,
             round_payload.total_putts,
+            round_payload.penalty_strokes,
             received_at,
             flagged,
             flag_note,
@@ -160,9 +204,22 @@ def _insert_round(
     ).lastrowid
     assert round_id is not None
     conn.executemany(
-        "INSERT INTO round_holes (round_id, position, strokes, putts) VALUES (?, ?, ?, ?)",
+        """
+        INSERT INTO round_holes (round_id, position, strokes, putts, fairway_hit)
+        VALUES (?, ?, ?, ?, ?)
+        """,
         [
-            (round_id, position, hole.strokes, hole.putts)
+            (
+                round_id,
+                position,
+                hole.strokes,
+                hole.putts,
+                None
+                if fairways is None
+                else fairway_hit(
+                    fairways[position - 1], pars[position - 1], hole.strokes
+                ),
+            )
             for position, hole in enumerate(round_payload.holes, start=1)
         ],
     )
@@ -245,6 +302,8 @@ class SeedRound:
     """A round as the seed page lists it."""
 
     public_id: str
+    #: the `users.id` of the player whose entry recorded the round
+    user_id: int
     player_name: str
     slot: int
     total_strokes: int
@@ -268,7 +327,8 @@ def rounds_for_seed(db: Database, seed_id: str) -> list[SeedRound]:
     with db.transaction() as conn:
         rows = conn.execute(
             """
-            SELECT rounds.id, rounds.public_id, coalesce(users.global_name, users.username) AS player_name,
+            SELECT rounds.id, rounds.public_id, entries.user_id,
+                   coalesce(users.global_name, users.username) AS player_name,
                    rounds.slot, rounds.total_strokes, rounds.total_putts, rounds.received_at, rounds.flagged
             FROM rounds
             JOIN entries ON entries.id = rounds.entry_id
@@ -294,6 +354,7 @@ def rounds_for_seed(db: Database, seed_id: str) -> list[SeedRound]:
     return [
         SeedRound(
             public_id=row["public_id"],
+            user_id=row["user_id"],
             player_name=row["player_name"],
             slot=row["slot"],
             total_strokes=row["total_strokes"],

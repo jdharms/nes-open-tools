@@ -83,7 +83,7 @@ class StampCreationDialog:
 
         # Result
         self.result: StampData | None = None
-        self.cancelled = False
+        self.canceled = False
 
     def _calculate_layout(self):
         """Calculate layout rectangles."""
@@ -159,7 +159,7 @@ class StampCreationDialog:
                 self._save_stamp()
                 return True
             elif self.cancel_button_rect.collidepoint(event.pos):
-                self.cancelled = True
+                self.canceled = True
                 return True
 
             # Check name input
@@ -204,7 +204,7 @@ class StampCreationDialog:
                 ):
                     self.category += event.unicode
             elif event.key == pygame.K_ESCAPE:
-                self.cancelled = True
+                self.canceled = True
                 return True
             elif event.key == pygame.K_RETURN:
                 self._save_stamp()
@@ -393,13 +393,13 @@ class StampCreationDialog:
             clock: Pygame clock for frame rate
 
         Returns:
-            StampData if user saved, None if cancelled
+            StampData if user saved, None if canceled
         """
         running = True
         while running:
             for event in pygame.event.get():
                 if event.type == pygame.QUIT:
-                    self.cancelled = True
+                    self.canceled = True
                     running = False
                 elif self.handle_event(event):
                     running = False
@@ -408,4 +408,4 @@ class StampCreationDialog:
             pygame.display.flip()
             clock.tick(60)
 
-        return self.result if not self.cancelled else None
+        return self.result if not self.canceled else None

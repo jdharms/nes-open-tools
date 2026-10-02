@@ -5,7 +5,7 @@
 ; rendering is off, skips the OAM DMA, the PPU update queue and the scroll
 ; write entirely. Only the music engine runs.
 ;
-; Two colours are enough for the whole screen, so one palette covers it and the
+; Two colors are enough for the whole screen, so one palette covers it and the
 ; attribute table is all zeroes. The universal backdrop is white, which makes
 ; the quiet zone free: the all-light QR tile is the blank tile.
 

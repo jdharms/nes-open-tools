@@ -132,7 +132,7 @@ with no match and lands on `$84E6`, which sets `$07FF`/`$F4` and returns into ga
 | `$89F8` `ApplyConfirmPromptSelection` | `$04`,`$08`,`$0D`,`$11`,`$14` | YES (sel 0): if `MenuStateBeforeOpen != 0` and `GolfGameMode & 3` then `JSR $D9AD` (erase / deduct); NO: pops the history stack and sets `SuppressMenuHistoryPushFlag` |
 
 Because handlers key off the *selection index*, not the entry text, reordering options
-inside a menu changes behaviour. Removing an option only matters if it shifts an index
+inside a menu changes behavior. Removing an option only matters if it shifts an index
 the handler special-cases.
 
 ## Back navigation
@@ -256,8 +256,14 @@ of a list leaves a visual gap unless the entries below it are moved up.
 `golf/core/patches/menu_trim.py` implements all of the above: it gives menus
 `$00`-`$02` a shared three-word header, cuts the main menu to STROKE PLAY + CLUB
 HOUSE, cuts course select to a single RANDOM COURSE option that picks course 0,
-and cuts the club house to five entries. Every `BytePatch` is length-preserving
-and inside bank 12, and no instruction changes except one compare operand.
+and cuts the club house to five entries, or four without CHOOSE CLUBS
+(`choose_clubs=False`, which a randomizer seed with club rules uses so the bag
+cannot change in the game). Every `BytePatch` is length-preserving and inside
+bank 12, and no instruction changes except one compare operand.
+
+Either way PLAYER STATS is gone, and nothing else reaches its code in bank 9
+(`$B519` on). `PLAYER_STATS_REMOVED` in the same module is a requirement other
+patches name when they reuse that space, as `extended_sram_defaults` does.
 
 ```python
 from golf.core.patches import menu_trim_patch
@@ -268,7 +274,7 @@ menu_trim_patch("OPEN GOLF RANDO").apply(writer)   # or ["OPEN", "GOLF", "RANDO"
 writer.save()
 ```
 
-Two things it has to handle beyond the raw table edits, both of which generalise
+Two things it has to handle beyond the raw table edits, both of which generalize
 to any removal:
 
 - **Row gaps.** Y is baked into each entry, so retained entries below a removed
@@ -292,11 +298,11 @@ key 1 in `ApplyCourseSelection`'s inline table (`$89EB`) is 0 so that selection
 
 ### Text position and attribute cells
 
-`SetMenuEntryPalette` colours every 2x2 attribute cell an entry touches, on the
-entry's row, and the cursor highlight also colours the row above. An entry
-whose span shares a cell with background art recolours that art. The menu box
+`SetMenuEntryPalette` colors every 2x2 attribute cell an entry touches, on the
+entry's row, and the cursor highlight also colors the row above. An entry
+whose span shares a cell with background art recolors that art. The menu box
 border sits in column 2 on rows `$08`-`$0F`, so an entry starting at column 3
-turns the border's colour-1 pixels in that cell from `$31` to `$30`. Every
+turns the border's color-1 pixels in that cell from `$31` to `$30`. Every
 vanilla entry starts at column 4 or later. The menu trim header keeps vanilla's
 exact span for this reason: 13 characters at column 4, row `$0A`, and 6 at
 column 4, row `$0C`.

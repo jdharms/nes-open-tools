@@ -52,7 +52,7 @@ pytestmark = pytest.mark.skipif(
 
 
 def make_art(result, palette_shift=1):
-    """Invent new art by recolouring the banner, so the fixture needs no
+    """Invent new art by recoloring the banner, so the fixture needs no
     second .aseprite and the expected pixels are known exactly."""
     patterns = []
     for tile in result.tiles[:22]:

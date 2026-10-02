@@ -9,6 +9,7 @@ import pytest
 from golf.core import rom_utils
 from golf.core.patches import (
     PATCH_SPECS,
+    CompositePatch,
     QrCredentials,
     Recipe,
     RecipeError,
@@ -43,6 +44,8 @@ class TestRegistry:
             "course_theme": {"music": 2},
             "menu_trim": {"words": "ABCD EFGH IJKL"},
             "mercy_tap_in": {"mercy_point": 9},
+            "peach_dress": {"color": 0x16},
+            "signpost_color": {"color": 0x12},
             "seeded_wind": {"seed": "x"},
             "qr_credentials": {"credentials": str(credentials_file)},
             "music_import": {"dump": "data/music/music_jp_courses.json"},
@@ -75,6 +78,25 @@ class TestRegistry:
         assert "clubs (list of string or null)" in describe_params(
             PATCH_SPECS["sram_defaults"]
         )
+
+    def test_extended_sram_defaults_recipe_fills_the_table_through_sram_defaults(self):
+        (built,) = Recipe(
+            [
+                parse_step_arg(
+                    "sram_defaults:bgm=false,swing=off,putt=fast,spin=back1", ROOT
+                )
+            ]
+        ).build_steps(b"")
+        assert built.patch.name == "sram_defaults"
+        assert built.patch.requires[0].name == "extended_sram_defaults"
+        assert isinstance(built.patch, CompositePatch)
+        assert built.patch.patches[-1].patched == b"\x00\xff\x02\x03"
+
+    def test_partial_extended_sram_defaults_recipe_is_refused(self):
+        with pytest.raises(
+            RecipeError, match="swing, putt and spin must be supplied together"
+        ):
+            Recipe([parse_step_arg("sram_defaults:spin=back1", ROOT)]).build_steps(b"")
 
 
 class TestParams:

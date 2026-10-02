@@ -10,14 +10,14 @@ each handler draws one `WriteNametableTiles` descriptor. Three writes:
 1. The US and UK entries of the jump table are repointed at the Japan handler
    ($AFC2), so every slot draws the same name. The name is only true when every
    slot plays the same course, which is why the patch requires `course_mirrors`.
-2. The Japan descriptor at $AFC8 is rewritten in place, centred on the row the
-   way vanilla centres its own names. With the US and UK handlers unreachable,
+2. The Japan descriptor at $AFC8 is rewritten in place, centered on the row the
+   way vanilla centers its own names. With the US and UK handlers unreachable,
    it may run past its vanilla 16 bytes into theirs ($AFD8-$AFFD).
 3. The course-name row is red only where the attribute table says so. The
    whole top attribute row, $B9F0-$B9F7, sits inside one literal in the blank
    card's compressed nametable stream, so all eight bytes are rebuilt in place
    with palette 3 under every column the name uses. The frame tiles the wider
-   band also covers use only colours 0 and 3, which are the same in every
+   band also covers use only colors 0 and 3, which are the same in every
    palette. The 36-hole match play tournament card has its own attributes,
    which already cover columns 2-29.
 
@@ -215,12 +215,12 @@ def _one_row_descriptor(dest: int, text: str) -> bytes:
 
 
 def descriptor_bytes(text: str) -> bytes:
-    """A one-row `WriteNametableTiles` descriptor drawing the name, centred on row 3."""
+    """A one-row `WriteNametableTiles` descriptor drawing the name, centered on row 3."""
     return _one_row_descriptor(NAME_ROW_PPU + first_column(text), text)
 
 
 def title_descriptor_bytes(text: str) -> bytes:
-    """A one-row `WriteNametableTiles` descriptor drawing the title, centred on row 4."""
+    """A one-row `WriteNametableTiles` descriptor drawing the title, centered on row 4."""
     return _one_row_descriptor(TITLE_ROW_PPU + title_first_column(text), text)
 
 
@@ -228,7 +228,7 @@ def attribute_bytes(text: str) -> bytes:
     """
     Attribute row 0, one byte per four columns, with palette 3 under the text.
 
-    Bits 4-5 of each byte colour its lower-left 2x2 tiles, bits 6-7 its
+    Bits 4-5 of each byte color its lower-left 2x2 tiles, bits 6-7 its
     lower-right; the lower half is tile row 3. The upper half belongs to the
     row above, and keeps its vanilla value.
     """
@@ -269,7 +269,7 @@ def scorecard_course_name_patches(
         ),
         BytePatch(
             name="scorecard_course_name_attributes",
-            description="Colour the course-name row red under the new name",
+            description="Color the course-name row red under the new name",
             prg_offset=_prg(ATTRIBUTES_ADDR),
             original=_VANILLA_ATTRIBUTES,
             patched=attribute_bytes(text),

@@ -4,6 +4,12 @@ import pytest
 
 from golf.core import rom_utils
 from golf.core.patches import Club, sram_defaults_patch, sram_defaults_patches
+from golf.core.patches.extended_sram_defaults import (
+    EXTENDED_SRAM_DEFAULTS_INSTALLED,
+    TABLE_OFFSET,
+    BallSpin,
+    SwingSpeed,
+)
 from golf.core.patches.sram_defaults import (
     VANILLA_CLUBS,
     VANILLA_MAGIC,
@@ -168,6 +174,27 @@ class TestPatch:
             b"\x10",
             b"\xd0",
         )
+
+    def test_extended_options_write_one_table_without_the_legacy_bgm_edit(self):
+        patch = sram_defaults_patch(
+            bgm=False,
+            swing=SwingSpeed.FAST,
+            putt=SwingSpeed.OFF,
+            spin=BallSpin.BACK1,
+        )
+        assert patch.requires == [EXTENDED_SRAM_DEFAULTS_INSTALLED]
+        (table,) = patch.patches
+        assert (table.prg_offset, table.patched) == (
+            TABLE_OFFSET,
+            b"\x00\x02\xff\x03",
+        )
+
+    @pytest.mark.parametrize(
+        "choices", [{"swing": SwingSpeed.OFF}, {"spin": BallSpin.OFF}]
+    )
+    def test_extended_options_must_be_supplied_together(self, choices):
+        with pytest.raises(ValueError, match="supplied together"):
+            sram_defaults_patch(**choices)
 
     def test_magic_rewrites_the_check_and_the_writes(self):
         leaves = sram_defaults_patches(sram_magic=0x1234)

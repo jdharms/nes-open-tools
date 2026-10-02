@@ -1,0 +1,384 @@
+{
+  "source_commit": "6e2a59d5b5cb6fff9112f3783452155ac385f18f",
+  "base_rom_sha1": "53b47f2b68c353afbc822baee0a9172eb16e38af",
+  "unfinished_ips_sha256": "8e66347a4dafe1fb2cd00c49fa76836e8e46c78483f23b29691e34e92309e019",
+  "source_hole": "nes_japan/14",
+  "source_hole_compressed_bytes": 504,
+  "manifest": {
+    "schema": 2,
+    "generator_version": 1,
+    "build_version": 4,
+    "finish_abi_version": 2,
+    "catalog_version": 1,
+    "curation_stamp": "18f8c57822440db029fc4715ee6226e8e7dc1aeac739956c9b4196f17d84d5a3",
+    "settings": {
+      "prng_seed": "frozen-build4-qr",
+      "par": 72,
+      "sources": [
+        "nes_open_us"
+      ],
+      "exclude_tags": [],
+      "allow_family_repeats": false,
+      "music": "nes_us",
+      "mercy_point": null,
+      "clubs": {
+        "max": 14,
+        "banned": [],
+        "required_bag": null
+      }
+    },
+    "course": {
+      "holes": [
+        {
+          "id": "build4/copy_01",
+          "par": 4,
+          "transforms": [],
+          "wind_seed": 0
+        },
+        {
+          "id": "build4/copy_02",
+          "par": 4,
+          "transforms": [],
+          "wind_seed": 0
+        },
+        {
+          "id": "build4/copy_03",
+          "par": 4,
+          "transforms": [],
+          "wind_seed": 0
+        },
+        {
+          "id": "build4/copy_04",
+          "par": 4,
+          "transforms": [],
+          "wind_seed": 0
+        },
+        {
+          "id": "build4/copy_05",
+          "par": 4,
+          "transforms": [],
+          "wind_seed": 0
+        },
+        {
+          "id": "build4/copy_06",
+          "par": 4,
+          "transforms": [],
+          "wind_seed": 0
+        },
+        {
+          "id": "build4/copy_07",
+          "par": 4,
+          "transforms": [],
+          "wind_seed": 0
+        },
+        {
+          "id": "build4/copy_08",
+          "par": 4,
+          "transforms": [],
+          "wind_seed": 0
+        },
+        {
+          "id": "build4/copy_09",
+          "par": 4,
+          "transforms": [],
+          "wind_seed": 0
+        },
+        {
+          "id": "build4/copy_10",
+          "par": 4,
+          "transforms": [],
+          "wind_seed": 0
+        },
+        {
+          "id": "build4/copy_11",
+          "par": 4,
+          "transforms": [],
+          "wind_seed": 0
+        },
+        {
+          "id": "build4/copy_12",
+          "par": 4,
+          "transforms": [],
+          "wind_seed": 0
+        },
+        {
+          "id": "build4/copy_13",
+          "par": 4,
+          "transforms": [],
+          "wind_seed": 0
+        },
+        {
+          "id": "build4/copy_14",
+          "par": 4,
+          "transforms": [],
+          "wind_seed": 0
+        },
+        {
+          "id": "build4/copy_15",
+          "par": 4,
+          "transforms": [],
+          "wind_seed": 0
+        },
+        {
+          "id": "build4/copy_16",
+          "par": 4,
+          "transforms": [],
+          "wind_seed": 0
+        },
+        {
+          "id": "build4/copy_17",
+          "par": 4,
+          "transforms": [],
+          "wind_seed": 0
+        },
+        {
+          "id": "build4/copy_18",
+          "par": 4,
+          "transforms": [],
+          "wind_seed": 0
+        }
+      ],
+      "music": "nes_us",
+      "mercy_point": null,
+      "clubs": {
+        "max": 14,
+        "banned": [],
+        "required_bag": null
+      },
+      "magic_words": [
+        "CUPS",
+        "WEDGE",
+        "TOAD"
+      ],
+      "sram_magic": 56784
+    }
+  },
+  "catalog": {
+    "version": 1,
+    "holes": {
+      "build4/copy_01": {
+        "source": {
+          "rom": "nes_open_us",
+          "course": "japan",
+          "hole": 14
+        },
+        "content_hash": "cbcf9219622c0c9d8071350063f14f007ec2a2751964e43a02541b0a8759ff18",
+        "par": 4,
+        "distance": 464,
+        "author": "Nintendo"
+      },
+      "build4/copy_02": {
+        "source": {
+          "rom": "nes_open_us",
+          "course": "japan",
+          "hole": 14
+        },
+        "content_hash": "cbcf9219622c0c9d8071350063f14f007ec2a2751964e43a02541b0a8759ff18",
+        "par": 4,
+        "distance": 464,
+        "author": "Nintendo"
+      },
+      "build4/copy_03": {
+        "source": {
+          "rom": "nes_open_us",
+          "course": "japan",
+          "hole": 14
+        },
+        "content_hash": "cbcf9219622c0c9d8071350063f14f007ec2a2751964e43a02541b0a8759ff18",
+        "par": 4,
+        "distance": 464,
+        "author": "Nintendo"
+      },
+      "build4/copy_04": {
+        "source": {
+          "rom": "nes_open_us",
+          "course": "japan",
+          "hole": 14
+        },
+        "content_hash": "cbcf9219622c0c9d8071350063f14f007ec2a2751964e43a02541b0a8759ff18",
+        "par": 4,
+        "distance": 464,
+        "author": "Nintendo"
+      },
+      "build4/copy_05": {
+        "source": {
+          "rom": "nes_open_us",
+          "course": "japan",
+          "hole": 14
+        },
+        "content_hash": "cbcf9219622c0c9d8071350063f14f007ec2a2751964e43a02541b0a8759ff18",
+        "par": 4,
+        "distance": 464,
+        "author": "Nintendo"
+      },
+      "build4/copy_06": {
+        "source": {
+          "rom": "nes_open_us",
+          "course": "japan",
+          "hole": 14
+        },
+        "content_hash": "cbcf9219622c0c9d8071350063f14f007ec2a2751964e43a02541b0a8759ff18",
+        "par": 4,
+        "distance": 464,
+        "author": "Nintendo"
+      },
+      "build4/copy_07": {
+        "source": {
+          "rom": "nes_open_us",
+          "course": "japan",
+          "hole": 14
+        },
+        "content_hash": "cbcf9219622c0c9d8071350063f14f007ec2a2751964e43a02541b0a8759ff18",
+        "par": 4,
+        "distance": 464,
+        "author": "Nintendo"
+      },
+      "build4/copy_08": {
+        "source": {
+          "rom": "nes_open_us",
+          "course": "japan",
+          "hole": 14
+        },
+        "content_hash": "cbcf9219622c0c9d8071350063f14f007ec2a2751964e43a02541b0a8759ff18",
+        "par": 4,
+        "distance": 464,
+        "author": "Nintendo"
+      },
+      "build4/copy_09": {
+        "source": {
+          "rom": "nes_open_us",
+          "course": "japan",
+          "hole": 14
+        },
+        "content_hash": "cbcf9219622c0c9d8071350063f14f007ec2a2751964e43a02541b0a8759ff18",
+        "par": 4,
+        "distance": 464,
+        "author": "Nintendo"
+      },
+      "build4/copy_10": {
+        "source": {
+          "rom": "nes_open_us",
+          "course": "japan",
+          "hole": 14
+        },
+        "content_hash": "cbcf9219622c0c9d8071350063f14f007ec2a2751964e43a02541b0a8759ff18",
+        "par": 4,
+        "distance": 464,
+        "author": "Nintendo"
+      },
+      "build4/copy_11": {
+        "source": {
+          "rom": "nes_open_us",
+          "course": "japan",
+          "hole": 14
+        },
+        "content_hash": "cbcf9219622c0c9d8071350063f14f007ec2a2751964e43a02541b0a8759ff18",
+        "par": 4,
+        "distance": 464,
+        "author": "Nintendo"
+      },
+      "build4/copy_12": {
+        "source": {
+          "rom": "nes_open_us",
+          "course": "japan",
+          "hole": 14
+        },
+        "content_hash": "cbcf9219622c0c9d8071350063f14f007ec2a2751964e43a02541b0a8759ff18",
+        "par": 4,
+        "distance": 464,
+        "author": "Nintendo"
+      },
+      "build4/copy_13": {
+        "source": {
+          "rom": "nes_open_us",
+          "course": "japan",
+          "hole": 14
+        },
+        "content_hash": "cbcf9219622c0c9d8071350063f14f007ec2a2751964e43a02541b0a8759ff18",
+        "par": 4,
+        "distance": 464,
+        "author": "Nintendo"
+      },
+      "build4/copy_14": {
+        "source": {
+          "rom": "nes_open_us",
+          "course": "japan",
+          "hole": 14
+        },
+        "content_hash": "cbcf9219622c0c9d8071350063f14f007ec2a2751964e43a02541b0a8759ff18",
+        "par": 4,
+        "distance": 464,
+        "author": "Nintendo"
+      },
+      "build4/copy_15": {
+        "source": {
+          "rom": "nes_open_us",
+          "course": "japan",
+          "hole": 14
+        },
+        "content_hash": "cbcf9219622c0c9d8071350063f14f007ec2a2751964e43a02541b0a8759ff18",
+        "par": 4,
+        "distance": 464,
+        "author": "Nintendo"
+      },
+      "build4/copy_16": {
+        "source": {
+          "rom": "nes_open_us",
+          "course": "japan",
+          "hole": 14
+        },
+        "content_hash": "cbcf9219622c0c9d8071350063f14f007ec2a2751964e43a02541b0a8759ff18",
+        "par": 4,
+        "distance": 464,
+        "author": "Nintendo"
+      },
+      "build4/copy_17": {
+        "source": {
+          "rom": "nes_open_us",
+          "course": "japan",
+          "hole": 14
+        },
+        "content_hash": "cbcf9219622c0c9d8071350063f14f007ec2a2751964e43a02541b0a8759ff18",
+        "par": 4,
+        "distance": 464,
+        "author": "Nintendo"
+      },
+      "build4/copy_18": {
+        "source": {
+          "rom": "nes_open_us",
+          "course": "japan",
+          "hole": 14
+        },
+        "content_hash": "cbcf9219622c0c9d8071350063f14f007ec2a2751964e43a02541b0a8759ff18",
+        "par": 4,
+        "distance": 464,
+        "author": "Nintendo"
+      }
+    }
+  },
+  "qr": {
+    "bank": 2,
+    "bank_size": 16384,
+    "bank_origin": 32768,
+    "header_size": 16,
+    "symbols": {
+      "QrBuildPayload": 36891,
+      "QrBuildUrl": 37046
+    },
+    "payload_address": 30176,
+    "payload_length": 36,
+    "url_address": 30224,
+    "url_length": 74,
+    "url_prefix": "https://nesopengolf.com/s/",
+    "strokes_address": 308,
+    "strokes_stride": 36,
+    "putts_address": 380,
+    "putts_stride": 18,
+    "game_progress_address": 149,
+    "player_count_address": 154,
+    "game_mode_address": 256,
+    "splice_prg_offset": 214318,
+    "enabled_splice": "bddc",
+    "disabled_splice": "ba85"
+  }
+}

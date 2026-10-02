@@ -1,9 +1,11 @@
-"""The generate form: submissions into settings, and the refusals it names."""
+"""The site's forms: submissions into settings and options, the refusals they name, and saved settings."""
 
 import pytest
 from starlette.datastructures import FormData
 
+from golf.core.patches.extended_sram_defaults import BallSpin, SwingSpeed
 from golf.core.patches.sram_defaults import VANILLA_CLUBS, VANILLA_NAME, Club
+from golf.randomizer.build import PlayerOptions
 from golf.randomizer.catalog import JP_ROM, US_ROM
 from golf.randomizer.manifest import DEFAULT_MERCY_POINT, ClubRules, Settings
 from golf.randomizer.roms import vanilla_rom
@@ -22,9 +24,12 @@ from server.forms import (
     DownloadState,
     FormError,
     FormState,
+    SavedSettings,
     check_rom_hashes,
+    fit,
     player_options_from_state,
     settings_from_state,
+    to_save,
 )
 
 
@@ -297,3 +302,209 @@ def test_a_missing_or_wrong_rom_hash_is_refused_naming_the_roms(hashes, roms):
 )
 def test_club_rules_count_as_set_only_away_from_the_defaults(changes, expected):
     assert state(**changes).has_club_rules() is expected
+
+
+# -- Saved settings ---------------------------------------------------------------------------
+
+VANILLA_LABELS = {club.label for club in VANILLA_CLUBS} - {"PT"}
+SAVED = SavedSettings(
+    player_name="LUIGI",
+    clubs=frozenset({Club.W1, Club.W3, Club.I5, Club.PW, Club.SW, Club.PT}),
+    bgm=False,
+    swing=SwingSpeed.FAST,
+    putt=SwingSpeed.SLOW,
+    spin=BallSpin.BACK1,
+)
+
+
+def test_saved_settings_round_trip_through_json():
+    assert SAVED.to_json() == {
+        "v": 1,
+        "name": "LUIGI",
+        "clubs": ["1W", "3W", "5I", "PW", "SW", "PT"],
+        "bgm": False,
+        "swing": "fast",
+        "putt": "slow",
+        "spin": "back1",
+    }
+    assert SavedSettings.from_json(SAVED.to_json()) == SAVED
+
+
+@pytest.mark.parametrize("data", [None, "LUIGI", [], 7, {}, {"v": 99}])
+def test_a_record_that_is_not_an_object_or_holds_nothing_reads_as_vanilla(data):
+    assert SavedSettings.from_json(data) == SavedSettings()
+
+
+@pytest.mark.parametrize(
+    "field, value",
+    [
+        ("name", ""),
+        ("name", "   "),
+        ("name", "ABCDEFGHIJK"),
+        ("name", "LU!GI"),
+        ("name", 7),
+        ("clubs", ["1W", "9W"]),
+        ("clubs", "1W"),
+        ("clubs", ["1W", 2]),
+        ("clubs", [club.label for club in Club if club != Club.PT] + ["PT"]),
+        ("bgm", "false"),
+        ("bgm", 0),
+        ("swing", "warp"),
+        ("swing", 2),
+        ("putt", "back1"),
+        ("spin", "fast"),
+        ("spin", None),
+    ],
+)
+def test_an_invalid_field_reads_as_vanilla_and_keeps_the_rest(field, value):
+    data = SAVED.to_json() | {field: value}
+    loaded = SavedSettings.from_json(data)
+    attr = "player_name" if field == "name" else field
+    assert getattr(loaded, attr) == getattr(SavedSettings(), attr)
+    for other in ("player_name", "clubs", "bgm", "swing", "putt", "spin"):
+        if other != attr:
+            assert getattr(loaded, other) == getattr(SAVED, other)
+
+
+def test_unknown_fields_are_ignored_and_names_are_upper_cased():
+    loaded = SavedSettings.from_json(
+        SAVED.to_json() | {"name": "dr. mario", "hat": "red", "clubs": ["1w", "pw"]}
+    )
+    assert loaded.player_name == "DR. MARIO"
+    assert loaded.clubs == {Club.W1, Club.PW, Club.PT}
+
+
+def test_fitting_under_default_rules_starts_with_the_saved_settings():
+    fitted = fit(SAVED, ClubRules(), abi=2)
+    assert fitted.state == DownloadState(
+        player_name="LUIGI",
+        clubs={"1W", "3W", "5I", "PW", "SW"},
+        bgm=False,
+        swing="fast",
+        putt="slow",
+        spin="back1",
+    )
+    assert fitted.removed == frozenset()
+    assert not fitted.over_max
+
+
+def test_a_required_bag_replaces_the_saved_bag():
+    rules = ClubRules(required_bag=frozenset({Club.W2, Club.I7}))
+    fitted = fit(SAVED, rules, abi=2)
+    assert fitted.state.clubs == {"2W", "7I"}
+    assert fitted.removed == frozenset()
+    assert not fitted.over_max
+
+
+def test_banned_clubs_are_removed_and_their_slots_left_empty():
+    rules = ClubRules(banned=frozenset({Club.W1, Club.SW, Club.I9}))
+    fitted = fit(SAVED, rules, abi=2)
+    assert fitted.state.clubs == {"3W", "5I", "PW"}
+    assert fitted.removed == {"1W", "SW"}
+    assert not fitted.over_max
+
+
+def test_a_bag_over_the_max_is_flagged_not_trimmed():
+    fitted = fit(SAVED, ClubRules(max=5), abi=2)
+    assert fitted.state.clubs == {"1W", "3W", "5I", "PW", "SW"}
+    assert fitted.over_max
+    assert not fit(SAVED, ClubRules(max=6), abi=2).over_max
+
+
+def test_removing_banned_clubs_can_bring_a_bag_under_the_max():
+    rules = ClubRules(max=5, banned=frozenset({Club.SW}))
+    fitted = fit(SAVED, rules, abi=2)
+    assert fitted.removed == {"SW"}
+    assert not fitted.over_max
+
+
+def test_the_vanilla_default_is_flagged_under_a_small_max():
+    rules = ClubRules(max=10)
+    assert DownloadState.default(rules).clubs == VANILLA_LABELS
+    assert fit(SavedSettings(), rules, abi=2).over_max
+
+
+def test_an_abi_one_seed_starts_swing_putt_and_spin_off():
+    state = fit(SAVED, ClubRules(), abi=1).state
+    assert (state.swing, state.putt, state.spin) == ("off", "off", "off")
+    assert state.bgm is False
+    assert state.player_name == "LUIGI"
+
+
+def downloaded(**overrides) -> PlayerOptions:
+    choices = {
+        "player_name": "MARIO",
+        "clubs": frozenset({Club.W2, Club.PW}),
+        "bgm": True,
+        "swing": SwingSpeed.MEDIUM,
+        "putt": SwingSpeed.OFF,
+        "spin": BallSpin.NORMAL,
+    }
+    return PlayerOptions(**(choices | overrides))
+
+
+def test_a_download_under_default_rules_saves_every_setting():
+    saved = to_save(downloaded(), ClubRules(), abi=2, previous=SAVED)
+    assert saved == SavedSettings(
+        player_name="MARIO",
+        clubs=frozenset({Club.W2, Club.PW, Club.PT}),
+        bgm=True,
+        swing=SwingSpeed.MEDIUM,
+        putt=SwingSpeed.OFF,
+        spin=BallSpin.NORMAL,
+    )
+
+
+@pytest.mark.parametrize(
+    "rules",
+    [
+        ClubRules(max=13),
+        ClubRules(banned=frozenset({Club.SW})),
+        ClubRules(required_bag=frozenset({Club.W2, Club.PW})),
+    ],
+)
+def test_a_seed_with_club_rules_keeps_the_saved_bag(rules):
+    saved = to_save(downloaded(), rules, abi=2, previous=SAVED)
+    assert saved.clubs == SAVED.clubs
+    assert saved.player_name == "MARIO"
+    assert saved.swing == SwingSpeed.MEDIUM
+
+
+def test_an_abi_one_seed_keeps_the_saved_swing_putt_and_spin():
+    saved = to_save(
+        downloaded(swing=SwingSpeed.OFF, spin=BallSpin.OFF),
+        ClubRules(),
+        abi=1,
+        previous=SAVED,
+    )
+    assert (saved.swing, saved.putt, saved.spin) == (
+        SAVED.swing,
+        SAVED.putt,
+        SAVED.spin,
+    )
+    assert saved.bgm is True
+    assert saved.clubs == {Club.W2, Club.PW, Club.PT}
+
+
+def test_saved_settings_round_trip_through_the_cookie():
+    value = SAVED.to_cookie()
+    assert set(value) <= set(
+        "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_"
+    )
+    assert SavedSettings.from_cookie(value) == SAVED
+
+
+@pytest.mark.parametrize("value", [None, "", "garbage", "!!!", "e30", "bm90IGpzb24"])
+def test_a_cookie_that_does_not_decode_reads_as_vanilla(value):
+    assert SavedSettings.from_cookie(value) == SavedSettings()
+
+
+def test_an_entry_supplies_name_and_clubs_and_leaves_the_rest():
+    with_entry = SAVED.with_entry("TOAD", ("2W", "PW", "PT"))
+    assert with_entry.player_name == "TOAD"
+    assert with_entry.clubs == {Club.W2, Club.PW, Club.PT}
+    assert (with_entry.bgm, with_entry.swing, with_entry.spin) == (
+        SAVED.bgm,
+        SAVED.swing,
+        SAVED.spin,
+    )

@@ -22,9 +22,10 @@ than reimplementing a scan in a scratch script.
 uv run golf-rom-peek <rom.nes> [--labels <file.mlb>] <subcommand> ...
 ```
 
-Always pass `--labels "NES Open Tournament Golf (USA).mlb"`. A sidecar
-(`...sidecar.mlb`) next to it loads automatically and shadows the base file, so
-output is annotated with everything the project has named so far. `--labels`
+Always pass `--labels "NES Open Tournament Golf (USA).mlb"`, so output is
+annotated with everything the project has named so far. A sidecar
+(`...sidecar.mlb`) next to it, if there is one, loads automatically and shadows
+the label file. `--labels`
 and `--sidecar` are top-level options and must come **before** the subcommand.
 
 ## Address grammar
@@ -51,14 +52,13 @@ reading anything.
 | `label <addr> [--type ...] [--bank N]` | Look up the label at an address. |
 | `find-label <substring>` | Search labels by name. |
 
-Use `golf-labels` (separate tool) to *add* labels; it writes to the sidecar by
-default. See the `nes-open-golf-label-conventions` skill for naming.
+Use `golf-labels` (separate tool) to *add* labels; it writes to the label file. See the `nes-open-golf-label-conventions` skill for naming.
 
 ## Four ways this ROM lies to a naive reading
 
 These are the reason the tool exists. Each has burned a previous session.
 
-### 1. Inline arguments desynchronise a linear disassembly
+### 1. Inline arguments desynchronize a linear disassembly
 
 Several routines read bytes that follow their own `JSR` and then skip past
 them. A disassembler that doesn't know this decodes the arguments as opcodes
@@ -85,7 +85,7 @@ instructions.
 added to it.** Both do `TSX` then read `$0103,X`, skipping their own return address — so
 the inline word belongs to whoever called *their* caller. A `JSR $D8A2` consumes nothing
 itself; it is the enclosing routine (`$D80A`, `$D41A`, and a dozen others) that carries
-the inline bytes. Listing `$D8A2` here desynchronises every direct call site by two
+the inline bytes. Listing `$D8A2` here desynchronizes every direct call site by two
 bytes. Check for this `$0103,X` pattern before adding any new entry.
 
 ```
@@ -97,16 +97,16 @@ If you find another such routine, add it to `INLINE_ARG_ROUTINES` in
 `golf/core/rom_analysis.py` — confirm first by disassembling it and checking
 that it advances its own return address past the arguments.
 
-`--no-inline-args` restores the raw behaviour if you need to see the bytes as
+`--no-inline-args` restores the raw behavior if you need to see the bytes as
 the CPU would misread them.
 
 ### 2. Data decodes as convincing code
 
 Range labels in the `.mlb` (`GolferScreenXTable:$80FA-$8109`) mark tables;
-single-address labels mark code. `disasm` renders labelled ranges as `.db`
+single-address labels mark code. `disasm` renders labeled ranges as `.db`
 rows instead of decoding them. `--no-data-ranges` opts out.
 
-This only works for ranges someone has already labelled. Unlabelled tables
+This only works for ranges someone has already labeled. Unlabeled tables
 still decode as nonsense — if a listing suddenly fills with `BRK`, `???`, and
 implausible branches, suspect data and go check the bytes with `read`. When
 you confirm a table, label it as a range so the next agent doesn't re-derive
@@ -169,7 +169,7 @@ computable without decoding.
 
 Stops at: a terminator (`RTS`/`RTI`/`JMP`) once no forward branch is still
 pending; a non-returning call (`JSR DispatchInlineJumpTable`); or the start of
-a labelled data range. Always prints why it stopped.
+a labeled data range. Always prints why it stopped.
 
 `--max N` (default 200) caps the output so a wrong guess about where code
 lives can't dump a whole bank. **If the cap is hit the output says
@@ -185,10 +185,10 @@ uv run golf-rom-peek rom.nes --labels notes.mlb disasm '$AB16' --bank 13 --routi
 Every hit is checked two ways and reported in one of three states:
 
 - **confirmed** — starts on a real instruction boundary (verified by decoding
-  forward from the nearest code label) and isn't inside a labelled data range.
+  forward from the nearest code label) and isn't inside a labeled data range.
 - **UNVERIFIED** — no code label within 192 bytes to anchor an alignment check
   from. Reported, but you must read it yourself.
-- **discarded** — lands mid-instruction, or sits inside a labelled data range.
+- **discarded** — lands mid-instruction, or sits inside a labeled data range.
   Byte coincidences, listed separately so you can see what was thrown away.
 
 The mid-instruction case is common and convincing: `$88B3` looks exactly like
@@ -207,7 +207,7 @@ see:
 
 On an empty result the tool says all of this and escalates to a raw
 pointer-pair scan. **For pointers the usual reading inverts**: a byte pair
-inside a labelled table is a *likely* real indirect reference, not a
+inside a labeled table is a *likely* real indirect reference, not a
 coincidence.
 
 So: **static analysis proposes, the emulator disposes.** For anything
@@ -258,6 +258,6 @@ range labels, and confirm with a breakpoint before writing anything there.
 - `--routine`'s terminator heuristic is wrong for jump tables, deliberate
   fall-through into an adjacent routine, and data interleaved mid-routine.
   `--count` and plain `read` remain the escape hatches.
-- The alignment check needs a nearby code label. In unlabelled regions it
-  returns "unknown", which is why labelling as you go makes the tool better
+- The alignment check needs a nearby code label. In unlabeled regions it
+  returns "unknown", which is why labeling as you go makes the tool better
   for everyone after you.

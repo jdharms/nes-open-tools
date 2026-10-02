@@ -13,7 +13,7 @@ supersedes = []
 ## Context
 
 `golf-difficulty` solves a hole for its expected strokes from the tee, over the exact
-port of the game's ball physics (ADR 0007) and a model of the player's errors
+port of the game's ball physics (ADR 0011) and a model of the player's errors
 (`docs/hole_difficulty.md`). What the randomizer wanted from it was where the 90 Mario
 Open holes sit against par next to the 54 NES Open holes. Every hole is now solved
 once, at skill 3, from the first pin, with no wind: two to three nights of a 12-core

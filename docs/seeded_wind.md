@@ -146,5 +146,55 @@ Forecast columns: `pin` is the 0-based flag index; `dir` is `WindDirectionAnchor
 ## Constraints
 
 - Requires `COURSE_MIRRORS_PATCH`. Without it the UK flag X offsets are live and would get clobbered, so the patch refuses to apply.
-- Fixed bank: net zero bytes. Bank 13: 16 bytes at `$BFAF-$BFBE` plus 10 NOPs at `$82C0`. Free bank 13 padding after this patch: `$BFBF-$BFF2` (52 bytes).
+- Fixed bank: net zero bytes. Bank 13: 16 bytes at `$BFAF-$BFBE` plus 10 NOPs at `$82C0`. The 52 bytes of bank 13 padding after it, `$BFBF-$BFF2`, are where `practice_swing` puts its 48 bytes (`docs/practice_swing.md`).
 - Practice mode manual wind and replay playback are untouched. The hole-in-one auto replay should still reproduce, since playback restores the slots and re-runs `InitHole`, but this has not been exercised.
+- `derive_hole_seeds` can return `$5555` or `$AAAA`, the two states off the LFSR's main cycle (`docs/wind.md`). They are valid seeds, but such a hole's wind alternates between two speeds forever.
+
+## Ideas: wind profiles and manifest-specified anchors
+
+Nothing in this section is implemented. The wind behavior it builds on is in `docs/wind.md`.
+
+### Profiles
+
+A seed could shape its wind instead of taking the vanilla distribution:
+
+- **Out and in**: the front nine's anchors mostly headwinds and the back nine's mostly tailwinds, or the reverse, chosen per seed. Every vanilla hole plays up the screen, so headwinds center on `$80` and tailwinds on `$00` regardless of the hole.
+- **Gentle, moderate, windy days**: anchors drawn from a band. Bands should target the speeds players see, not anchor values: anchors 7-8 are the windiest steady winds, while 9 and 10 play as gusty moderate winds.
+- **Gustiness**: anchor 10 (moderate with gusts), 8 (strong with lulls) and 9 (unsettled) are vanilla's own variable winds. The seed also fixes the jitter sequence, so seeds can be picked for steady or jumpy early swings.
+- **Par-aware**: tailwinds on par 5s to make them reachable, or headwinds for a harder round.
+- **Changing weather**: speed rising over the round, or direction turning a step every hole or two.
+- **Crosswind day**: only possible honestly on correct directions, or with the crosswind bug fixed.
+
+A profile that avoids the crosswind bug without patching it restricts anchors to `$00`-`$30` and `$80`-`$B0`. That loses winds toward the upper left and lower right, and hides the bug rather than fixing it. Whether to fix, avoid or leave the bug is undecided.
+
+### Option A: choose seeds
+
+The manifest already carries a 16-bit `wind_seed` per hole, and every hole-start outcome is a pure function of it. The generator could compute `predict_hole` for all 65,536 seeds once, then for each hole pick a target (pin, direction, speed) and any seed that produces it. This needs no ROM or manifest change.
+
+The limit is the coupling in `docs/wind.md`: only 64 (direction, speed) pairs are reachable. A straight headwind or tailwind can only have speed anchor 2, 4, 7 or 9, and anchor 10 exists only on broken crosswind directions. Each (pin, direction, speed) combination has 256 seeds to choose among for the jitter sequence. The generator should skip `$5555` and `$AAAA`.
+
+### Option B: anchors from the manifest
+
+Replace the two anchor draws at `$DBA0`-`$DBB5` (22 bytes) with a read from an 18-byte per-hole table. One byte per hole fits both anchors, direction in the high nibble and speed in the low nibble, the format they already use. The read and the two masked stores take about 18 bytes. `$E00B`-`$E02E`, the part of the course-3 `GreenFlagXTable` block after the seed table, is dead under `COURSE_MIRRORS_PATCH` and has room for it.
+
+The manifest would gain a direction and speed per hole (a schema change with `build_version` and `generator_version` bumps), and the seed would only drive the pin and the jitter. Any of the 176 pairs becomes reachable. `predict_hole` would take the anchors as inputs, and `seed_holes` would store them from the manifest.
+
+### Pin from the manifest
+
+The pin could leave the seed the same way. The only confirmed reader of the flag offset tables is `InitHole`, at `$DB21` and `$DB40` (other `find-refs` hits are in data and unconfirmed). The manifest would gain a pin per hole, `CoursePatch` would write that pin's offsets into slot 0 of the hole's four, and `AND #$03` at `$DB18` would become `AND #$00` (one byte, PRG `0x3DB19`).
+
+Keeping the `JSR LSFR_RNG_ALGO` at `$DB15` leaves the RNG stream unchanged, so a seed gives the same wind with or without the change. The byte belongs with `CoursePatch` or a patch of its own, not with this one. Under Option A it frees seed choice from the pin, giving 1,024 seeds per (direction, speed) pair; under Option B the seed is left driving only the jitter.
+
+Pins could then be chosen on purpose, for easy or hard pin days or to balance against hole difficulty. Seeds already stored on the site are unaffected: it serves their original manifest and unfinished IPS and never rebuilds them.
+
+### Showing wind on the seed page
+
+The site does not display wind yet. A display rule for each hole's wind:
+
+- **Speed**: the anchor's most common speed, which is the anchor for 0-9 and 5 for anchor 10. For every anchor exactly half the hole's swings play at that speed.
+- **Variability**: a marker (a class or data attribute) on anchors 8, 9 and 10, the rows the wrap spreads out. Every other anchor stays within -1 to +2 of the speed shown.
+- **Direction**: the direction the game displays, not the corrected physical one, so the page agrees with the in-game arrow. If the crosswind bug is left in, the broken directions are the place for a marker, not a corrected arrow.
+- **Anchor 0**: shown as calm with no arrow, since half its swings are calm and one in eight blows the other way.
+- **Storage**: `seed_holes` keeps the raw anchors, and the display values are derived at render time, so stats queries see the real values and the rule can change without a migration.
+
+Every player's first swing on a hole gets the same wind, so the page could instead show the exact tee-shot wind. That describes one swing rather than the hole, and is a possible addition rather than a replacement.

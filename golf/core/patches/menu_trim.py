@@ -15,7 +15,9 @@ What this patch does:
   * Menu $02 offers a single option, RANDOM COURSE, which selects course 0
     (vanilla JAPAN COURSE).
   * Menu $15 (club house) keeps only REGISTER NAME, CHOOSE CLUBS, OPTIONS,
-    TRAINING and CLEAR SAVED DATA.
+    TRAINING and CLEAR SAVED DATA. With `choose_clubs=False` it drops CHOOSE
+    CLUBS as well, so the bag a new save starts with is the bag it keeps: a
+    seed with club rules is built this way (docs/planning/download_settings.md).
 
 Nothing is relocated. A text list is `count` followed by `count` 2-byte entry
 pointers, so shortening a list means writing a smaller count and rewriting the
@@ -36,7 +38,7 @@ slot, so words 1 and 2 always start at columns 4 and 11:
 
 Matching vanilla's span matters because `SetMenuEntryPalette` sets palette 1
 on every 2x2 attribute cell the entry covers. An entry starting at column 3
-would share a cell with the box border at column 2 and recolour it.
+would share a cell with the box border at column 2 and recolor it.
 
 The header list and its line 1 entry live in the 26 bytes freed by the removed
 MATCH,PLAY and TOURNAMENT entries:
@@ -72,7 +74,8 @@ Other wrinkles
 1. Each entry carries its own Y coordinate, so removing an entry from the
    middle of a list leaves a visual gap. The retained entries below a removed
    one move up: CLUB HOUSE from row $14 to $10; club house TRAINING from $12
-   to $0C and CLEAR SAVED DATA from $16 to $0E.
+   to $0C and CLEAR SAVED DATA from $16 to $0E. Without CHOOSE CLUBS,
+   OPTIONS moves from $0A to $08, TRAINING to $0A and CLEAR SAVED DATA to $0C.
 
 2. `ApplyPlayModeSelection` ($89A2), menu $00's choice handler, keys off the
    *selection index*: `sel < 2` sets `GolfGameMode = sel * 4`. CLUB HOUSE is
@@ -98,13 +101,30 @@ Byte edits, all in bank 12:
   $8B00  81 82 83 84 85            -> 81 82 83 87 89 club house destinations
   $8DD1  28 12                     -> 28 0C          TRAINING row
   $8DF1  28 16                     -> 28 0E          CLEAR SAVED DATA row
+
+and without CHOOSE CLUBS, in place of the last four:
+
+  $8D64  09 77 8D 87 8D ... F1 8D  -> 04 77 8D 96 8D D1 8D F1 8D  4 entries
+  $8B00  81 82 83 84               -> 81 83 87 89    club house destinations
+  $8D96  28 0A                     -> 28 08          OPTIONS row
+  $8DD1  28 12                     -> 28 0A          TRAINING row
+  $8DF1  28 16                     -> 28 0C          CLEAR SAVED DATA row
+
+Either way PLAYER STATS (code $84, bank 9 $B519) is out of the club house, and
+nothing else reaches it. `PLAYER_STATS_REMOVED` is a requirement for patches
+that reuse its code space.
 """
 
 import string
 from collections.abc import Sequence
+from typing import TYPE_CHECKING
 
+from .base import PatchError, ROMPatch
 from .byte_patch import BytePatch
 from .composite import CompositePatch
+
+if TYPE_CHECKING:
+    from golf.core.rom_writer import RomWriter
 
 # Bank 12 holds the whole title menu system.
 _BANK12_PRG_BASE = 12 * 0x4000
@@ -163,6 +183,19 @@ _HEADER_LIST_ORIGINAL = bytes(
         0x41,  # $8BC4 "TOURNA"...
     ]
 )
+
+#: Club house entries, and the destination code each exits with
+_CLUB_HOUSE_CODES = {
+    "REGISTER NAME": 0x81,
+    "CHOOSE CLUBS": 0x82,
+    "OPTIONS": 0x83,
+    "PLAYER STATS": 0x84,
+    "PRIZE MONEY": 0x85,
+    "TOURNAMENT ROSTER": 0x86,
+    "TRAINING": 0x87,
+    "HALL OF FAME HOLES": 0x88,
+    "CLEAR SAVED DATA": 0x89,
+}
 
 RANDOM_COURSE_TEXT = "RANDOM COURSE"
 _COURSE_OPTION_ADDR = 0x8C6C
@@ -234,12 +267,81 @@ def header_lines(words: str | Sequence[str] | None = None) -> tuple[str, str]:
     )
 
 
-def menu_trim_patches(words: str | Sequence[str] | None = None) -> list[BytePatch]:
+def _club_house_patches(choose_clubs: bool) -> list[BytePatch]:
+    """The club house's entry list, destinations and rows, with or without CHOOSE CLUBS."""
+    # entry pointers: REGISTER NAME, CHOOSE CLUBS, OPTIONS, then TRAINING and
+    # CLEAR SAVED DATA in the slots PLAYER STATS and PRIZE MONEY had
+    entries = [0x8D77, 0x8D87, 0x8D96, 0x8DD1, 0x8DF1]
+    codes = [0x81, 0x82, 0x83, 0x87, 0x89]
+    rows = {"options": 0x0A, "training": 0x0C, "clear_saved_data": 0x0E}
+    if not choose_clubs:
+        del entries[1], codes[1]
+        rows = {"options": 0x08, "training": 0x0A, "clear_saved_data": 0x0C}
+    names = ", ".join(name for name, code in _CLUB_HOUSE_CODES.items() if code in codes)
+    original_list = bytes(
+        [0x09, 0x77, 0x8D, 0x87, 0x8D, 0x96, 0x8D, 0xA0, 0x8D, 0xAF, 0x8D]
+    )
+    entry_list = bytes([len(entries)]) + b"".join(
+        addr.to_bytes(2, "little") for addr in entries
+    )
+    original_codes = bytes([0x81, 0x82, 0x83, 0x84, 0x85])
+    patches = [
+        BytePatch(
+            name="menu_trim_club_house_options",
+            description=f"Club house options: {len(entries)} entries ({names}) instead of 9",
+            prg_offset=_prg(0x8D64),
+            original=original_list[: len(entry_list)],
+            patched=entry_list,
+        ),
+        BytePatch(
+            name="menu_trim_club_house_destinations",
+            description=f"Club house destination codes for the {len(codes)} retained entries",
+            prg_offset=_prg(0x8B00),
+            original=original_codes[: len(codes)],
+            patched=bytes(codes),
+        ),
+    ]
+    if not choose_clubs:
+        patches.append(
+            BytePatch(
+                name="menu_trim_options_row",
+                description=f"Move OPTIONS up from row $0A to ${rows['options']:02X}",
+                prg_offset=_prg(0x8D96),
+                original=bytes([0x28, 0x0A]),
+                patched=bytes([0x28, rows["options"]]),
+            )
+        )
+    patches += [
+        BytePatch(
+            name="menu_trim_training_row",
+            description=f"Move TRAINING up from row $12 to ${rows['training']:02X}",
+            prg_offset=_prg(0x8DD1),
+            original=bytes([0x28, 0x12]),
+            patched=bytes([0x28, rows["training"]]),
+        ),
+        BytePatch(
+            name="menu_trim_clear_saved_data_row",
+            description=(
+                "Move CLEAR SAVED DATA up from row $16 to "
+                f"${rows['clear_saved_data']:02X}"
+            ),
+            prg_offset=_prg(0x8DF1),
+            original=bytes([0x28, 0x16]),
+            patched=bytes([0x28, rows["clear_saved_data"]]),
+        ),
+    ]
+    return patches
+
+
+def menu_trim_patches(
+    words: str | Sequence[str] | None = None, choose_clubs: bool = True
+) -> list[BytePatch]:
     """
     Build the menu trim patch set.
 
     Args:
         words: the header's three words; see normalize_words.
+        choose_clubs: false leaves CHOOSE CLUBS out of the club house.
 
     Returns:
         The patches in application order.
@@ -351,51 +453,51 @@ def menu_trim_patches(words: str | Sequence[str] | None = None) -> list[BytePatc
             original=bytes([0x01]),
             patched=bytes([0x00]),
         ),
-        BytePatch(
-            name="menu_trim_club_house_options",
-            description="Club house options: 5 entries (REGISTER NAME, CHOOSE CLUBS, OPTIONS, TRAINING, CLEAR SAVED DATA) instead of 9",
-            prg_offset=_prg(0x8D64),
-            original=bytes(
-                [0x09, 0x77, 0x8D, 0x87, 0x8D, 0x96, 0x8D, 0xA0, 0x8D, 0xAF, 0x8D]
-            ),
-            patched=bytes(
-                [0x05, 0x77, 0x8D, 0x87, 0x8D, 0x96, 0x8D, 0xD1, 0x8D, 0xF1, 0x8D]
-            ),
-        ),
-        BytePatch(
-            name="menu_trim_club_house_destinations",
-            description="Club house destination codes for the 5 retained entries",
-            prg_offset=_prg(0x8B00),
-            original=bytes([0x81, 0x82, 0x83, 0x84, 0x85]),
-            patched=bytes([0x81, 0x82, 0x83, 0x87, 0x89]),
-        ),
-        BytePatch(
-            name="menu_trim_training_row",
-            description="Move TRAINING up from row $12 to $0C",
-            prg_offset=_prg(0x8DD1),
-            original=bytes([0x28, 0x12]),
-            patched=bytes([0x28, 0x0C]),
-        ),
-        BytePatch(
-            name="menu_trim_clear_saved_data_row",
-            description="Move CLEAR SAVED DATA up from row $16 to $0E",
-            prg_offset=_prg(0x8DF1),
-            original=bytes([0x28, 0x16]),
-            patched=bytes([0x28, 0x0E]),
-        ),
+        *_club_house_patches(choose_clubs),
     ]
 
 
 def menu_trim_patch(
-    words: str | Sequence[str] | None = None,
+    words: str | Sequence[str] | None = None, choose_clubs: bool = True
 ) -> CompositePatch[BytePatch]:
     """Build the menu trim patch set as a single named CompositePatch."""
-    patches = menu_trim_patches(words)
+    patches = menu_trim_patches(words, choose_clubs)
+    entries = 5 if choose_clubs else 4
     return CompositePatch(
         name="menu_trim",
         description=(
             "Trim the title menu to STROKE PLAY + CLUB HOUSE, course select to "
-            "RANDOM COURSE and the club house to 5 entries, under a three-word header"
+            f"RANDOM COURSE and the club house to {entries} entries, under a "
+            "three-word header"
         ),
         patches=patches,
     )
+
+
+class _ClubHouseOmits(ROMPatch):
+    """
+    A requirement, not a patch: the club house offers no entry with `code`.
+
+    It is named `menu_trim`, the patch that satisfies it, so a stack missing
+    that step reports the step to add. It writes nothing.
+    """
+
+    def __init__(self, code: int):
+        self.name = "menu_trim"
+        self.description = f"The club house has no entry with code ${code:02X}"
+        self.code = code
+
+    def can_apply(self, rom_writer: "RomWriter") -> bool:
+        return False
+
+    def is_applied(self, rom_writer: "RomWriter") -> bool:
+        count = rom_writer.read_prg(_prg(0x8D64), 1)[0]
+        return self.code not in rom_writer.read_prg(_prg(0x8B00), count)
+
+    def apply(self, rom_writer: "RomWriter") -> None:
+        raise PatchError(f"{self.description} is a requirement, not a patch")
+
+
+#: The club house no longer reaches PLAYER STATS (code $84, bank 9 $B519), so
+#: its code is free space for patches that require this.
+PLAYER_STATS_REMOVED = _ClubHouseOmits(_CLUB_HOUSE_CODES["PLAYER STATS"])

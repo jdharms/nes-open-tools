@@ -1,9 +1,9 @@
-"""Annotate the course-name banner with tile indices, colour-coded by role.
+"""Annotate the course-name banner with tile indices, color-coded by role.
 
 Answers "what's actually reusable background vs. baked-in art" by rendering
-the 16x6 banner blob at high zoom with each tile's hex index and a coloured
+the 16x6 banner blob at high zoom with each tile's hex index and a colored
 border: green = confirmed background filler (appears identically in letter-free
-rows and as spacing beside letters), grey = the signpost's structural frame/
+rows and as spacing beside letters), gray = the signpost's structural frame/
 shadow, red = unique wordmark/letter art (not reusable for other text).
 See docs/prehole_signpost.md "Is there a reusable background tile?".
 """
@@ -85,7 +85,7 @@ def main():
     out = os.path.join(HERE, "banner_annotated_japan.png")
     img.save(out)
     print("wrote", out)
-    print("green border = confirmed background filler, grey = signpost frame/shadow,")
+    print("green border = confirmed background filler, gray = signpost frame/shadow,")
     print("red = unique wordmark/letter art (JAPAN + COURSE)")
 
 

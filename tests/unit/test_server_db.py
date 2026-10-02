@@ -9,6 +9,7 @@ from server.migrations import APPLICATION_ID, MIGRATIONS
 
 SCHEMA_TABLES = {
     "admin_actions",
+    "download_settings",
     "entries",
     "round_holes",
     "rounds",
@@ -122,6 +123,93 @@ def test_migration_two_backfills_existing_seeds_without_changing_their_artifacts
     assert after["build_version"] == 1
     assert after["finish_abi_version"] == 1
     assert after["withdrawn_at"] is None
+
+
+def _insert_version_one_rounds(db: Database) -> None:
+    """A seed, an entry, a recorded round with its holes and a voided round, as 1.0 stored them."""
+    insert_seed(db)
+    with db.transaction() as conn:
+        conn.execute(
+            """
+            INSERT INTO users (id, discord_id, username, player_id, created_at, last_login)
+            VALUES (1, 'dev:alice', 'alice', 7, 'now', 'now')
+            """
+        )
+        conn.execute(
+            """
+            INSERT INTO entries (id, seed_id, user_id, player_name, clubs, key_slot0,
+                                 key_slot1, created_at, updated_at)
+            VALUES (1, '0000000001', 1, 'LUIGI', '[]', zeroblob(8), zeroblob(8), 'now', 'now')
+            """
+        )
+        conn.execute(
+            """
+            INSERT INTO rounds (id, public_id, entry_id, slot, payload, total_strokes,
+                                total_putts, received_at, flagged, flag_note)
+            VALUES (5, 'RoundOne01', 1, 0, zeroblob(36), 72, 30, 'then', 1, 'a note')
+            """
+        )
+        conn.executemany(
+            "INSERT INTO round_holes (round_id, position, strokes, putts) VALUES (5, ?, 4, 2)",
+            [(position,) for position in range(1, 19)],
+        )
+        conn.execute(
+            """
+            INSERT INTO voided_rounds (id, public_id, entry_id, slot, payload, received_at,
+                                       flagged, flag_note, voided_at, void_note)
+            VALUES (2, 'VoidedOne1', 1, 1, zeroblob(36), 'then', 0, NULL, 'later', 'why')
+            """
+        )
+
+
+def test_migration_five_keeps_earlier_rounds_with_their_stats_unrecorded(db):
+    """A version 1 round never recorded fairways or penalties: NULL, not a miss or a zero."""
+    db.migrate(MIGRATIONS[:4])
+    _insert_version_one_rounds(db)
+
+    assert db.migrate(MIGRATIONS[:5]) == 5
+    with db.transaction() as conn:
+        assert conn.execute("PRAGMA foreign_key_check").fetchall() == []
+        round_row = dict(conn.execute("SELECT * FROM rounds").fetchone())
+        holes = conn.execute(
+            "SELECT round_id, strokes, putts, fairway_hit FROM round_holes"
+        ).fetchall()
+        voided = dict(conn.execute("SELECT * FROM voided_rounds").fetchone())
+
+    assert round_row == {
+        "id": 5,
+        "public_id": "RoundOne01",
+        "entry_id": 1,
+        "slot": 0,
+        "payload": bytes(36),
+        "total_strokes": 72,
+        "total_putts": 30,
+        "penalty_strokes": None,
+        "received_at": "then",
+        "flagged": 1,
+        "flag_note": "a note",
+    }
+    assert [tuple(hole) for hole in holes] == [(5, 4, 2, None)] * 18
+    assert voided["public_id"] == "VoidedOne1"
+    assert voided["void_note"] == "why"
+
+
+def test_after_migration_five_a_round_carries_stats_exactly_when_its_payload_does(db):
+    db.migrate()
+    _insert_version_one_rounds(db)
+    insert = """
+        INSERT INTO rounds (public_id, entry_id, slot, payload, total_strokes, total_putts,
+                            penalty_strokes, received_at)
+        VALUES (?, 1, 1, ?, 72, 30, ?, 'now')
+    """
+    with db.transaction() as conn:
+        conn.execute(insert, ("RoundTwo01", bytes(39), 3))
+        conn.execute("DELETE FROM rounds WHERE slot = 1")
+    for payload, penalties in ((bytes(39), None), (bytes(36), 0), (bytes(38), 0)):
+        with pytest.raises(sqlite3.IntegrityError), db.transaction() as conn:
+            conn.execute(insert, ("RoundTwo01", payload, penalties))
+    with pytest.raises(sqlite3.IntegrityError), db.transaction() as conn:
+        conn.execute(insert, ("RoundTwo01", bytes(39), 64))
 
 
 def test_a_failing_script_leaves_the_version_and_schema_as_they_were(db):

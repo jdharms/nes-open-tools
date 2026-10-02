@@ -74,7 +74,7 @@ class VideoMemory:
         self.touched.add(addr)
 
     def tile(self, index: int, base: int = 0x0000) -> list[list[int]]:
-        """Return one 8x8 pattern as rows of 2-bit colour indices."""
+        """Return one 8x8 pattern as rows of 2-bit color indices."""
         origin = base + index * 16
         rows = []
         for y in range(8):

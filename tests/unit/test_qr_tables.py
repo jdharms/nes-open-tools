@@ -270,7 +270,7 @@ def test_chr_tiles_decode_to_their_own_index(by_name) -> None:
         )
         for pixel, bit in quadrants:
             assert pixel == (index >> bit) & 1
-        # Each quadrant is solid, and nothing uses colour 2 or 3.
+        # Each quadrant is solid, and nothing uses color 2 or 3.
         assert set(tile.flatten().tolist()) <= {0, 1}
         for row_start in (0, 4):
             for col_start in (0, 4):
@@ -311,9 +311,9 @@ def test_codeword_head_stops_at_the_first_variable_code_word(urls) -> None:
 
 def test_codeword_head_starts_with_the_documented_constants(by_name) -> None:
     head = by_name["codeword_head"].data
-    # Mode indicator 0100 plus the high nibble of the 74-character count.
+    # Mode indicator 0100 plus the high nibble of the 78-character count.
     assert head[0] == 0x44
-    assert head[1] == 0xA0 | (ord(URL_PREFIX[0]) >> 4)
+    assert head[1] == 0xE0 | (ord(URL_PREFIX[0]) >> 4)
     assert head[2] == ((ord(URL_PREFIX[0]) & 0x0F) << 4) | (ord(URL_PREFIX[1]) >> 4)
 
 

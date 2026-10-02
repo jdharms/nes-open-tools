@@ -170,7 +170,7 @@ def test_extracted_track_round_trips(path):
 
 
 @pytest.mark.parametrize("path", [US, JP])
-def test_export_is_json_serialisable_and_complete(path):
+def test_export_is_json_serializable_and_complete(path):
     rom = _load(path)
     ids = sorted(set(md.discover_course_bgm(rom)["music_ids"].values()))
     data = md.export(rom, ids, source=path)

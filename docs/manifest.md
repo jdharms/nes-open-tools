@@ -17,8 +17,8 @@ With the hole list trimmed to one of its 18 slots:
 {
   "schema": 2,
   "generator_version": 1,
-  "build_version": 3,
-  "finish_abi_version": 1,
+  "build_version": 4,
+  "finish_abi_version": 2,
   "catalog_version": 1,
   "curation_stamp": "f640f8d1…",
   "settings": {
@@ -85,7 +85,9 @@ is strict: a missing or unknown field is an error. `golf/randomizer/build.py` tu
 |---|---:|---:|---|
 | 1 | 1 (implicit) | 1 (implicit) | The randomizer 1.0 manifest. Current code reads it for display and finishes its stored artifact through ABI 1, but does not rebuild it. |
 | 2 | 2 | 1 | Adds the required `build_version` and `finish_abi_version` fields. Current code reads it and finishes its stored artifact through ABI 1, but does not rebuild it. |
-| 2 | 3 | 1 | `wram_expansion` moves the terrain attribute buffer into WRAM, replacing `attr_streaming`, and the unfinished stack adds `green_shortcut`. This is the current schema and unfinished buildchain. |
+| 2 | 3 | 1 | `wram_expansion` moves the terrain attribute buffer into WRAM, replacing `attr_streaming`, and the unfinished stack adds `green_shortcut`. Current code finishes its stored artifact through ABI 1, but does not rebuild it. |
+| 2 | 4 | 2 | The unfinished stack adds `extended_sram_defaults`, a table the finisher fills with the BGM, swing, putt and spin defaults, and a seed with club rules leaves CHOOSE CLUBS out of the club house. Current code finishes its stored artifact through ABI 2, but does not rebuild it. |
+| 2 | 5 | 2 | The unfinished stack adds `round_stats`, which counts fairways hit and penalty strokes, and its scorecard QR sends them in payload protocol version 2. This is the current schema and unfinished buildchain. |
 
 Loading schema 1 supplies `build_version = 1` and `finish_abi_version = 1` in memory and
 serializes it back in its original shape without adding either field. The website stores
@@ -128,7 +130,7 @@ A slot is a catalog hole `id`, its `par` (a copy of the catalog's, for readabili
 empty. The wind seed is the 16-bit state the ROM's own RNG starts the hole from
 (`docs/seeded_wind.md`), not a seed for generation. No hole id appears twice.
 
-The SRAM magic is what the ROM's save initialisation compares a save against at boot
+The SRAM magic is what the ROM's save initialization compares a save against at boot
 (`sram_defaults`). A save holding any other magic, from the vanilla game or another seed,
 is wiped and rebuilt with the name and bag the player chose at download, so those choices
 always land. Neither byte may be `$00` or `$FF`, what blank SRAM holds, or blank SRAM would

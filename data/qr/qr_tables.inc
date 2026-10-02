@@ -3,9 +3,9 @@
 ;
 ; mask            5
 ; url prefix      https://nesopengolf.com/s/
-; url length      74
+; url length      78
 ; total bytes     2329
-; sha256          722c39c1e2e306ab0143134169103062cb22ee5ab0a21e634bb5590412633e9d
+; sha256          0fd7702220b1b1fde2addbfdec50f2015dce9a01cdfaa7029273d34f0b8d7420
 ; origin          $8400
 ;
 ; offset  size  label
@@ -94,7 +94,7 @@ QrBase64AlphabetEnd:
 ; data code words 0-27, payload-invariant
 ; 28 bytes
 QrCodewordHead:
-    .byte $44,$A6,$87,$47,$47,$07,$33,$A2,$F2,$F6,$E6,$57,$36,$F7,$06,$56
+    .byte $44,$E6,$87,$47,$47,$07,$33,$A2,$F2,$F6,$E6,$57,$36,$F7,$06,$56
     .byte $E6,$76,$F6,$C6,$62,$E6,$36,$F6,$D2,$F7,$32,$F4
 QrCodewordHeadEnd:
 

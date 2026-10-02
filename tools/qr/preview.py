@@ -4,7 +4,7 @@ Scorecard QR Preview
 
 Builds a submission payload, encodes it as the ROM will, and writes a PNG of
 the resulting NES screen. Everything renders through the CHR + nametable, so
-the image is what the PPU would actually put out rather than an idealised QR.
+the image is what the PPU would actually put out rather than an idealized QR.
 """
 
 import argparse

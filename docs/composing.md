@@ -121,7 +121,7 @@ Middle C is `o4 c`.
 
 You cannot change volume note by note. There is no `mf`, no crescendo, no accent on a single
 note. Instead, each of **lead** and **harmony** gets one *instrument* per section, chosen from
-seven fixed presets. That preset governs both the tone colour and the volume shape of every
+seven fixed presets. That preset governs both the tone color and the volume shape of every
 note in that section.
 
 Each preset has a built-in attack-and-decay that plays out over about a quarter of a second

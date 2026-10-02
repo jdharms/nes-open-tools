@@ -5,7 +5,7 @@ Three things a plain byte search or a naive disassembler gets wrong on this
 ROM, factored out so `golf-rom-peek` (and tests) can share them:
 
 1. **Inline arguments.** Several routines read bytes that follow their own
-   `JSR` and then skip past them, so a linear disassembly desynchronises for
+   `JSR` and then skip past them, so a linear disassembly desynchronizes for
    ten or twenty instructions afterwards. `INLINE_ARG_ROUTINES` records how
    many bytes each consumes.
 
@@ -322,7 +322,7 @@ def disassemble(
 
     `count` decodes a fixed number of rows. `routine=True` instead decodes
     until the routine plausibly ends - an RTS/RTI/JMP with no unresolved
-    forward branch past it, a non-returning call, or the start of a labelled
+    forward branch past it, a non-returning call, or the start of a labeled
     data range - capped at `max_instructions` so a wrong guess about where
     code lives can't dump the whole bank.
     """
@@ -354,7 +354,7 @@ def disassemble(
             listing.stop_reason = "ran past the end of the bank"
             break
 
-        # A labelled data range: emit raw bytes instead of decoding them.
+        # A labeled data range: emit raw bytes instead of decoding them.
         data_label = data_range_at(labels, cur_prg) if expand_data else None
         if data_label is not None:
             if routine and cur_prg != prg_offset:
@@ -455,7 +455,7 @@ def _label_name(labels, prg_offset: int) -> str | None:
 
 
 def _emit_data(listing, reader, start_prg, start_cpu, end_prg, label, budget) -> int:
-    """Emit a labelled data range as .db rows of 8. Returns rows emitted."""
+    """Emit a labeled data range as .db rows of 8. Returns rows emitted."""
     rows = 0
     prg = start_prg
     cpu = start_cpu

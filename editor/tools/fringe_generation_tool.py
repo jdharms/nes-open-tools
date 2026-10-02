@@ -323,4 +323,4 @@ class FringeGenerationTool:
         self.state = FringeToolState()
         self._update_highlights(context)
 
-        return ToolResult.modified(message="Fringe path cancelled")
+        return ToolResult.modified(message="Fringe path canceled")

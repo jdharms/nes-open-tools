@@ -76,8 +76,8 @@ def test_records_versions_and_round_trips(real_catalog, real_curation):
     manifest = generate(real_catalog, real_curation, Settings(prng_seed="abc"))
     assert manifest.schema == SCHEMA == 2
     assert manifest.generator_version == GENERATOR_VERSION
-    assert manifest.build_version == BUILD_VERSION == 3
-    assert manifest.finish_abi_version == FINISH_ABI_VERSION == 1
+    assert manifest.build_version == BUILD_VERSION == 5
+    assert manifest.finish_abi_version == FINISH_ABI_VERSION == 2
     assert manifest.catalog_version == real_catalog.version
     assert manifest.curation_stamp == real_curation.stamp
     assert Manifest.from_json(json.loads(json.dumps(manifest.to_json()))) == manifest

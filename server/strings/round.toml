@@ -53,3 +53,23 @@ text = "In"
 [round.holes.total]
 note = "round table last footer row label, under the back nine's totals; all 18 holes' total par, strokes and putts follow"
 text = "Total"
+
+[round.holes.fairway]
+note = "round table column header; whether the tee shot found the fairway (or the green) on a par 4 or 5. Only on rounds from ROMs that record it; par 3 cells stay empty"
+text = "FIR"
+
+[round.holes.fairway_hit]
+note = "round table cell under round.holes.fairway: the tee shot found the fairway or the green, or went in"
+text = "✓"
+
+[round.holes.fairway_missed]
+note = "round table cell under round.holes.fairway: the tee shot missed"
+text = "✗"
+
+[round.holes.fairways_count]
+note = "round table footer cell under round.holes.fairway, for a nine and for the round; {hit} fairways hit, {possible} the par 4s and 5s"
+text = "{hit}/{possible}"
+
+[round.penalty_strokes]
+note = "line under the round tables; {count} the round's penalty strokes, one each for a ball in the water or out of bounds (0 included). Only on rounds from ROMs that record it"
+text = "{count}"

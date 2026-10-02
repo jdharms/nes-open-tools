@@ -26,6 +26,11 @@ from .base import ROMPatch
 from .composite import CompositePatch
 from .course import CoursePatch
 from .course_theme import course_theme_patch
+from .extended_sram_defaults import (
+    EXTENDED_SRAM_DEFAULTS_PATCH,
+    BallSpin,
+    SwingSpeed,
+)
 from .green_shortcut import green_shortcut_patch
 from .green_slope_physics import (
     DEFAULT_FRICTION,
@@ -36,9 +41,11 @@ from .menu_trim import menu_trim_patch
 from .mercy_tap_in import mercy_tap_in_patches
 from .multi_bank import COURSE_MIRRORS_PATCH, MULTI_BANK_CODE_PATCH
 from .music_import import music_import_patch
+from .peach_dress import peach_dress_patch
 from .practice_swing import DEFAULT_HOLD_FRAMES, practice_swing_patch
 from .putting_practice import putting_practice_patches
 from .qr_credentials import load_credentials, qr_credentials_patch
+from .round_stats import ROUND_STATS_PATCH
 from .scorecard_course_name import DEFAULT_NAME as DEFAULT_COURSE_NAME
 from .scorecard_course_name import scorecard_course_name_patch
 from .scorecard_qr import (
@@ -50,6 +57,7 @@ from .scorecard_qr import (
 )
 from .seeded_wind import derive_hole_seeds, seeded_wind_patch
 from .signpost_banner import remove_course_banner_patches
+from .signpost_color import signpost_color_patch
 from .signpost_random_banner import signpost_banner_patch
 from .sram_defaults import (
     VANILLA_CLUBS,
@@ -126,6 +134,8 @@ class GreenSlopePhysicsParams:
 class MenuTrimParams:
     #: three 4-6 character header words for menus $00-$02; default OPEN GOLF RANDO
     words: list[str] | None = None
+    #: false leaves CHOOSE CLUBS out of the club house, so the new-save bag stays
+    choose_clubs: bool = True
 
 
 @dataclass(frozen=True)
@@ -136,6 +146,12 @@ class SignpostBannerParams:
     banner: str = "us"
     #: the hole the export shows
     hole: int = 1
+
+
+@dataclass(frozen=True)
+class SignpostColorParams:
+    #: one of signpost_color.SIGNPOST_COLORS
+    color: int
 
 
 @dataclass(frozen=True)
@@ -180,6 +196,12 @@ class MusicImportParams:
 
 
 @dataclass(frozen=True)
+class PeachDressParams:
+    #: one of peach_dress.DRESS_COLORS
+    color: int
+
+
+@dataclass(frozen=True)
 class SramDefaultsParams:
     #: 1-10 characters: A-Z, '.' and space
     player_name: str | None = None
@@ -189,6 +211,10 @@ class SramDefaultsParams:
     bgm: bool = True
     #: the high byte is stored at $6001; neither byte may be $00 or $FF
     sram_magic: int = VANILLA_MAGIC
+    #: supply all three to use the extended SRAM defaults table
+    swing: str | None = None
+    putt: str | None = None
+    spin: str | None = None
 
 
 # --- Factories and reports ------------------------------------------------------
@@ -316,12 +342,41 @@ def _report_sram_defaults(params: SramDefaultsParams, patch) -> list[str]:
     name = VANILLA_NAME if params.player_name is None else params.player_name.upper()
     clubs = VANILLA_CLUBS if params.clubs is None else params.clubs
     magic = magic_bytes(params.sram_magic)
-    return [
+    lines = [
         f"player name: {name}",
         f"clubs: {' '.join(club_labels(club_bag_bytes(clubs)))}",
         f"bgm: {'on' if params.bgm else 'off'}",
         f"sram magic: ${magic[0]:02X} ${magic[1]:02X}",
     ]
+    if params.swing is not None:
+        lines.append(
+            f"defaults: swing {params.swing}, putt {params.putt}, spin {params.spin}"
+        )
+    return lines
+
+
+def _named[E: (SwingSpeed, BallSpin)](kind: type[E], name: str, field: str) -> E:
+    try:
+        return kind[name.upper()]
+    except KeyError:
+        choices = ", ".join(member.name.lower() for member in kind)
+        raise ValueError(f"{field} must be one of {choices}, got {name!r}") from None
+
+
+def _build_sram_defaults(ctx: BuildContext, params: SramDefaultsParams) -> ROMPatch:
+    return sram_defaults_patch(
+        params.player_name,
+        params.clubs,
+        params.bgm,
+        params.sram_magic,
+        swing=_named(SwingSpeed, params.swing, "swing")
+        if params.swing is not None
+        else None,
+        putt=_named(SwingSpeed, params.putt, "putt")
+        if params.putt is not None
+        else None,
+        spin=_named(BallSpin, params.spin, "spin") if params.spin is not None else None,
+    )
 
 
 def _fixed[R: ROMPatch](patch: R) -> Callable[[BuildContext, NoParams], R]:
@@ -366,7 +421,7 @@ PATCH_SPECS: dict[str, PatchSpec[Any, Any]] = {
             "menu_trim",
             "Trim the title, course select and club house menus, under a three-word header (docs/menu_system.md)",
             MenuTrimParams,
-            lambda ctx, params: menu_trim_patch(params.words),
+            lambda ctx, params: menu_trim_patch(params.words, params.choose_clubs),
         ),
         PatchSpec(
             "remove_course_banner",
@@ -380,6 +435,12 @@ PATCH_SPECS: dict[str, PatchSpec[Any, Any]] = {
             SignpostBannerParams,
             _build_signpost,
             _report_signpost,
+        ),
+        PatchSpec(
+            "signpost_color",
+            "Recolor the pre-hole signpost banner to a curated NES color (docs/prehole_signpost.md)",
+            SignpostColorParams,
+            lambda ctx, params: signpost_color_patch(params.color),
         ),
         PatchSpec(
             "mercy_tap_in",
@@ -405,6 +466,12 @@ PATCH_SPECS: dict[str, PatchSpec[Any, Any]] = {
             "Show one course name on the scorecard for every course slot (docs/scorecard.md)",
             ScorecardCourseNameParams,
             lambda ctx, params: scorecard_course_name_patch(params.name, params.title),
+        ),
+        PatchSpec(
+            "round_stats",
+            "Count fairways hit and penalty strokes for the scorecard QR (docs/scorecard_qr.md)",
+            NoParams,
+            _fixed(ROUND_STATS_PATCH),
         ),
         PatchSpec(
             "scorecard_qr",
@@ -435,12 +502,16 @@ PATCH_SPECS: dict[str, PatchSpec[Any, Any]] = {
         ),
         PatchSpec(
             "sram_defaults",
-            "Change a new save's player name, club bags, BGM option and SRAM magic",
+            "Change a new save's name, club bags, options and SRAM magic; swing, putt and spin require extended_sram_defaults",
             SramDefaultsParams,
-            lambda ctx, params: sram_defaults_patch(
-                params.player_name, params.clubs, params.bgm, params.sram_magic
-            ),
+            _build_sram_defaults,
             _report_sram_defaults,
+        ),
+        PatchSpec(
+            "extended_sram_defaults",
+            "Install the SRAM defaults routine and table for BGM, swing, putt and spin; needs menu_trim",
+            NoParams,
+            _fixed(EXTENDED_SRAM_DEFAULTS_PATCH),
         ),
         PatchSpec(
             "green_slope_physics",
@@ -455,6 +526,12 @@ PATCH_SPECS: dict[str, PatchSpec[Any, Any]] = {
             "B then Select opens the green detail view, B then Start the scorecard (docs/green_shortcut.md)",
             NoParams,
             lambda ctx, params: green_shortcut_patch(),
+        ),
+        PatchSpec(
+            "peach_dress",
+            "Recolor Peach's dress in the putting view to a curated NES color",
+            PeachDressParams,
+            lambda ctx, params: peach_dress_patch(params.color),
         ),
         PatchSpec(
             "putting_practice",

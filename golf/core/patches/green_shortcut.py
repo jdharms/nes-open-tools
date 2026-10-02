@@ -233,7 +233,7 @@ def _poll_code() -> bytes:
             and #SELECT_BIT+START_BIT+A_BIT   ; a button that ends the frame wait?
             beq Continue            ; none: fall back into the countdown
             and #SELECT_BIT+START_BIT
-            beq Abort               ; A button: vanilla behaviour, carry set
+            beq Abort               ; A button: vanilla behavior, carry set
             sta ShortcutFlag        ; A is the isolated bit, so it records which
         Abort:
             sec

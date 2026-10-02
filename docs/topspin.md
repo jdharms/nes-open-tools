@@ -81,7 +81,7 @@ $B16F  A5 E4       LDA VelocityScaleX
 ...
 ```
 
-So the five-position gauge resolves to three behaviours, and even those three are thin:
+So the five-position gauge resolves to three behaviors, and even those three are thin:
 `$ADBB` gives `BACK 1` and `BACK 2` the same `+3`, and `$B2A3` treats them identically.
 They only diverge at `$B14A`, and only on the green with a club of 4 or higher.
 
@@ -146,7 +146,7 @@ mechanic that is really a step function.
 
 ## Labels added
 
-Range labels covering the above are in the sidecar:
+Range labels covering the above are in the label file:
 
 | Address | Label |
 |---------|-------|
@@ -163,7 +163,7 @@ Range labels covering the above are in the sidecar:
 The enumeration of readers is exhaustive rather than pattern-matched, so no consumer of
 `$012E` escaped it. What static analysis cannot rule out is an indexed or computed access
 landing on `$012E`; of the indexed bases near it, `$0127,X`, `$0129,X` and `$012B,X` are
-all two-entry arrays initialised at `$80AF`, so none of them reach it.
+all two-entry arrays initialized at `$80AF`, so none of them reach it.
 
 This has not been confirmed on hardware or in an emulator. The cheap check is a read
 breakpoint on `$012E` in Mesen: play a shot at `TOP 2` and one at `NORMAL` and confirm the

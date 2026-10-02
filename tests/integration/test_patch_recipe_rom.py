@@ -56,6 +56,7 @@ def full_recipe(courses: Path) -> dict:
             {"patch": "mercy_tap_in", "mercy_point": 9},
             {"patch": "seeded_wind", "seed": "recipe"},
             {"patch": "practice_swing"},
+            {"patch": "round_stats"},
             {"patch": "scorecard_qr"},
             {"patch": "music_import", "dump": "data/music/music_jp_courses.json"},
         ]
@@ -166,6 +167,8 @@ def test_cli_finishes_an_unfinished_rom_with_credentials(
         "wram_expansion",
         "-p",
         f"course:course={vanilla_courses / 'japan'}",
+        "-p",
+        "round_stats",
         "-p",
         "scorecard_qr",
         "-o",

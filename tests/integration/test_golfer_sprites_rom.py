@@ -117,7 +117,7 @@ class TestBuilds:
 
 
 class TestPaletteAndPriority:
-    def test_each_golfer_gets_one_custom_colour(self, sprites):
+    def test_each_golfer_gets_one_custom_color(self, sprites):
         shirts = [sprites.body_palette(g)[1] for g in range(6)]
         assert shirts == [0x25, 0x2B, 0x28, 0x22, 0x26, 0x38]
         assert len(set(shirts)) == 6
@@ -125,7 +125,7 @@ class TestPaletteAndPriority:
     def test_only_billy_overrides_the_skin_tone(self, sprites):
         assert [sprites.body_palette(g)[3] for g in range(6)] == [0x36] * 5 + [0x27]
 
-    def test_colour_zero_is_never_displayed(self, sprites):
+    def test_color_zero_is_never_displayed(self, sprites):
         assert sprites.body_palette(0)[0] is None
 
     def test_body_draws_in_front_on_exactly_two_frames(self):
@@ -231,7 +231,7 @@ class TestExporter:
         shared = meta["nudge_classes_shared_by"]
         assert len(shared) == 1 and len(next(iter(shared.values()))) == 3
 
-    def test_palette_offers_every_nes_colour_once(self, rom, sprites, tmp_path):
+    def test_palette_offers_every_nes_color_once(self, rom, sprites, tmp_path):
         from golf.core.golfer_export import PALETTE_SIZE, build_palette, nes_index
         from golf.core.palettes import (
             NES_BLACK_ENTRIES,
@@ -261,7 +261,7 @@ class TestExporter:
         assert sum(1 for v in NES_ENTRIES if v in NES_BLACK_ENTRIES) == 1
         assert len(NES_ENTRIES) == 55
 
-    def test_no_two_palette_entries_share_a_colour_except_white(self):
+    def test_no_two_palette_entries_share_a_color_except_white(self):
         # $20 and $30 are both white in this palette rendering; every other
         # duplicate has been folded away.
         from golf.core.golfer_export import NES_ENTRIES

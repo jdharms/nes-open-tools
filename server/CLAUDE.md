@@ -26,7 +26,9 @@ in this package.
   takes credentials for a signed-in download and none for a guest. Builds run in the threadpool (`run_in_threadpool`), never on the event
   loop.
 - Route helpers with no web types live beside the app: `server/forms.py` (the generate
-  form to `Settings`, the download form to `PlayerOptions` and ROM hashes),
+  form to `Settings`, the download form to `PlayerOptions` and ROM hashes, and a player's
+  `SavedSettings`, with `fit` to start a seed's form from them and `to_save` for what a
+  download remembers),
   `server/views.py` (what a page shows, as dataclasses, and the download file name) and
   `server/ratelimit.py`.
 - `server/auth.py` holds sign-in: `DiscordClient` (the two OAuth2 calls), `safe_next` for
@@ -35,6 +37,15 @@ in this package.
   processor in `create_app`. The session cookie holds only `users.id`, plus the OAuth
   state and return path while a Discord sign-in is under way. `app.state.discord` is the
   client, or None when Discord is not configured.
+- The other cookie is `golf_download` (`DOWNLOAD_COOKIE`): a player's `SavedSettings`,
+  compact JSON in base64url, which every successful download sets through `to_save` for a
+  year, signed in or not. It is HttpOnly and SameSite=lax, Secure on an HTTPS base URL
+  like the session cookie, and untrusted: `SavedSettings.from_cookie` reads anything that
+  fails to decode as vanilla. A signed-in player's settings are also saved on the account
+  (`server/download_settings.py`), which wins over the cookie once it exists. The seed
+  page starts its download form from those, with a signed-in player's entry for that seed
+  giving name and clubs over them. `/me` edits the account's settings and forgets them,
+  expiring this browser's cookie too.
 - `server/live.py`'s `LiveServer` serves an app on a free localhost port for tools and
   tests that drive a real browser.
 - A route a script fetches answers a refusal as JSON, `{"error": reason, "values": {...}}`,
@@ -78,6 +89,8 @@ in this package.
   finish-ABI versions for operations, and loading verifies that the copies agree.
 - `server/users.py` is the only code that writes `users`, and the only place player ids
   are drawn. `seeds.creator_id` holds a `users.id`.
+- `server/download_settings.py` is the only code that writes `download_settings`, one
+  `SavedSettings` record per user, read back as leniently as the cookie.
 - `server/entries.py` is the only code that writes `entries`, and the only place MAC keys
   are drawn. `Entry.keys` stays out of `repr`; keys never go in a page, a log or a manifest.
 - `server/timings.py` is the only code that writes `timings` and `timing_day`. A request's
@@ -192,7 +205,9 @@ in this package.
   UTC text as the title. A timestamp passed into `t()` goes through the filter too; its
   `Markup` passes through unescaped.
 - The ROM store is IndexedDB database `golf-randomizer`, object store `roms`, records
-  `{id, sha1, bytes}` keyed by catalog ROM id. It holds only files whose SHA-1 matched.
+  `{id, sha1, bytes}` keyed by catalog ROM id. It holds only bytes whose SHA-1 matched: `rom.js`
+  retries a mismatched file with the catalog ROM's iNES header (`golf/randomizer/roms.py`)
+  and stores the result when that matches.
 - A downloaded ROM is named `notgr_par<par>_<id>.nes` by `download_stem` in
   `server/views.py`, and reaches the script as a data attribute. A file name is data, never
   a strings entry.
@@ -286,8 +301,8 @@ ROM in `GOLF_ROM_DIR`. With `--rom` too, the ROMs are loaded before generating, 
 download form captures ready rather than missing. With `--login NAME`, each browser signs
 in through the development bypass first, so the header captures signed in, and `NAME` is
 an admin, so `/admin` pages capture too. With `--expand`, every capture whose page body
-has collapsed `<details>` sections (the generate form's club rules, the seed page's hole
-table and details) is taken again with them all open, as `<name>-expanded.png` or
+has collapsed `<details>` sections (the generate form's club rules, the seed page's download
+settings, rounds, hole table and details) is taken again with them all open, as `<name>-expanded.png` or
 `<name>-seed-expanded.png`. The tool is
 `tools/site_screenshot.py`; `tests/integration/test_site_screenshot.py` skips without a
 Playwright browser.

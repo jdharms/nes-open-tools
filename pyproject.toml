@@ -129,6 +129,7 @@ dev = [
     "playwright>=1.63.0",
     "pytest-xdist>=3.8.0",
     "djlint>=1.46.1",
+    "codespell>=2.4.3",
 ]
 
 [tool.hatch.build.targets.wheel]
@@ -155,6 +156,15 @@ ignore = [
 [tool.pyright]
 venvPath = "."
 venv = ".venv"
+
+[tool.codespell]
+# American spelling only: no typo dictionary. golf-check passes it the tracked files.
+builtin = "en-GB_to_en-US"
+# split snake_case and CamelCase identifiers into words so names are checked too
+regex = "[A-Z]?[a-z]+|[A-Z]+(?![a-z])"
+# "dialogue" is American for game text; asyncio names its exception
+ignore-words-list = "dialogue"
+ignore-regex = "CancelledError"
 
 [tool.djlint]
 profile = "jinja"

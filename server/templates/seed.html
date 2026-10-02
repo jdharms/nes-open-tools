@@ -1,5 +1,15 @@
 {% extends "base.html" %}
 {% import "_scorecard.html" as scorecard %}
+{% import "_download_settings.html" as controls %}
+{# A summary value, marked so download.js can copy the control's current value into it. #}
+{% macro summary_value(field, value) -%}
+  <span data-summary="{{ field }}">{{ value }}</span>
+{%- endmacro %}
+{% macro bgm_summary(on) -%}
+  <span data-summary="bgm"
+        data-on="{{ t_plain('seed.download.bgm.on') }}"
+        data-off="{{ t_plain('seed.download.bgm.off') }}">{{ controls.bgm_label(on) }}</span>
+{%- endmacro %}
 {% block title %}{{ t_plain("seed.page_title", words=seed.magic_words|join(" ")) }}{% endblock %}
 {% block content %}
   <hgroup>
@@ -31,42 +41,40 @@
           <p><mark>{{ t("seed.download.noscript") }}</mark></p>
         </noscript>
 
+        {% set state = download.state %}
         <form method="post" action="{{ download.ips_url }}" id="download-form">
-          <label for="download-name">{{ t("seed.download.name_label") }}</label>
-          <input type="text"
-                 id="download-name"
-                 name="player_name"
-                 value="{{ download.default_name }}"
-                 maxlength="{{ download.name_max }}"
-                 autocomplete="off"
-                 autocapitalize="characters"
-                 spellcheck="false"
-                 required>
+          {% set summary_name = summary_value("name", state.player_name) %}
+          {% set summary_clubs = summary_value("clubs", download.bag_count) %}
+          <details class="download-settings"
+                   data-clubs-max="{{ download.clubs_max }}"
+                   data-over-max="{{ 'true' if download.over_max else 'false' }}"
+                   {% if download.open %}open{% endif %}>
+            <summary>
+              {% if download.option_defaults %}
+                {{ t("seed.download.summary", name=summary_name, clubs=summary_clubs, bgm=bgm_summary(state.bgm), swing=summary_value("swing", controls.speed_label(state.swing)), putt=summary_value("putt", controls.speed_label(state.putt)), spin=summary_value("spin", controls.spin_label(state.spin))) }}
+              {% else %}
+                {{ t("seed.download.summary_no_defaults", name=summary_name, clubs=summary_clubs, bgm=bgm_summary(state.bgm)) }}
+              {% endif %}
+              {% if download.removed %}
+                <mark class="download-removed">{{ t("seed.download.adjusted.removed", clubs=download.removed|join(" ")) }}</mark>
+              {% endif %}
+              <mark class="download-over-max">{{ t("seed.download.adjusted.over_max", count=summary_clubs, max=download.clubs_max) }}</mark>
+            </summary>
 
-          {% if download.required_bag %}
-            <p>{{ t("seed.download.locked_bag", clubs=download.required_bag|join(" ")) }}</p>
-          {% else %}
-            <fieldset>
-              <legend>{{ t("seed.download.clubs_legend") }}</legend>
-              <div class="club-grid">
-                {% for label in download.club_labels %}
-                  <label>
-                    {% if label in download.banned %}
-                      <input type="checkbox" name="clubs" value="{{ label }}" disabled>
-                      <s>{{ label }}</s>
-                    {% else %}
-                      <input type="checkbox"
-                             name="clubs"
-                             value="{{ label }}"
-                             {% if label in download.default_clubs %}checked{% endif %}>
-                      {{ label }}
-                    {% endif %}
-                  </label>
-                {% endfor %}
-              </div>
-              <small>{{ t("seed.download.clubs_help", max=download.clubs_max) }}</small>
-            </fieldset>
-          {% endif %}
+            {{ controls.name_field("download-name", state.player_name, download.name_max) }}
+
+            {% if download.required_bag %}
+              <p>{{ t("seed.download.locked_bag", clubs=download.required_bag|join(" ")) }}</p>
+            {% else %}
+              <fieldset>
+                <legend>{{ t("seed.download.clubs_legend") }}</legend>
+                {{ controls.club_grid(download.club_labels, state.clubs, download.banned) }}
+                <small>{{ t("seed.download.clubs_help", max=download.clubs_max) }}</small>
+              </fieldset>
+            {% endif %}
+
+            {{ controls.option_fieldset(state, download.option_defaults) }}
+          </details>
 
           <p class="download-status" role="status" aria-live="polite"></p>
           <p class="download-rom-setup"><a href="/rom">{{ t("seed.download.rom_setup_link") }}</a></p>
@@ -78,70 +86,78 @@
   </section>
 
   <section>
-    <h2>{{ t("seed.rounds.heading") }}</h2>
     {% if rounds %}
-      {% set front = seed.holes[:9] %}
-      {% set back = seed.holes[9:] %}
-      {% set front_par = front | sum(attribute="par") %}
-      {% set back_par = back | sum(attribute="par") %}
-      <div class="overflow-auto">
-        <table class="rounds scorecard striped">
-          <colgroup>
-            <col>
-            <col span="9">
-            <col class="nine-end">
-            <col span="9">
-            <col class="nine-end">
-            <col span="2">
-          </colgroup>
-          <thead>
-            <tr>
-              <th scope="row">{{ t("seed.rounds.hole") }}</th>
-              {% for hole in front %}
-                <th scope="col" class="num">{{ hole.number }}</th>
-              {% endfor %}
-              <th scope="col" class="num nine-total">{{ t("seed.rounds.out") }}</th>
-              {% for hole in back %}
-                <th scope="col" class="num">{{ hole.number }}</th>
-              {% endfor %}
-              <th scope="col" class="num nine-total">{{ t("seed.rounds.in") }}</th>
-              <th scope="col" class="num nine-total">{{ t("seed.rounds.strokes") }}</th>
-              <th scope="col" class="num">{{ t("seed.rounds.putts") }}</th>
-            </tr>
-            <tr>
-              <th scope="row">{{ t("seed.rounds.par") }}</th>
-              {% for hole in front %}
-                <th scope="col" class="num">{{ hole.par }}</th>
-              {% endfor %}
-              <th scope="col" class="num nine-total">{{ front_par }}</th>
-              {% for hole in back %}
-                <th scope="col" class="num">{{ hole.par }}</th>
-              {% endfor %}
-              <th scope="col" class="num nine-total">{{ back_par }}</th>
-              <th scope="col" class="num nine-total">{{ seed.total_par }}</th>
-              <th scope="col"></th>
-            </tr>
-          </thead>
-          <tbody>
-            {% for round in rounds %}
-              <tr>
-                <td><a href="/r/{{ round.public_id }}">{% if round.slot == 1 %}{{ t("seed.rounds.player_two", name=round.player_name) }}{% else %}{{ round.player_name }}{% endif %}</a></td>
-                {% for hole in front %}
-                  <td class="num strokes{{ scorecard.to_par(round.strokes[loop.index0], hole.par) }}">{{ scorecard.score_mark(round.strokes[loop.index0], hole.par) }}</td>
+      <article class="collapsible">
+        <details{% if rounds_open %} open{% endif %}>
+          <summary>
+            <h2>{{ t("seed.rounds.heading_count", count=rounds|length) }}</h2>
+          </summary>
+          {% set front = seed.holes[:9] %}
+          {% set back = seed.holes[9:] %}
+          {% set front_par = front | sum(attribute="par") %}
+          {% set back_par = back | sum(attribute="par") %}
+          <div class="overflow-auto">
+            <table class="rounds scorecard striped">
+              <colgroup>
+                <col>
+                <col span="9">
+                <col class="nine-end">
+                <col span="9">
+                <col class="nine-end">
+                <col span="2">
+              </colgroup>
+              <thead>
+                <tr>
+                  <th scope="row">{{ t("seed.rounds.hole") }}</th>
+                  {% for hole in front %}
+                    <th scope="col" class="num">{{ hole.number }}</th>
+                  {% endfor %}
+                  <th scope="col" class="num nine-total">{{ t("seed.rounds.out") }}</th>
+                  {% for hole in back %}
+                    <th scope="col" class="num">{{ hole.number }}</th>
+                  {% endfor %}
+                  <th scope="col" class="num nine-total">{{ t("seed.rounds.in") }}</th>
+                  <th scope="col"
+                      class="num nine-total">{{ t("seed.rounds.strokes") }}</th>
+                  <th scope="col" class="num">{{ t("seed.rounds.putts") }}</th>
+                </tr>
+                <tr>
+                  <th scope="row">{{ t("seed.rounds.par") }}</th>
+                  {% for hole in front %}
+                    <th scope="col" class="num">{{ hole.par }}</th>
+                  {% endfor %}
+                  <th scope="col" class="num nine-total">{{ front_par }}</th>
+                  {% for hole in back %}
+                    <th scope="col" class="num">{{ hole.par }}</th>
+                  {% endfor %}
+                  <th scope="col" class="num nine-total">{{ back_par }}</th>
+                  <th scope="col" class="num nine-total">{{ seed.total_par }}</th>
+                  <th scope="col"></th>
+                </tr>
+              </thead>
+              <tbody>
+                {% for round in rounds %}
+                  <tr>
+                    <td><a href="/r/{{ round.public_id }}">{% if round.slot == 1 %}{{ t("seed.rounds.player_two", name=round.player_name) }}{% else %}{{ round.player_name }}{% endif %}</a></td>
+                    {% for hole in front %}
+                      <td class="num strokes{{ scorecard.to_par(round.strokes[loop.index0], hole.par) }}">{{ scorecard.score_mark(round.strokes[loop.index0], hole.par) }}</td>
+                    {% endfor %}
+                    <td class="num nine-total{{ scorecard.to_par(round.strokes_out, front_par) }}">{{ round.strokes_out }}</td>
+                    {% for hole in back %}
+                      <td class="num strokes{{ scorecard.to_par(round.strokes[9 + loop.index0], hole.par) }}">{{ scorecard.score_mark(round.strokes[9 + loop.index0], hole.par) }}</td>
+                    {% endfor %}
+                    <td class="num nine-total{{ scorecard.to_par(round.strokes_in, back_par) }}">{{ round.strokes_in }}</td>
+                    <td class="num nine-total{{ scorecard.to_par(round.total_strokes, seed.total_par) }}">{{ round.total_strokes }}{% if round.flagged %} {{ t("seed.rounds.flagged") }}{% endif %}</td>
+                    <td class="num">{{ round.total_putts }}</td>
+                  </tr>
                 {% endfor %}
-                <td class="num nine-total{{ scorecard.to_par(round.strokes_out, front_par) }}">{{ round.strokes_out }}</td>
-                {% for hole in back %}
-                  <td class="num strokes{{ scorecard.to_par(round.strokes[9 + loop.index0], hole.par) }}">{{ scorecard.score_mark(round.strokes[9 + loop.index0], hole.par) }}</td>
-                {% endfor %}
-                <td class="num nine-total{{ scorecard.to_par(round.strokes_in, back_par) }}">{{ round.strokes_in }}</td>
-                <td class="num nine-total{{ scorecard.to_par(round.total_strokes, seed.total_par) }}">{{ round.total_strokes }}{% if round.flagged %} {{ t("seed.rounds.flagged") }}{% endif %}</td>
-                <td class="num">{{ round.total_putts }}</td>
-              </tr>
-            {% endfor %}
-          </tbody>
-        </table>
-      </div>
+              </tbody>
+            </table>
+          </div>
+        </details>
+      </article>
     {% else %}
+      <h2>{{ t("seed.rounds.heading") }}</h2>
       <p>{{ t("seed.rounds.none") }}</p>
     {% endif %}
   </section>

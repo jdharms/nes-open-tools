@@ -200,7 +200,7 @@ LiePopupPoll:                    ; fixed bank $CAE4, 27 bytes
     and #$A0                     ; either button that ends the frame wait?
     beq Continue                 ; neither: fall back into the countdown
     and #$20
-    beq Abort                    ; A button: vanilla behaviour, carry set
+    beq Abort                    ; A button: vanilla behavior, carry set
     sta ShortcutFlag             ; Select: A is $20, so this is nonzero
 Abort:
     sec

@@ -41,7 +41,7 @@ def grid_report(ase, ragged, path, margin=1, zoom=12):
     `zoom x zoom` block on an aligned grid.  A stroke drawn thinner than that,
     or starting half a block over, has no hardware pixel to live in - the
     overlay draws the real pixel boundaries and rings every block that ended up
-    holding more than one colour.
+    holding more than one color.
     """
     from PIL import Image, ImageDraw
 
@@ -54,13 +54,13 @@ def grid_report(ase, ragged, path, margin=1, zoom=12):
     y0, y1 = max(0, min(ys) - margin), min(SCREEN_ROWS * 8, max(ys) + margin + 1)
 
     flat = ase.composite()
-    colours = [(entry[0], entry[1], entry[2]) for entry in ase.palette]
+    colors = [(entry[0], entry[1], entry[2]) for entry in ase.palette]
     image = Image.new("RGB", ((x1 - x0) * scale, (y1 - y0) * scale))
     pixels = image.load()
     assert pixels is not None
     for j in range((y1 - y0) * scale):
         for i in range((x1 - x0) * scale):
-            pixels[i, j] = colours[flat[(y0 * scale + j) * ase.width + x0 * scale + i]]
+            pixels[i, j] = colors[flat[(y0 * scale + j) * ase.width + x0 * scale + i]]
 
     big = image.resize(
         (image.width * zoom, image.height * zoom), Image.Resampling.NEAREST
@@ -89,7 +89,7 @@ def preview(result, reference, palette, path, scale=2):
 
     Rendering from the converted patterns rather than from the artist's canvas
     is the point: anything their drawing asked for that the hardware cannot do -
-    a fourth colour, detail finer than a pixel - disappears here, which is the
+    a fourth color, detail finer than a pixel - disappears here, which is the
     only honest preview.
     """
     from PIL import Image
@@ -107,11 +107,11 @@ def preview(result, reference, palette, path, scale=2):
     for tile in result.tiles:
         for y, row in enumerate(chr_rows(tile.chr_bytes)):
             for x, value in enumerate(row):
-                colour = (
+                color = (
                     palette[0] if value == 0 else palette[tile.subpalette * 4 + value]
                 )
                 pixels[tile.col * 8 + x, tile.row * 8 + y] = NES_SYSTEM_PALETTE[
-                    colour & 0x3F
+                    color & 0x3F
                 ]
 
     image.resize(

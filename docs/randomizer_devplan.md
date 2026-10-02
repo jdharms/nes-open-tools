@@ -36,14 +36,15 @@ needed:
 
 - **Unfinished.** Run once at generation time: the base patches, the course, seeded
   wind, music, mercy tap-in, the green detail view and scorecard shortcuts, the magic
-  words on the menus and scorecard, signpost, and the
-  scorecard QR image with its credential placeholders unfilled. The manifest also carries
+  words on the menus and scorecard, signpost, the round stats the QR code sends (fairways
+  hit and penalty strokes), and the scorecard QR image with its credential placeholders
+  unfilled. The manifest also carries
   the seed's SRAM magic, which only finishing writes. The result is stored as an IPS blob
   on the seed row. The server rejects QR code submissions with all-zero seed IDs, so an
   unfinished ROM cannot cause downstream problems.
 - **Finished.** Run per download, in milliseconds: SRAM defaults for name, clubs and
   music under the seed's SRAM magic, so a save from vanilla or another seed is rebuilt
-  with the player's choices, and one of two flavours.
+  with the player's choices, and one of two flavors.
   - *Signed in*: a credentials patch of three byte patches writing the seed's `qr_seed_id` as
     the seed ID, the player ID and the MAC keys into the placeholders. Their expected original bytes are the
     placeholder fill, so finishing can only land on an unfinished image.
@@ -88,7 +89,10 @@ Nothing requires sign-in. Discord OAuth2 with the `identify` scope, hand-rolled 
 httpx calls (`server/auth.py`): the code is exchanged for a token, the token reads
 `/users/@me`, and the token is thrown away. The session is a signed cookie through
 Starlette's session middleware, SameSite=lax, and holds only the user's `users.id`, plus
-the OAuth `state` and return path while a sign-in is under way. A development-only login
+the OAuth `state` and return path while a sign-in is under way. A second cookie,
+`golf_download`, holds a player's saved download settings, set by every successful
+download for a year, signed in or not; the seed page starts its download form from it
+(`docs/planning/download_settings.md`). A development-only login
 bypass, `GOLF_DEV_LOGIN`, keeps local work off Discord: `/auth/login?as=<name>` signs in as
 the user `dev:<name>`, and the site refuses to start with it on unless the base URL is
 localhost.
@@ -131,8 +135,9 @@ cannot submit.
 | `seeds` | A 10-character base62 id for URLs and the same value as an integer, `qr_seed_id`, both unique; manifest JSON, generator, unfinished-build, finish-ABI and catalog versions, curation stamp, the immutable unfinished IPS blob, nullable creator, created_at and nullable withdrawn_at |
 | `seed_holes` | seed, position 1-18, catalog hole id, transforms, par, wind seed, pin index, wind direction anchor, wind speed anchor. Pure denormalization of the manifest for SQL stats; a migration can always backfill it |
 | `entries` | One per (seed, user), unique. The player's choices at their latest download (name, clubs), one MAC key per slot, created_at, updated_at |
-| `rounds` | A scan the server accepted: a unique `public_id`, the base62 id of its `/r/<id>` permalink; entry, slot, raw payload, total strokes, total putts, received_at, flagged, with an admin-only flag note. Unique on (entry, slot), which is the first-submission rule |
-| `round_holes` | round, position, strokes, putts. Joins to `seed_holes` on (seed, position) |
+| `download_settings` | One per user: the player's saved download settings as a JSON `SavedSettings` record, and updated_at. Written by a signed-in download under the saving rule and by `/me`; deleted by "forget my settings" (`docs/planning/download_settings.md`) |
+| `rounds` | A scan the server accepted: a unique `public_id`, the base62 id of its `/r/<id>` permalink; entry, slot, raw payload (36 bytes for QR protocol version 1, 39 for version 2), total strokes, total putts, penalty strokes (NULL for a version 1 round, which did not record them), received_at, flagged, with an admin-only flag note. Unique on (entry, slot), which is the first-submission rule |
+| `round_holes` | round, position, strokes, putts, and whether the tee shot found the fairway: the ROM's bit, or a hole in one on a par 4 or longer (NULL for a version 1 round). Joins to `seed_holes` on (seed, position) |
 | `voided_rounds` | A round an admin voided: its `public_id`, entry, slot, the payload (unique, and holding every hole, so no hole rows), received_at, its flag and note, voided_at, an admin-only note. A scan of a voided payload is refused; restoring moves it back while its slot is empty |
 | `timings` | One row per request: created_at, request ID (indexed for lookup from `X-Request-Id`), the matched route template, method, status, total milliseconds, an outcome naming what a status cannot tell apart, and a JSON detail holding the phases inside the request. Written in batches by `server/timings.py`, kept 30 days |
 | `timing_day` | The daily rollup of `timings`, per day, route and method: count, errors and the p50, p90, p99 and maximum of that day. Kept for good. Each row's percentiles are exact for its own day and are never re-aggregated into a longer window |
@@ -145,8 +150,10 @@ once the entry has a round.
 
 An entry's name and clubs are the new-save defaults of the latest download, not a record of
 the bag a round was played with. A save made before a re-download keeps its old defaults
-under the seed's SRAM magic, an older ROM file still submits, and the club house's CHOOSE
-CLUBS changes the bag in-game, so the bag is on the honour system.
+under the seed's SRAM magic, and an older ROM file still submits. In a seed with club
+rules the club house has no CHOOSE CLUBS, so the bag played is one the rules allowed; in a
+seed without them CHOOSE CLUBS changes the bag in-game, and the bag is on the honor
+system.
 
 A scan is submitted; a scan the server accepts becomes a round, and a rejected one is
 stored nowhere. A round's `public_id` is drawn when it is recorded, moves to
@@ -220,13 +227,15 @@ qr_seed_id INTEGER NOT NULL UNIQUE CHECK (qr_seed_id BETWEEN 1 AND 8392993658683
 | `GET /pages/<slug>` | A checked-in Markdown page, or a collection page with one card per entry file; enabled unlisted pages remain available by direct URL, while disabled pages answer 404. Each enabled page is registered as a route of its own, so its timings are too |
 | `GET /rom` | ROM setup, pure client-side: pick files, hash, store in IndexedDB, show verified status |
 | `GET /generate`, `POST /generate` | Settings form: par target, source ROMs, music or random, and club rules in a collapsed section of their own, open when a returned form has them set. The mercy point and tag filters take their defaults. POST redirects to the seed page |
-| `GET /h/<id>` | Seed page: the magic words, hole list with source, par and yards, totals, music, settings, required ROMs, recorded rounds, and either the download form or a withdrawn notice |
+| `GET /h/<id>` | Seed page: the magic words, hole list with source, par and yards, totals, music, settings, required ROMs, recorded rounds (collapsed until the viewer has recorded one of their own), and either the download form or a withdrawn notice |
 | `GET /h/<id>.json` | The manifest |
-| `POST /h/<id>/patch.ips` | Name, clubs, ROM hashes in; the finished IPS out. Signed in, upserts the entry and finishes with credentials; signed out, finishes as a guest. A withdrawn seed answers JSON 410 before creating an entry or finishing. The page's script intercepts the form submit, fetches this, patches the ROM from IndexedDB and triggers the download |
-| `GET /s/<48 chars>` | QR submission: decode, verify MAC, record, then 303 to the round's permalink, with `?recorded` for the scan that recorded it. Uncached. A rejection has no round to point at, so it renders here |
+| `POST /h/<id>/patch.ips` | Name, clubs, BGM, swing, putt and spin, and ROM hashes in; the finished IPS out, with the saved settings in the `golf_download` cookie and, signed in, on the account. Signed in, upserts the entry and finishes with credentials; signed out, finishes as a guest. A withdrawn seed answers JSON 410 before creating an entry or finishing. The page's script intercepts the form submit, fetches this, patches the ROM from IndexedDB and triggers the download |
+| `GET /s/<52 or 48 chars>` | QR submission, protocol version 2 or 1: decode, verify MAC, record, then 303 to the round's permalink, with `?recorded` for the scan that recorded it. Uncached. A rejection has no round to point at, so it renders here |
 | `GET /r/<id>` | A round's permalink: its scorecard, or 410 and a page of its own once an admin has voided it. An ordinary cacheable page, linked from the seed page, `/me` and a scan |
 | `GET /auth/login`, `GET /auth/callback`, `POST /auth/logout` | Discord sign-in |
-| `GET /me` | The player's entries and rounds. Signed out, redirects to sign-in |
+| `GET /me` | The player's entries, rounds and saved download settings. Signed out, redirects to sign-in |
+| `POST /me/download-settings` | Saves the settings form to the account and this browser's `golf_download` cookie, and redirects back with `?result=`; a refused form saves nothing. Signed out, 404 |
+| `POST /me/download-settings/forget` | Deletes the account's saved settings, expires this browser's cookie and redirects back with `?result=`. Signed out, 404 |
 | `GET /admin/...` | Counts, seeds, rounds (flagged filter), users, voided rounds, admin activity, and each seed, round and user. Admins only |
 | `POST /admin/rounds/<id>/flag`, `.../unflag`, `.../void`, `.../restore` | Flag with a note, clear the flag, void with a note, restore into an empty slot. `<id>` is the round's `public_id` |
 | `POST /admin/seeds/<id>/withdraw`, `.../restore` | Refuse or restore downloads without changing the seed's manifest, unfinished IPS, entries or rounds; withdrawal takes an admin-only note |
@@ -279,7 +288,7 @@ says so, a ROM playtested. Items 1 to 6 build the library; 7 onward build the si
    finishing stack for `PlayerOptions` (name, bag, music), checked against the seed's club
    rules, with `credentials_for` or as a guest. The manifest's course gained `sram_magic`,
    drawn per seed. NES Open themes use the new `course_theme` patch rather than an import.
-   `tests/integration/test_build_rom.py` builds both flavours from generated manifests on
+   `tests/integration/test_build_rom.py` builds both flavors from generated manifests on
    the real ROM and checks the stages overlap only where `scorecard_qr` wrote.
 6. **`golf-randomize` CLI.** Done: `tools/randomize.py`. `generate` turns settings flags
    into a manifest file, `build` turns a manifest into a finished guest ROM or IPS by
@@ -293,7 +302,8 @@ says so, a ROM playtested. Items 1 to 6 build the library; 7 onward build the si
    connection in WAL mode, migrated by `PRAGMA user_version` from the ordered scripts in
    `server/migrations.py`; migration 1 is the frozen version 1.0 baseline. The vanilla ROMs
    and their SHA-1s are `golf/randomizer/roms.py`; `server/static/rom.js` hashes a chosen
-   file with SubtleCrypto and stores verified bytes in IndexedDB. `golf-site` launches
+   file with SubtleCrypto, retrying a mismatch with the vanilla iNES header in place or
+   prepended, and stores verified bytes in IndexedDB. `golf-site` launches
    it. `tests/unit/test_server_app.py`, `test_server_db.py` and `test_server_config.py`
    run against an in-memory database. See `server/CLAUDE.md`.
 8. **Generate and seed page.** Done: `/generate`, `/h/<id>` and `/h/<id>.json`.
@@ -422,11 +432,10 @@ says so, a ROM playtested. Items 1 to 6 build the library; 7 onward build the si
       account is undecided; candidates are a share code shown on `/me` that the teammate
       gives the downloader, and an invite link the teammate opens signed in to join the
       entry.
-    - **Bag from ROM.** Repointing the bag reads at a table in PRG ROM (see
-      `golf/core/patches/sram_defaults.py`) so no save can change the bag, with CHOOSE
-      CLUBS out of the club house. With that in place, SRAM magic derived from the
-      player's choices, and keys that change when the choices do, would make an entry's
-      bag the bag played.
+    - **Entry bag is the bag played.** A seed with club rules has no CHOOSE CLUBS, so a
+      save keeps the bag it was created with. SRAM magic derived from the player's
+      choices, and keys that change when the choices do, would make an entry's bag the
+      bag played rather than the bag of the latest download.
     - **Phone header.** The site has been laid out for desktop, where seeds are downloaded,
       but the scan page (`/s/`) opens on the phone that scanned the QR code. At phone width
       the header wraps into the site name, the nav links and the sign-in row, taking the

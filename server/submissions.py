@@ -1,7 +1,9 @@
 """Submissions: decoding and verifying a scan, and handing the round it carries to `server/rounds.py`.
 
-A scan of a finished ROM's scorecard QR code carries the round's 36-byte payload
-(`golf/qr/payload.py`). `submit_scan` resolves it to the entry it belongs to: the seed ID
+A scan of a finished ROM's scorecard QR code carries the round's payload
+(`golf/qr/payload.py`): 39 bytes in protocol version 2, which adds fairways hit and penalty
+strokes, or 36 in version 1, which ROMs built before it still send and which is accepted for
+good. `submit_scan` resolves it to the entry it belongs to: the seed ID
 names the seed, the player ID the user, the pair their entry, and the payload's slot the
 MAC key. A payload that verifies is recorded as the round for (entry, slot), and the first
 one recorded stays: a later scan for the same entry and slot that also verifies, identical
@@ -25,7 +27,7 @@ from .seeds import MAX_QR_SEED_ID, encode_seed_id, utc_now
 log = logging.getLogger(__name__)
 
 #: ScanError reasons, each shown by its own strings key in scan_rejected.html
-#: not a payload this protocol version sends: length, alphabet, version, flags or slot
+#: not a payload any protocol version sends: length, alphabet, version, flags or slot
 MALFORMED = "malformed"
 #: an unfinished ROM's all-zero seed or player ID
 UNFINISHED = "unfinished"
@@ -61,20 +63,17 @@ class ScanResult:
 
 def _parse(text: str) -> tuple[bytes, payload.RoundPayload]:
     quoted = repr(text[:LOGGED_TEXT_LENGTH])
-    if len(text) != payload.BASE64_LEN:
+    version = payload.VERSION_BY_BASE64_LEN.get(len(text))
+    if version is None:
         raise _rejected(MALFORMED, "length", length=len(text), text=quoted)
     try:
         data = payload.base64url_decode(text)
     except ValueError:
         raise _rejected(MALFORMED, "alphabet", text=quoted) from None
+    # each version has its own length, so the version byte has to match the one it implies
+    if data[0] != version:
+        raise _rejected(MALFORMED, "protocol version", version=data[0], text=quoted)
     round_payload, _mac = payload.RoundPayload.from_bytes(data)
-    if round_payload.protocol_version != payload.PROTOCOL_VERSION:
-        raise _rejected(
-            MALFORMED,
-            "protocol version",
-            version=round_payload.protocol_version,
-            text=quoted,
-        )
     if round_payload.reserved_flags != 0:
         raise _rejected(
             MALFORMED, "reserved flags", flags=round_payload.reserved_flags, text=quoted

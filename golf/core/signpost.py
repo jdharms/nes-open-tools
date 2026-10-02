@@ -270,7 +270,7 @@ def subpalette_at(vram: VideoMemory, col: int, row: int) -> int:
 
 
 def render_screen(vram: VideoMemory, palette) -> list:
-    """The screen as 240 rows of 256 NES colour values."""
+    """The screen as 240 rows of 256 NES color values."""
     pixels = []
     for row in range(SCREEN_ROWS):
         lines = [[0] * (SCREEN_COLS * 8) for _ in range(8)]
@@ -343,7 +343,7 @@ class BannerImport:
         """The banner's `width * rows` raw bytes.
 
         `placement` maps a new CHR pattern to the pattern index it will occupy;
-        without it, a banner that needs new art cannot be serialised.
+        without it, a banner that needs new art cannot be serialized.
         """
         placement = placement or {}
         body = bytearray()
@@ -360,8 +360,8 @@ class BannerImport:
         return bytes(body)
 
 
-def _colour_lookup(palette) -> list[dict]:
-    """NES colour value -> the 2-bit value that draws it, per subpalette.
+def _color_lookup(palette) -> list[dict]:
+    """NES color value -> the 2-bit value that draws it, per subpalette.
 
     Keyed by RGB rather than by palette value: `$20` and `$30` are the same
     white, and an artist picking one swatch or the other must mean the same
@@ -388,10 +388,10 @@ def convert_banner(
 
     `screen` is 240 rows of 256 RGB triples - whatever the artist drew.
     `reference` supplies the pattern table to match against and the attribute
-    table that decides each cell's three usable colours.
+    table that decides each cell's three usable colors.
     """
     result = BannerImport(descriptor=descriptor)
-    lookup = _colour_lookup(palette)
+    lookup = _color_lookup(palette)
     patterns = pattern_tiles(reference)
     by_pattern: dict[bytes, int] = {}
     for index, pattern in enumerate(patterns):
@@ -520,7 +520,7 @@ class EditedScreen:
 
     pixels: list  # 240 rows of 256 RGB triples
     scale: int  # the canvas zoom the artist worked at
-    ragged: list  # NES pixels whose zoom x zoom block was not one colour
+    ragged: list  # NES pixels whose zoom x zoom block was not one color
     source: AsepriteFile
 
 
@@ -528,7 +528,7 @@ def screen_from_aseprite(path) -> EditedScreen:
     """Read a `.aseprite` export of the whole screen.
 
     The canvas is the 256x240 screen at an integer zoom, so every zoom x zoom
-    block has to be a single colour.  Anything finer is detail the hardware
+    block has to be a single color.  Anything finer is detail the hardware
     cannot show; it is collected rather than quietly averaged away, because the
     artist needs to be told which marks to redraw.
     """
@@ -541,7 +541,7 @@ def screen_from_aseprite(path) -> EditedScreen:
             "at an integer zoom (256x240, 512x480, 768x720, ...)"
         )
 
-    colours = [
+    colors = [
         (entry[0], entry[1], entry[2]) if entry[3] else None for entry in ase.palette
     ]
     flat = ase.composite()
@@ -559,7 +559,7 @@ def screen_from_aseprite(path) -> EditedScreen:
             if len(block) > 1:
                 ragged.append((x, y))
             index = min(block)
-            rgb = colours[index] if index < len(colours) else None
+            rgb = colors[index] if index < len(colors) else None
             if rgb is None:
                 raise ValueError(
                     f"pixel ({x}, {y}) uses palette index {index}, which is "

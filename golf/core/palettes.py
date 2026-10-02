@@ -5,6 +5,9 @@ Shared constants for NES color palettes and course dimensions used
 across all tools (editor, visualizer, analyzer).
 """
 
+from collections.abc import Sequence
+from typing import NamedTuple
+
 # Type alias for RGB color
 RGBColor = tuple[int, int, int]
 
@@ -30,6 +33,18 @@ def canonical_nes(value: int) -> int:
 def distinct_nes_entries() -> list[int]:
     """The NES values worth showing in a palette: all 64 minus nine spare blacks."""
     return [v for v in range(64) if canonical_nes(v) == v]
+
+
+class ColorFamily(NamedTuple):
+    """A named group of NES colors that read as one color, e.g. "green"."""
+
+    name: str
+    colors: tuple[int, ...]
+
+
+def family_colors(families: Sequence[ColorFamily]) -> tuple[int, ...]:
+    """Every color in `families`, the families concatenated in order."""
+    return tuple(color for family in families for color in family.colors)
 
 
 NES_SYSTEM_PALETTE: list[RGBColor] = [

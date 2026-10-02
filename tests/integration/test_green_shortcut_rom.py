@@ -108,7 +108,7 @@ def test_every_lie_panel_call_site_is_spliced(tmp_path):
 
     A raw byte count of `20 DE A5` over bank 13 finds four hits in vanilla and
     two more that are coincidences, so this asks the reference finder instead -
-    it checks instruction boundaries and labelled data ranges.
+    it checks instruction boundaries and labeled data ranges.
     """
     reader = RomReader(ROM_PATH)
     vanilla = find_code_references(reader, LIE_POPUP_ADDR, 13).confirmed

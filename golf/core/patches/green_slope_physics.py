@@ -126,7 +126,7 @@ Not included
 ------------
 
 Two things from the same design that do not fit an in-place patch: bilinear
-interpolation of the slope vector between tile centres (which would smooth the
+interpolation of the slope vector between tile centers (which would smooth the
 faceting at 8-pixel boundaries), and a per-course green-speed byte. Vanilla's
 proportional friction is also left in place rather than removed, since `$09` is
 computed at `$B245`, outside the replaced region.
