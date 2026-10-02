@@ -47,7 +47,6 @@ One line per document. Command-line tools are indexed in the top-level `README.m
 | [practice_swing.md](practice_swing.md) | Practice swings that cost no stroke |
 | [green_shortcut.md](green_shortcut.md) | B then Select opens the green detail view, B then Start the scorecard |
 | [practice_greens.md](practice_greens.md) | Standalone Practice Greens hack: every vanilla green, runtime selection, storage and testing |
-| [putting_practice.md](putting_practice.md) | Original putting-spawn research and experimental patch |
 | [green_slope_physics.md](green_slope_physics.md) | Experimental: green slopes as constant acceleration rather than speed-scaled |
 | [prehole_signpost.md](prehole_signpost.md) | The pre-hole signpost card, and replacing its banner art |
 | [scorecard_qr.md](scorecard_qr.md) | End-of-round QR code submission, and its 6502 port |

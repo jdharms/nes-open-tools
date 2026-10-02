@@ -43,7 +43,6 @@ from .multi_bank import COURSE_MIRRORS_PATCH, MULTI_BANK_CODE_PATCH
 from .music_import import music_import_patch
 from .peach_dress import peach_dress_patch
 from .practice_swing import DEFAULT_HOLD_FRAMES, practice_swing_patch
-from .putting_practice import putting_practice_patches
 from .qr_credentials import load_credentials, qr_credentials_patch
 from .round_stats import ROUND_STATS_PATCH
 from .scorecard_course_name import DEFAULT_NAME as DEFAULT_COURSE_NAME
@@ -546,16 +545,6 @@ PATCH_SPECS: dict[str, PatchSpec[Any, Any]] = {
             "Skip post-hole ball retrieval and ace celebrations",
             NoParams,
             lambda ctx, params: skip_hole_celebrations_patch(),
-        ),
-        PatchSpec(
-            "putting_practice",
-            "Experimental: start every hole as a putt (docs/putting_practice.md)",
-            NoParams,
-            lambda ctx, params: CompositePatch(
-                "putting_practice",
-                "Start every hole with the ball on the putting surface",
-                putting_practice_patches(),
-            ),
         ),
     ]
 }
