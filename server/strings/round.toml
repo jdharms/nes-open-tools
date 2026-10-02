@@ -72,4 +72,4 @@ text = "{hit}/{possible}"
 
 [round.penalty_strokes]
 note = "line under the round tables; {count} the round's penalty strokes, one each for a ball in the water or out of bounds (0 included). Only on rounds from ROMs that record it"
-text = "{count}"
+text = "Penalty Strokes: {count}"
