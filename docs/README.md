@@ -51,6 +51,7 @@ One line per document. Command-line tools are indexed in the top-level `README.m
 | [prehole_signpost.md](prehole_signpost.md) | The pre-hole signpost card, and replacing its banner art |
 | [scorecard_qr.md](scorecard_qr.md) | End-of-round QR code submission, and its 6502 port |
 | [scorecard_qr_mask_sweep.md](scorecard_qr_mask_sweep.md) | Results of the QR mask/capture-condition validation sweep |
+| [seasonal_terrain.md](seasonal_terrain.md) | Spike: recoloring terrain for seasons; palette sites, the ball's shared color slots, unknowns and a plan |
 
 ## Guides
 
