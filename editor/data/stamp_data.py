@@ -89,22 +89,11 @@ class StampData:
         stamp.metadata = metadata if metadata is not None else StampMetadata()
         return stamp
 
-    def save(self, path: str | Path):
-        """
-        Save stamp to JSON file using hex_utils format.
-
-        Args:
-            path: File path to save to (can be string or Path)
-        """
-        path = Path(path)
-
-        # Ensure parent directory exists
-        path.parent.mkdir(parents=True, exist_ok=True)
-
-        # Convert tiles to hex strings using shared utility
+    def to_json(self) -> str:
+        """The stamp as the JSON text `save` writes."""
+        # Convert tiles to hex strings, with "--" marking transparent tiles
         tile_rows = []
         for row in self.tiles:
-            # Convert None values to "--" marker for transparency
             hex_values = []
             for tile_value in row:
                 if tile_value is None:
@@ -126,9 +115,21 @@ class StampData:
         if self.attributes:
             data["attributes"] = {"rows": self.attributes}
 
-        # Save to JSON
-        with open(path, "w") as f:
-            json.dump(data, f, indent=2)
+        return json.dumps(data, indent=2)
+
+    def save(self, path: str | Path):
+        """
+        Save stamp to JSON file using hex_utils format.
+
+        Args:
+            path: File path to save to (can be string or Path)
+        """
+        path = Path(path)
+
+        # Ensure parent directory exists
+        path.parent.mkdir(parents=True, exist_ok=True)
+
+        path.write_text(self.to_json())
 
     @staticmethod
     def load(path: str | Path) -> "StampData":

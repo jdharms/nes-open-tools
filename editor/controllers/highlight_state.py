@@ -50,6 +50,12 @@ class HighlightState:
         # Carpet paint tool active state (for visual dimming)
         self.carpet_paint_active: bool = False
 
+        # Feature brush state, in game pixels
+        self.feature_brush_cursor: tuple[int, int] | None = None
+        self.feature_brush_radius: int = 0
+        self.feature_brush_points: list[tuple[int, int]] | None = None
+        self.feature_brush_erasing: bool = False
+
     def set_picker_hover(self, tile_value: int | None):
         """
         Update the shift-hover tile highlight.

@@ -60,7 +60,7 @@ def event_handler(editor_state, hole_data, tool_manager):
     mock_on_load_file = Mock()
     mock_on_save = Mock()
     mock_on_mode_change = Mock()
-    mock_on_flag_change = Mock()
+    mock_on_select_flag = Mock()
     mock_on_resize = Mock()
     mock_on_tool_change = Mock()
     mock_on_terrain_modified = Mock()
@@ -80,7 +80,7 @@ def event_handler(editor_state, hole_data, tool_manager):
         on_load_file=mock_on_load_file,
         on_save=mock_on_save,
         on_mode_change=mock_on_mode_change,
-        on_flag_change=mock_on_flag_change,
+        on_select_flag=mock_on_select_flag,
         on_resize=mock_on_resize,
         on_tool_change=mock_on_tool_change,
         on_terrain_modified=mock_on_terrain_modified,
@@ -211,6 +211,18 @@ class TestOtherGlobalShortcuts:
             event_handler.handle_events([event])
             # After undo, should not be able to undo again (only had 1 state)
             assert not event_handler.state.undo_manager.can_undo()
+
+    def test_f1_to_f4_select_the_flag_position(self, mock_pygame, event_handler):
+        """F1-F4 select flag positions 0-3, as the toolbar's buttons of those names do."""
+        keys = (pygame.K_F1, pygame.K_F2, pygame.K_F3, pygame.K_F4)
+        with patch("pygame.key.get_mods", return_value=0):
+            for index, key in enumerate(keys):
+                event_handler.handle_events([MockEvent(pygame.KEYDOWN, key=key)])
+                event_handler.on_select_flag.assert_called_with(index)
+            event_handler.on_select_flag.reset_mock()
+            for key in (pygame.K_LEFTBRACKET, pygame.K_RIGHTBRACKET):
+                event_handler.handle_events([MockEvent(pygame.KEYDOWN, key=key)])
+            event_handler.on_select_flag.assert_not_called()
 
     def test_g_cycles_grid_mode(self, mock_pygame, event_handler):
         """G key should cycle through grid modes: TILE -> SUPERTILE -> OFF -> TILE."""

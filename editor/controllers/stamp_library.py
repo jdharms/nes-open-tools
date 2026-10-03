@@ -102,7 +102,7 @@ class StampLibrary:
             recursive: If True, include stamps from subcategories
 
         Returns:
-            List of StampData objects
+            List of StampData objects, smallest first
         """
         node = self.category_tree.get_node(category_path)
         if not node:
@@ -110,7 +110,14 @@ class StampLibrary:
 
         stamp_ids = node.get_all_stamp_ids() if recursive else node.stamp_ids
 
-        return [self.stamps[sid] for sid in stamp_ids if sid in self.stamps]
+        stamps = [self.stamps[sid] for sid in stamp_ids if sid in self.stamps]
+        return sorted(stamps, key=self._size_order)
+
+    @staticmethod
+    def _size_order(stamp: StampData) -> tuple[int, int, int, str]:
+        """Sort key: smallest stamp first, by the tiles it places."""
+        placed = sum(tile is not None for row in stamp.tiles for tile in row)
+        return (placed, stamp.height, stamp.width, stamp.metadata.id)
 
     def get_all_categories(self) -> list[str]:
         """Get list of all categories."""

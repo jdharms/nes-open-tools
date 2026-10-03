@@ -43,6 +43,7 @@ from .tools.add_row_tool import AddRowTool
 from .tools.carpet_paint_tool import CarpetPaintTool
 from .tools.cycle_tool import CycleTool
 from .tools.eyedropper_tool import EyedropperTool
+from .tools.feature_brush_tool import BoundaryBrushTool, FeatureBrushTool
 from .tools.forest_fill_tool import ForestFillTool
 from .tools.fringe_generation_tool import FringeGenerationTool
 from .tools.green_fill_tool import GreenFillTool
@@ -176,9 +177,11 @@ class EditorApplication:
         self.tool_picker.register_tool("palette", "Palette", "🎨")
         self.tool_picker.register_tool("selection", "Select", "✂")
         self.tool_picker.register_tool("stamp", "Stamp", "📋")
+        self.tool_picker.register_tool("feature_brush", "Feature", "🖍")
+        self.tool_picker.register_tool("boundary_brush", "OOB", "🚧")
+        self.tool_picker.register_tool("forest_fill", "Forest Fill", "🌲")
         self.tool_picker.register_tool("transform", "Transform", "↔")
         self.tool_picker.register_tool("cycle", "Cycle", "🔄")
-        self.tool_picker.register_tool("forest_fill", "Forest Fill", "🌲")
         self.tool_picker.register_tool("fringe_generation", "Fringe Gen", "🌊")
         self.tool_picker.register_tool("green_fill", "Green Fill", "🌿", is_action=True)
         self.tool_picker.register_tool("carpet_paint", "Carpet", "⛳")
@@ -206,6 +209,8 @@ class EditorApplication:
         self.tool_manager.register_tool("carpet_paint", CarpetPaintTool())
         self.tool_manager.register_tool("selection", SelectionTool())
         self.tool_manager.register_tool("stamp", StampTool())
+        self.tool_manager.register_tool("feature_brush", FeatureBrushTool())
+        self.tool_manager.register_tool("boundary_brush", BoundaryBrushTool())
         self.tool_manager.register_tool("palette", PaletteTool())
         self.tool_manager.register_tool("transform", TransformTool())
         self.tool_manager.register_tool("eyedropper", EyedropperTool())
@@ -236,7 +241,7 @@ class EditorApplication:
             on_load_file=self._on_load_file,
             on_save=self._on_save,
             on_mode_change=self._update_mode_buttons,
-            on_flag_change=self._update_flag_buttons,
+            on_select_flag=self._select_flag,
             on_resize=self._on_resize,
             on_tool_change=self._on_tool_change,
             on_create_stamp=self._on_create_stamp,

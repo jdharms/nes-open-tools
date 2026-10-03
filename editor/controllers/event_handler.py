@@ -20,6 +20,9 @@ from golf.formats.hole_data import HoleData
 
 from .editor_state import EditorState
 
+#: the keys that show each flag position, in order
+FLAG_KEYS = (pygame.K_F1, pygame.K_F2, pygame.K_F3, pygame.K_F4)
+
 
 class EventHandler:
     """Handles all user input events."""
@@ -40,7 +43,7 @@ class EventHandler:
         on_load_file: Callable[[str], None],
         on_save: Callable[[], None],
         on_mode_change: Callable[[], None],
-        on_flag_change: Callable[[], None],
+        on_select_flag: Callable[[int], None],
         on_resize: Callable[[int, int], None],
         on_tool_change: Callable[[], None],
         on_create_stamp: Callable[[], None] | None = None,
@@ -63,7 +66,7 @@ class EventHandler:
             on_load_file: Callback for loading a specific file (drag-and-drop)
             on_save: Callback for save action
             on_mode_change: Callback when mode changes
-            on_flag_change: Callback when flag selection changes
+            on_select_flag: Callback to select a flag position by index (0-3)
             on_resize: Callback for window resize (width, height)
             on_create_stamp: Callback for creating stamp from selection
             on_terrain_modified: Callback when terrain is modified
@@ -83,7 +86,7 @@ class EventHandler:
         self.on_save = on_save
         self.on_mode_change = on_mode_change
         self.on_create_stamp = on_create_stamp
-        self.on_flag_change = on_flag_change
+        self.on_select_flag = on_select_flag
         self.on_resize = on_resize
         self.on_tool_change = on_tool_change
         self.on_terrain_modified = on_terrain_modified
@@ -299,23 +302,9 @@ class EventHandler:
         elif event.key == pygame.K_DOWN:
             self.state.canvas_offset_y += 20
 
-        elif event.key == pygame.K_LEFTBRACKET:  # [
-            # Previous flag position
-            if self.hole_data.metadata.get("flag_positions"):
-                num_flags = len(self.hole_data.metadata["flag_positions"])
-                self.state.selected_flag_index = (
-                    self.state.selected_flag_index - 1
-                ) % num_flags
-                self.on_flag_change()
-
-        elif event.key == pygame.K_RIGHTBRACKET:  # ]
-            # Next flag position
-            if self.hole_data.metadata.get("flag_positions"):
-                num_flags = len(self.hole_data.metadata["flag_positions"])
-                self.state.selected_flag_index = (
-                    self.state.selected_flag_index + 1
-                ) % num_flags
-                self.on_flag_change()
+        elif event.key in FLAG_KEYS:
+            # F1-F4: show that flag position, as the toolbar's F1-F4 buttons do
+            self.on_select_flag(FLAG_KEYS.index(event.key))
 
         else:
             # Try tool hotkeys
