@@ -8,7 +8,8 @@ Pygame-based course editor (`golf-editor`). The data it edits is described in
 - `controllers/` - editor state, event handling, view state, undo management
 - `rendering/` - specialized renderers (terrain, greens, grid, sprites)
 - `tools/` - editor tools (paint, transform, eyedropper, forest fill, etc.)
-- `algorithms/` - fringe generation and similar
+- `algorithms/` - fringe generation and green fill; algorithms the randomizer shares,
+  forest fill among them, are in `golf/algorithms/`
 
 A standalone executable is built with PyInstaller from the repo root:
 `uv run pyinstaller run_editor.spec`.

@@ -24,6 +24,7 @@ from golf.core.patches.sram_defaults import BAG_SIZE, Club, magic_bytes, parse_c
 from .catalog import JP_ROM, US_ROM, Catalog, CatalogError, HoleId, RomSource
 from .layout import COUNTS
 from .music import RANDOM, TRACKS, track
+from .transforms import TransformError, parse_transform
 from .words import MagicWordsError, check_magic_words
 
 SCHEMA = 2
@@ -239,8 +240,8 @@ class Slot:
     """One hole of the course.
 
     `wind_seed` is the 16-bit state the ROM's own RNG starts the hole from
-    (docs/seeded_wind.md), not a PRNG seed for generation. Schema 1 defines no transforms,
-    so `transforms` is always empty.
+    (docs/seeded_wind.md), not a PRNG seed for generation. `transforms` names hole
+    transforms (`golf/randomizer/transforms.py`), applied to the hole in order.
     """
 
     id: HoleId
@@ -260,10 +261,15 @@ class Slot:
                 f"{self.id}: wind_seed must be 0-65535, got {self.wind_seed!r}"
             )
         object.__setattr__(self, "transforms", tuple(self.transforms))
-        if self.transforms:
-            raise ManifestError(
-                f"{self.id}: schema {SCHEMA} defines no transforms, got {list(self.transforms)}"
-            )
+        for name in self.transforms:
+            if not isinstance(name, str):
+                raise ManifestError(
+                    f"{self.id}: transform must be a string, got {name!r}"
+                )
+            try:
+                parse_transform(name)
+            except TransformError as problem:
+                raise ManifestError(f"{self.id}: {problem}") from None
 
     def to_json(self) -> dict:
         return {

@@ -1,8 +1,10 @@
 """
-NES Open Tournament Golf - Intelligent Forest Fill Algorithm
+Forest fill: replaces placeholder tiles with forest that tiles with its surroundings.
 
 Deterministic algorithm based on tile family constraints and tree exertion matching,
-using arc consistency for bidirectional constraint propagation.
+using arc consistency for bidirectional constraint propagation (`docs/forest_notes.md`).
+The editor's forest fill tool fills one region at a time; the mirror transform
+(`golf/algorithms/mirror.py`) fills every region of a hole with `fill_all`.
 """
 
 from __future__ import annotations
@@ -151,6 +153,10 @@ def count_ones(tile: int) -> int:
     return sum(sum(bits) for bits in TILE_EXERTIONS[tile])
 
 
+class ForestFillError(ValueError):
+    pass
+
+
 class ForestFillRegion:
     """
     Represents a contiguous region to be filled with forest tiles.
@@ -252,7 +258,7 @@ class CellConstraints:
         return max(valid, key=count_ones)
 
 
-class BetterForestFiller:
+class ForestFiller:
     """
     Forest fill algorithm using arc consistency for constraint propagation.
 
@@ -879,6 +885,21 @@ class BetterForestFiller:
 
         result, _, _ = self._fill_with_orientation(region, orientation, terrain)
         return result
+
+    def fill_all(self, terrain: list[list[int]]) -> None:
+        """Replace every placeholder in `terrain` with forest, in place.
+
+        Raises `ForestFillError` naming the first placeholder the fill leaves behind.
+        """
+        for region in self.detect_regions(terrain):
+            for (row, col), tile in self.fill_region(terrain, region).items():
+                terrain[row][col] = tile
+        for row, tiles in enumerate(terrain):
+            if PLACEHOLDER_TILE in tiles:
+                col = tiles.index(PLACEHOLDER_TILE)
+                raise ForestFillError(
+                    f"forest fill left a placeholder at row {row}, column {col}"
+                )
 
     @staticmethod
     def is_placeholder(tile_value: int) -> bool:

@@ -126,8 +126,10 @@ the CLI sets all three.
 | `sram_magic` | The 16-bit value that marks a save as this seed's, neither byte `$00` or `$FF` |
 
 A slot is a catalog hole `id`, its `par` (a copy of the catalog's, for readability),
-`transforms` and a `wind_seed`. Schema 1 defines no transforms, so the list is always
-empty. The wind seed is the 16-bit state the ROM's own RNG starts the hole from
+`transforms` and a `wind_seed`. `transforms` names hole transforms, such as `mirror@1`
+or `hazards@1:<seed>`, applied to the hole in order when the course is built
+(`docs/hole_transforms.md`). A name this release does not know, or a malformed seed,
+fails when the manifest loads. Generation adds no transforms yet. The wind seed is the 16-bit state the ROM's own RNG starts the hole from
 (`docs/seeded_wind.md`), not a seed for generation. No hole id appears twice.
 
 The SRAM magic is what the ROM's save initialization compares a save against at boot

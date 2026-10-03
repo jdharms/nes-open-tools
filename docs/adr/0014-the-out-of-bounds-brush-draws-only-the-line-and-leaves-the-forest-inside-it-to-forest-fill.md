@@ -20,7 +20,7 @@ the middles of sides, with the out-of-bounds side on one side or the other. Over
 side are close to a hard rule.
 
 Inside the line is forest, or bare out-of-bounds ground (`$3F`). Forest Fill
-(`editor/algorithms/better_forest_fill.py`) already fills a region of the editor's
+(`golf/algorithms/forest_fill.py`) already fills a region of the editor's
 placeholder with forest, its edge tiles and `$3F` where it has to. User seeds a
 region with a forest edge tile or `$3F` before filling, to pin the tiling and open
 clearings (`docs/forest_notes.md`). In the vanilla holes 13% of the cells just inside
@@ -46,7 +46,7 @@ Brush.
 
 - **Running Forest Fill on release.** It gives a finished forest in one step, but a
   dense one, and the clearing and tiling choices made by seeding are taste a stroke
-  cannot express. It would also move the fill out of `editor/` into `golf/`.
+  cannot express.
 - **A pen that draws the line itself.** The user would have to keep track of which
   side is out of bounds; painting the area settles that.
 - **A separate solver for the line.** The fit already handles it: fitted back, the

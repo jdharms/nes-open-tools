@@ -88,6 +88,7 @@ Build a standalone editor executable with `uv run pyinstaller run_editor.spec`.
 | `golf-dump <rom> [out_dir]` | Extract all courses from the US ROM to JSON, with compression statistics |
 | `golf-dump-jp <jp_rom> [out_dir]` | Extract the Mario Open Golf (JP) courses; see `docs/jp_extraction.md` |
 | `golf-write <rom> <course_dir>` | Write one course back into a ROM, packed across terrain banks 0 and 1; see `docs/multi_bank_terrain.md` |
+| `golf-transform <hole.json or course_dir> <out> <transform>...` | Apply hole transforms (mirror, hazard redraws) to a hole or course, writing new JSON; `--list` names them. See `docs/hole_transforms.md` |
 | `golf-visualize <tileset> <hole.json or course_dir> [out]` | Render holes to PNG |
 | `golf-render-web <courses> <out_dir>` | Render every dumped hole and its metadata for the site's rangefinder |
 
