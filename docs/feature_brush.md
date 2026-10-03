@@ -201,7 +201,7 @@ of stroke.
 | `,` / `.`, `Esc` | As for the Feature Brush; the palette makes no difference |
 
 On release the line is fitted round the new edge and the cells inside it become the
-placeholder (`0x100`, the grey check). Nothing is filled: seed the region with `$3F` or a
+placeholder (`0x100`, the gray check). Nothing is filled: seed the region with `$3F` or a
 forest edge tile to taste (`docs/forest_notes.md`) and run Forest Fill (`F`). Forest
 beside any cell the stroke changed becomes placeholder too, since its trees may have run
 into that cell, so reshaping a filled forest leaves a strip to fill again. `golf-write`
