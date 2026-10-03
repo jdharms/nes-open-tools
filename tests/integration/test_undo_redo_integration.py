@@ -63,7 +63,7 @@ def editor_setup():
         on_load_file=lambda path: None,
         on_save=lambda: None,
         on_mode_change=lambda: None,
-        on_flag_change=lambda: None,
+        on_select_flag=lambda index: None,
         on_resize=lambda w, h: None,
         on_tool_change=lambda: None,
     )

@@ -3,7 +3,8 @@
 The four terrain palettes differ only in color 3, and only feature tiles (`$27`, the
 lips and borders `$40`-`$7F`, the tree-edge tiles `$BC`-`$BF`) and the tee box draw with
 it. So a feature is a 4-connected area of color-3 pixels, and the black outlines inside
-the border tiles keep neighbouring features apart even when they share a tile.
+the border tiles keep it apart from a feature in the next tile. No tile holds two
+features.
 
 A feature's palette is also its lie (`LEFA7` in the fixed bank): 1 plays as fairway, 2 as
 a bunker, and 0 or 3 as water. Features that share a supertile share its palette, so they
