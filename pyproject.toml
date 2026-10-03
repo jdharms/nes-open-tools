@@ -30,6 +30,7 @@ golf-rehydrate = "tools.rehydrate:main"
 golf-dump = "tools.dump:main"
 golf-dump-jp = "tools.dump_jp_courses:main"
 golf-write = "tools.write:main"
+golf-transform = "tools.transform:main"
 golf-visualize = "tools.visualize:main"
 golf-render-web = "tools.render_web:main"
 

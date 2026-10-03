@@ -426,7 +426,8 @@ says so, a ROM playtested. Items 1 to 6 build the library; 7 onward build the si
     no browser keeps an old script or stylesheet past a deploy.
     `tests/unit/test_server_static_files.py` covers the versioning.
 16. **Polish.** The guest menu marker once its wording is settled, difficulty filters,
-    mirrored holes and the transforms column, hole thumbnails, multi-course generation.
+    generating seeds with hole transforms (`docs/hole_transforms.md`) and the transforms
+    column, hole thumbnails, multi-course generation.
     - **Player 2's account.** Both ROM slots carry the downloader's `player_id`, so a
       player 2 round counts toward the downloader's entry. Crediting it to a second
       account is undecided; candidates are a share code shown on `/me` that the teammate

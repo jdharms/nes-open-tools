@@ -14,6 +14,7 @@ One line per document. Command-line tools are indexed in the top-level `README.m
 | [documentation.md](documentation.md) | Philosophy and practices followed for documentation for the development process |
 | [catalog.md](catalog.md) | The randomizer hole catalog: frozen index, curation, ids, versions and families |
 | [manifest.md](manifest.md) | Randomizer seed manifests: settings, the concrete course, and how generation fills them |
+| [hole_transforms.md](hole_transforms.md) | Hole transforms: mirroring and hazard redraws, their names, versions and golden test |
 | [thoughts_on_par_6.md](thoughts_on_par_6.md) | Design note: fitting par 6 (and any scarce par) into layout generation |
 | [jp_extraction.md](jp_extraction.md) | Extracting Mario Open Golf (JP) courses for import into the US ROM |
 

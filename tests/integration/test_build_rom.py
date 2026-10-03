@@ -8,6 +8,7 @@ import pytest
 
 from golf.core import ips
 from golf.core.patches import PatchStack, StackError
+from golf.core.patches.course import CoursePatch
 from golf.core.patches.extended_sram_defaults import BallSpin, SwingSpeed
 from golf.core.patches.qr_credentials import PLACEHOLDERS, placeholder_offset
 from golf.core.patches.scorecard_qr import SCORECARD_QR_PATCH
@@ -33,6 +34,7 @@ from golf.randomizer.manifest import (
     ClubRules,
     Settings,
 )
+from golf.randomizer.transforms import apply_transforms
 from tests.new_save import new_save
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -195,6 +197,24 @@ def test_a_nes_open_seed_repoints_the_theme_and_can_leave_out_mercy(
     build = build_unfinished(nes_manifest, catalog, store, vanilla)
     table = HEADER + 0x3C000 + (0xDA14 - 0xC000)
     assert build.rom[table : table + 3] == b"\x02\x02\x02"
+
+
+def test_a_seed_with_transforms_builds_its_transformed_holes(
+    nes_manifest, catalog, store, vanilla
+):
+    styles = ("hazards@1", "hazards-weighted@1")
+    slots = tuple(
+        replace(slot, transforms=("mirror@1", f"{styles[i % 2]}:{i}"))
+        for i, slot in enumerate(nes_manifest.course.holes)
+    )
+    manifest = replace(nes_manifest, course=replace(nes_manifest.course, holes=slots))
+    steps = unfinished_steps(manifest, catalog, store, vanilla)
+    course = next(step for step in steps if isinstance(step, CoursePatch))
+    for slot, hole in zip(slots, course.holes, strict=True):
+        expected = apply_transforms(store.load(catalog[slot.id]), slot.transforms)
+        assert hole.to_dict() == expected.to_dict()
+    build = build_unfinished(manifest, catalog, store, vanilla)
+    assert build.ips != build_unfinished(nes_manifest, catalog, store, vanilla).ips
 
 
 def club_house(steps) -> list[str]:

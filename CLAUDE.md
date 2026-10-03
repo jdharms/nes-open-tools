@@ -44,8 +44,9 @@ A toolset for reverse engineering, editing and patching the NES Open Tournament 
   - `formats/` - hole data model and JSON serialization (see `docs/course_data.md`)
   - `algorithms/` - hole-editing algorithms shared by the editor and the randomizer:
     terrain features (fairways, bunkers, water), the hazard shapes cut from them, the
-    out-of-bounds line, and fitting border tiles to a painted shape
-    (`docs/feature_brush.md`)
+    out-of-bounds line, fitting border tiles to a painted shape
+    (`docs/feature_brush.md`), forest fill, and the hole transforms' mirror and hazard
+    redraws (`docs/hole_transforms.md`)
   - `rendering/` - PIL rendering for static images
   - `qr/` - scorecard QR reference implementation and 6502 port
   - `physics/` - Python model of the ball physics (launch to rest), checked frame by frame

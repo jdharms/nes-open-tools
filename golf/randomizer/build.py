@@ -1,7 +1,8 @@
 """
 The two-stage build: a manifest into an unfinished ROM, and an unfinished ROM into a finished one.
 
-- **Unfinished**, once per seed: the base patches, the course, seeded wind, the course theme,
+- **Unfinished**, once per seed: the base patches, the course with each slot's hole
+  transforms applied, seeded wind, the course theme,
   mercy tap-in, the green detail view and scorecard shortcuts, the round stats the QR code
   sends (fairways hit and penalty strokes), the scorecard QR image with
   its credential placeholders at the fill, the signpost banner, the magic words on the
@@ -73,6 +74,7 @@ from golf.qr import payload
 from .catalog import JP_ROM, REPO_ROOT, US_ROM, Catalog, HoleStore
 from .manifest import ClubRules, Manifest
 from .music import MUSIC_DUMPS, track
+from .transforms import apply_transforms
 from .words import scorecard_title
 
 SIGNPOST_ART = (
@@ -228,7 +230,10 @@ def unfinished_steps(
 ) -> list[ROMPatch]:
     """The unfinished stack's steps, in order. `vanilla` is read for the signpost art."""
     course = manifest.course
-    holes = [store.load(catalog[slot.id]) for slot in course.holes]
+    holes = [
+        apply_transforms(store.load(catalog[slot.id]), slot.transforms)
+        for slot in course.holes
+    ]
     steps: list[ROMPatch] = [
         WRAM_EXPANSION_PATCH,
         MULTI_BANK_CODE_PATCH,

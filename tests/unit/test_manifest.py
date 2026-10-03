@@ -217,8 +217,10 @@ def test_rejects_bad_slots():
         Slot(HoleId("nes_us/01"), 4, 0x10000)
     with pytest.raises(ManifestError, match="par"):
         Slot(HoleId("nes_us/01"), 6, 0)
-    with pytest.raises(ManifestError, match="no transforms"):
+    with pytest.raises(ManifestError, match="unknown transform 'mirror'"):
         Slot(HoleId("nes_us/01"), 4, 0, ("mirror",))
+    with pytest.raises(ManifestError, match="transform must be a string"):
+        Slot.from_json({"id": "nes_us/01", "par": 4, "transforms": [1], "wind_seed": 0})
     with pytest.raises(ManifestError, match="not canonical"):
         Slot.from_json(
             {"id": "nes_us/01@1", "par": 4, "transforms": [], "wind_seed": 0}
