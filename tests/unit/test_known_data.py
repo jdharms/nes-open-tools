@@ -78,6 +78,13 @@ class FakeRom:
     def __init__(self):
         self.data = bytearray(SIZE)
 
+    @property
+    def prg_size(self) -> int:
+        return SIZE
+
+    def read_prg(self, offset, length):
+        return bytes(self.data[offset : offset + length])
+
     def read_switched(self, cpu, bank, length):
         start = bank * 0x4000 + (cpu - 0x8000)
         return bytes(self.data[start : start + length])
@@ -103,8 +110,62 @@ def test_regions_that_claim_the_same_bytes_are_a_contradiction():
     ]
 
 
-def test_a_triples_metasprite_is_a_count_and_three_bytes_a_sprite():
-    from golf.core.known_data import CHUNKED, TRIPLES_ONLY, _metasprite_size
+def test_metasprite_size_follows_the_renderer_format():
+    from golf.core.known_data import CHUNKED, QUADS, TRIPLES_ONLY, _metasprite_size
 
     assert _metasprite_size(bytes([0x04] + [0] * 12), TRIPLES_ONLY) == 13
+    assert _metasprite_size(bytes([0x04] + [0] * 16), QUADS) == 17
     assert _metasprite_size(bytes([0x04] + [0] * 16), CHUNKED) == 17
+
+
+def test_every_bank_ends_in_its_vectors():
+    from golf.core.known_data import vector_regions
+
+    regions = vector_regions(FakeRom())
+    assert [(r.bank, r.cpu, r.length) for r in regions[::15]] == [
+        (0, 0xBFFA, 6),
+        (15, 0xFFFA, 6),
+    ]
+    assert regions[-1].name == "InterruptVectors"
+
+
+class TestCopiedBlockRegions:
+    # JSR CopyInlineMemoryBlock / .dw src, dst, length
+    @staticmethod
+    def copy(rom, prg, src, dst, length):
+        rom.data[prg : prg + 9] = bytes(
+            [0x20, 0x1A, 0xD4, src & 0xFF, src >> 8, dst & 0xFF, dst >> 8, length, 0]
+        )
+
+    def test_switchable_source_is_in_the_sites_bank(self):
+        from golf.core.known_data import copied_block_regions
+
+        rom, result = FakeRom(), traced()
+        prg = 13 * 0x4000 + 0x16E3  # bank 13 $96E3
+        self.copy(rom, prg, 0x9978, 0x0497, 64)
+        result.marks[prg] = OPCODE
+        [found] = copied_block_regions(rom, result)
+        assert (found.bank, found.cpu, found.length) == (13, 0x9978, 64)
+        assert found.name == "AttributeTableDataD9978"
+
+    def test_fixed_bank_site_uses_the_banks_it_ran_with(self):
+        from golf.core.known_data import copied_block_regions
+
+        rom, result = FakeRom(), traced()
+        prg = 0x3C100
+        self.copy(rom, prg, 0x9000, 0x0410, 6)
+        result.marks[prg] = OPCODE
+        result.contexts[prg] = {12, None}
+        [found] = copied_block_regions(rom, result)
+        assert (found.bank, found.name) == (12, "NametableDescriptorTemplateC9000")
+
+
+def test_clip_window_records_follow_the_inline_word():
+    from golf.core.known_data import clip_window_regions
+
+    rom, result = FakeRom(), traced()
+    prg = 14 * 0x4000 + 0x2EC7  # bank 14 $AEC7: JSR SetObjectClipWindow / .dw $B2E3
+    rom.data[prg : prg + 5] = bytes([0x20, 0x81, 0xF8, 0xE3, 0xB2])
+    result.marks[prg] = OPCODE
+    [found] = clip_window_regions(rom, result)
+    assert (found.bank, found.cpu, found.length) == (14, 0xB2E3, 5)

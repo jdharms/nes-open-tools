@@ -338,6 +338,26 @@ def padding_regions(rom) -> list[KnownRegion]:
     return regions
 
 
+def vector_regions(rom) -> list[KnownRegion]:
+    """Every bank's NMI, RESET and IRQ vectors, the last 6 bytes.
+
+    MMC1 can power up with any bank at `$C000`, so each switchable bank carries
+    its own copy; the trace seeds from all of them (`rom_trace.vector_seeds`).
+    """
+    banks = rom.prg_size // PRG_BANK_SIZE
+    return [
+        _region(
+            bank,
+            0xFFFA if bank == banks - 1 else 0xBFFA,
+            6,
+            "vectors",
+            "InterruptVectors" if bank == banks - 1 else f"Bank{bank}InterruptVectors",
+            "NMI, RESET, IRQ",
+        )
+        for bank in range(banks)
+    ]
+
+
 @dataclass
 class LabelPlan:
     """How the known regions compare with a label file."""
@@ -515,23 +535,39 @@ def script_regions(walk: ScriptWalk) -> list[KnownRegion]:
 SPRITE_PTR = 0x45  # PointerToSpriteData
 LDA_ABS_X, LDA_ABS_Y, LDA_IMM, STA_ZP = 0xBD, 0xB9, 0xA9, 0x85
 MAX_SPLIT_TABLE = 64
-RENDERER_REACH = 12  # instructions to look ahead from the pointer load
+RENDERER_REACH = 16  # instructions to look ahead from the pointer load
 
-# Renderer -> its metasprite format. RenderMetasprite and RenderMetaspriteClipped
-# read chunked metasprites (`metasprite_length`); RenderMetaspriteWithAttr a
-# count byte and 3 bytes a sprite, with the attribute from $29.
+# (bank, renderer) -> its metasprite format; bank None for the fixed bank's.
+# RenderMetasprite and RenderMetaspriteClipped read chunked metasprites
+# (`metasprite_length`); RenderMetaspriteWithAttr a count byte and 3 bytes a
+# sprite, with the attribute from $29; bank 13's RenderGreenViewMetasprite a
+# count byte and 4 bytes a sprite (y, tile, attribute, x).
 CHUNKED, TRIPLES_ONLY = "chunked", "count + 3 per sprite"
-RENDERERS = {0xFEBD: CHUNKED, 0xFDCE: CHUNKED, 0xFF38: TRIPLES_ONLY}
+QUADS = "count + 4 per sprite"
+RENDERERS = {
+    (None, 0xFEBD): CHUNKED,
+    (None, 0xFDCE): CHUNKED,
+    (None, 0xFF38): TRIPLES_ONLY,
+    (13, 0x9492): QUADS,
+}
 
 
 def _metasprite_size(data: bytes, form: str) -> int | None:
     if form == CHUNKED:
         return metasprite_length(data)
-    return 1 + 3 * data[0] if data else None
+    if not data:
+        return None
+    return 1 + (3 if form == TRIPLES_ONLY else 4) * data[0]
 
 
-def _renderer_after(rom_data: bytes, result: TraceResult, prg: int) -> str | None:
-    """The format of the first renderer a straight run from `prg` calls."""
+def _renderer_after(
+    rom_data: bytes, result: TraceResult, prg: int, depth: int = 1
+) -> str | None:
+    """The format of the first renderer a straight run from `prg` calls.
+
+    A call to anything else is followed `depth` levels in, for the helpers that
+    clip a sprite's position and then draw it (bank 13 `LD_8ED0`).
+    """
     for _ in range(RENDERER_REACH):
         prg = _next_opcode(result, prg)
         if prg >= len(rom_data) - 2:
@@ -539,8 +575,15 @@ def _renderer_after(rom_data: bytes, result: TraceResult, prg: int) -> str | Non
         op = rom_data[prg]
         if op in (0x20, 0x4C):  # JSR, JMP
             target = rom_data[prg + 1] | rom_data[prg + 2] << 8
-            if target in RENDERERS:
-                return RENDERERS[target]
+            bank = None if target >= 0xC000 else prg // PRG_BANK_SIZE
+            if (bank, target) in RENDERERS:
+                return RENDERERS[(bank, target)]
+            if depth and target >= 0x8000:
+                callee = _prg(15 if bank is None else bank, target)
+                if result.marks[callee] == OPCODE:
+                    form = _renderer_after(rom_data, result, callee - 1, depth - 1)
+                    if form is not None:
+                        return form
             if op == 0x4C:
                 return None
         elif op in (0x60, 0x40):  # RTS, RTI
@@ -648,32 +691,35 @@ def metasprite_regions(rom, result: TraceResult) -> list[KnownRegion]:
 
 LOAD_32_BYTES = 0xD80A  # Load32BytesToBuffer: inline word -> PaletteBuffer
 PALETTE_SIZE = 32
+SET_CLIP_WINDOW = 0xF881  # SetObjectClipWindow: inline word -> a 5-byte record
+CLIP_WINDOW_SIZE = 5
 
 
-def palette_regions(rom, result: TraceResult) -> list[KnownRegion]:
-    """The 32-byte palettes traced code passes inline to `Load32BytesToBuffer`.
+def _inline_word_targets(rom, result: TraceResult, routine: int):
+    """(bank, cpu, site prg) for each traced `JSR routine` and its inline word.
 
-    A switchable-bank site's palette is in its own bank; a fixed-bank site
-    naming `$8000-$BFFF` depends on its caller, so it is left out.
+    The word resolves in the site's own bank, the fixed bank, or - for a
+    fixed-bank site naming `$8000-$BFFF` - each bank the trace saw mapped there.
     """
     data = rom.read_prg(0, rom.prg_size)
-    found: dict[tuple[int, int], int] = {}
-    lo, hi = LOAD_32_BYTES & 0xFF, LOAD_32_BYTES >> 8
+    lo, hi = routine & 0xFF, routine >> 8
     for prg in range(len(data) - 4):
-        if not (
+        if (
             result.marks[prg] == OPCODE
             and data[prg] == 0x20
             and data[prg + 1] == lo
             and data[prg + 2] == hi
         ):
-            continue
-        cpu = data[prg + 3] | data[prg + 4] << 8
-        bank = prg // PRG_BANK_SIZE
-        if cpu >= 0xC000:
-            bank = 15
-        elif cpu < 0x8000 or bank == 15:
-            continue
-        found.setdefault((bank, cpu), prg)
+            cpu = data[prg + 3] | data[prg + 4] << 8
+            for bank in sorted(_site_banks(result, prg, cpu)):
+                yield bank, cpu, prg
+
+
+def palette_regions(rom, result: TraceResult) -> list[KnownRegion]:
+    """The 32-byte palettes traced code passes inline to `Load32BytesToBuffer`."""
+    found: dict[tuple[int, int], int] = {}
+    for bank, cpu, site in _inline_word_targets(rom, result, LOAD_32_BYTES):
+        found.setdefault((bank, cpu), site)
     return [
         _region(
             bank,
@@ -685,6 +731,97 @@ def palette_regions(rom, result: TraceResult) -> list[KnownRegion]:
             f"${_cpu_of(site):04X}",
         )
         for (bank, cpu), site in sorted(found.items())
+    ]
+
+
+def clip_window_regions(rom, result: TraceResult) -> list[KnownRegion]:
+    """The records traced code passes inline to `SetObjectClipWindow`.
+
+    Each is a window index, then the four bounds `RenderMetaspriteClipped`
+    clips an object's sprites to (`$7A91`/`$7A99`/`$7AA1`/`$7AA9`).
+    """
+    found: dict[tuple[int, int], int] = {}
+    for bank, cpu, site in _inline_word_targets(rom, result, SET_CLIP_WINDOW):
+        found.setdefault((bank, cpu), site)
+    return [
+        _region(
+            bank,
+            cpu,
+            CLIP_WINDOW_SIZE,
+            "clip",
+            f"ObjectClipWindow{bank:X}{cpu:04X}",
+            "window index, then four clip bounds for SetObjectClipWindow at bank "
+            f"{site // PRG_BANK_SIZE} ${_cpu_of(site):04X}",
+        )
+        for (bank, cpu), site in sorted(found.items())
+    ]
+
+
+# --- Blocks copied inline ----------------------------------------------
+
+COPY_INLINE_BLOCK = 0xD41A  # CopyInlineMemoryBlock: inline src, dst, length
+NAMETABLE_DESCRIPTOR_BUFFER = range(0x0410, 0x0420)  # copies seen land at its start
+ATTRIBUTE_BUFFER = 0x0497  # CurrentTerrainAttrs, 64 bytes
+
+
+def _copied_kind(dst: int, length: int) -> str:
+    """What a copy's destination says its source is."""
+    if dst in NAMETABLE_DESCRIPTOR_BUFFER:
+        return "NametableDescriptorTemplate"
+    if dst == ATTRIBUTE_BUFFER and length == 64:
+        return "AttributeTableData"
+    return "CopiedBlock"
+
+
+def _site_banks(result: TraceResult, prg: int, cpu: int) -> set[int]:
+    """The banks a ROM address named by the instruction at `prg` can be in.
+
+    The fixed bank for `$C000+`; the site's own bank for switchable code; for
+    fixed-bank code, each bank the trace saw mapped when it ran (none if unknown).
+    """
+    if cpu >= 0xC000:
+        return {15}
+    if cpu < 0x8000:
+        return set()
+    bank = prg // PRG_BANK_SIZE
+    if bank != 15:
+        return {bank}
+    return {b for b in result.contexts.get(prg, ()) if b is not None}
+
+
+def copied_block_regions(rom, result: TraceResult) -> list[KnownRegion]:
+    """The ROM sources traced code copies with `CopyInlineMemoryBlock`."""
+    data = rom.read_prg(0, rom.prg_size)
+    found: dict[tuple[int, int], tuple[int, int, int]] = {}  # -> length, dst, site
+    lo, hi = COPY_INLINE_BLOCK & 0xFF, COPY_INLINE_BLOCK >> 8
+    for prg in range(len(data) - 8):
+        if not (
+            result.marks[prg] == OPCODE
+            and data[prg] == 0x20
+            and data[prg + 1] == lo
+            and data[prg + 2] == hi
+        ):
+            continue
+        src = data[prg + 3] | data[prg + 4] << 8
+        dst = data[prg + 5] | data[prg + 6] << 8
+        length = data[prg + 7] | data[prg + 8] << 8
+        if not length:
+            continue
+        for bank in _site_banks(result, prg, src):
+            key = (bank, src)
+            if length > found.get(key, (0,))[0]:
+                found[key] = (length, dst, prg)
+    return [
+        _region(
+            bank,
+            cpu,
+            length,
+            "copied",
+            f"{_copied_kind(dst, length)}{bank:X}{cpu:04X}",
+            f"{length} bytes copied to ${dst:04X} by CopyInlineMemoryBlock at "
+            f"bank {site // PRG_BANK_SIZE} ${_cpu_of(site):04X}",
+        )
+        for (bank, cpu), (length, dst, site) in sorted(found.items())
     ]
 
 
@@ -887,6 +1024,26 @@ def opponent_shot_regions(rom, result: TraceResult) -> list[KnownRegion]:
 # --- Scene objects ------------------------------------------------------
 
 
+def _frame_count(rom, bank: int, table: int, used: int) -> int:
+    """Entries in a frame table: at least `used`, and on up to what it points at.
+
+    The tables sit in front of their metasprites, so a table runs until the
+    lowest metasprite any of its entries names; past the highest frame a record
+    uses, an entry that isn't a pointer into the object data ends it.
+    """
+    end = OBJECT_DATA_END[bank]
+    low, n = end, 0
+    while table + 2 * n < low:
+        word = bank_word(rom, bank, table + 2 * n)
+        if not table + 2 * n < word < end:
+            if n >= used:
+                break
+        else:
+            low = min(low, word)
+        n += 1
+    return max(n, used)
+
+
 def object_regions(rom, walk: ObjectWalk) -> list[KnownRegion]:
     """Record lists, and in banks 2 and 10 the sprite tables, metasprites, streams."""
     pieces: dict[tuple[int, int], tuple[int, str, str]] = {}  # (bank, start) -> ...
@@ -912,7 +1069,7 @@ def object_regions(rom, walk: ObjectWalk) -> list[KnownRegion]:
             table.cpu,
             table.cpu + 2 * len(table.counts) - 1,
             f"ObjectRecordPtrTable{TABLE_BANK:X}{table.cpu:04X}",
-            f"{len(table.counts)} record lists for LF7EE; {table.why}",
+            f"{len(table.counts)} record lists for LF7EE or \$F856; {table.why}",
         )
     for bank in {b for b, _ in walk.frames}:
         end, low, n = OBJECT_DATA_END[bank], OBJECT_DATA_END[bank], 0
@@ -931,15 +1088,16 @@ def object_regions(rom, walk: ObjectWalk) -> list[KnownRegion]:
         )
     for (bank, sprite), frames in walk.frames.items():
         table = bank_word(rom, bank, 0x8000 + 2 * sprite)
+        count = _frame_count(rom, bank, table, max(frames) + 1)
         claim(
             bank,
             table,
-            table + 2 * max(frames) + 1,
+            table + 2 * count - 1,
             f"ObjectFrameTable{bank:X}{table:04X}",
             f"metasprite per frame of sprite ${sprite:02X}",
         )
-        # Every entry up to the highest frame used is a real pointer, used or not.
-        for frame in range(max(frames) + 1):
+        # Every entry is a real pointer, used or not.
+        for frame in range(count):
             ptr = bank_word(rom, bank, table + 2 * frame)
             if not 0x8000 <= ptr < OBJECT_DATA_END[bank]:
                 continue
@@ -1016,7 +1174,10 @@ def known_regions(
     measured += opponent_shot_regions(rom, result)
     measured += metasprite_regions(rom, result)
     measured += palette_regions(rom, result)
+    measured += clip_window_regions(rom, result)
+    measured += copied_block_regions(rom, result)
     measured += descriptor_regions(rom, result)
+    measured += vector_regions(rom)
     regions = list(measured)
     for pad in padding_regions(rom):
         # A graphics stream ends in its own $FF terminator, which the scan

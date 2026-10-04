@@ -27,6 +27,8 @@ from dataclasses import dataclass, field
 from functools import lru_cache
 
 from golf.core.rom_analysis import (
+    ABS_INDEXED_OPCODES,
+    ABS_OPCODES,
     BRANCH_OPCODES,
     FIXED_BANK,
     JMP_ABS,
@@ -162,7 +164,7 @@ CODE_POINTER_TABLES: tuple[CodePointerTable, ...] = (
 
 # --- Results ------------------------------------------------------------
 
-NONE, OPCODE, OPERAND, INLINE = 0, 1, 2, 3
+NONE, OPCODE, OPERAND, INLINE, UNCALLED = 0, 1, 2, 3, 4
 
 
 @dataclass
@@ -191,16 +193,21 @@ class TraceResult:
     entries: dict[int, str] = field(default_factory=dict)  # prg -> how it's entered
     unresolved: list[Finding] = field(default_factory=list)
     conflicts: list[Finding] = field(default_factory=list)
+    # opcode prg -> every bank it was decoded with mapped at $8000 (None: unknown)
+    contexts: dict[int, set] = field(default_factory=dict)
 
     @property
     def banks(self) -> int:
         return len(self.marks) // PRG_BANK_SIZE
 
     def coverage(self, bank: int) -> dict[str, int]:
-        """Byte counts for one bank: code, data, both, neither."""
-        counts = {"code": 0, "data": 0, "both": 0, "neither": 0}
+        """Byte counts for one bank: code, data, both, uncalled, neither."""
+        counts = {"code": 0, "data": 0, "both": 0, "uncalled": 0, "neither": 0}
         start = bank * PRG_BANK_SIZE
         for prg in range(start, start + PRG_BANK_SIZE):
+            if self.marks[prg] == UNCALLED:
+                counts["uncalled"] += 1
+                continue
             data = self.data_names[prg] is not None
             # Inline arguments inside a range label are data both ways round.
             code = self.marks[prg] in (OPCODE, OPERAND) or (
@@ -446,6 +453,7 @@ def trace(reader, labels=None, seeds=None, pointer_tables=CODE_POINTER_TABLES):
                 for p in range(prg + 1, prg + length):
                     result.marks[p] = OPERAND
                     owner[p] = prg
+            result.contexts.setdefault(prg, set()).add(ctx)
 
             operand = rom[prg + 1 : prg + length]
             next_cpu = cpu + length
@@ -519,6 +527,104 @@ def trace(reader, labels=None, seeds=None, pointer_tables=CODE_POINTER_TABLES):
     result.unresolved = _dedupe(result.unresolved)
     result.conflicts = _dedupe(result.conflicts)
     return result
+
+
+@dataclass(frozen=True)
+class DataReader:
+    """A traced instruction that names a ROM address as data."""
+
+    site: int  # prg of the instruction (the first load, for an immediate pair)
+    target: int  # prg it names, in the bank mapped when it runs
+    ctx: int | None  # the bank mapped at $8000 when it runs
+    how: str  # "LDA abs,X", ..., or "immediate pair" for LDx #lo .. LDx #hi
+    indexed: bool  # an indexed base: the instruction can reach past `target`
+
+
+PAIR_REACH = 6  # instructions after a `LDx #lo` to look for its `LDx #hi`
+
+
+def data_readers(rom: bytes, result: TraceResult) -> list[DataReader]:
+    """Every traced absolute operand and immediate pointer pair naming ROM.
+
+    An operand in `$8000-$BFFF` resolves against each bank the instruction was
+    traced with mapped, so a fixed-bank reader is listed once per bank it can
+    see, and not at all when that bank is unknown. Immediate pairs are a load of
+    `#lo` followed within `PAIR_REACH` instructions by a load of `#hi` - the
+    shape of a pointer built into zero page - and are only candidates.
+    """
+    lengths = _opcode_lengths()
+    out = []
+
+    def add(site, cpu, ctx, how, indexed):
+        target = _to_prg(cpu, ctx)
+        if target is not None and target < len(rom):
+            out.append(DataReader(site, target, ctx, how, indexed))
+
+    for prg, ctxs in sorted(result.contexts.items()):
+        opcode = rom[prg]
+        own = _bank_of(prg)
+        banks = {own} if own != FIXED_BANK else ctxs
+        if opcode in ABS_OPCODES or opcode in ABS_INDEXED_OPCODES:
+            cpu = rom[prg + 1] | (rom[prg + 2] << 8)
+            if cpu < 0x8000 or opcode in _MAPPER_WRITES:
+                continue
+            indexed = opcode in ABS_INDEXED_OPCODES
+            how = ABS_INDEXED_OPCODES[opcode] if indexed else ABS_OPCODES[opcode]
+            for ctx in banks if cpu < 0xC000 else {None}:
+                add(prg, cpu, ctx, how, indexed)
+        elif (first := _immediate_store(rom, prg)) is not None:
+            p = prg + 2 + lengths[rom[prg + 2]]
+            for _ in range(PAIR_REACH):
+                if result.marks[p] != OPCODE or rom[p] in _ENDS_PAIR_SEARCH:
+                    break
+                second = _immediate_store(rom, p)
+                if second is not None and abs(second[0] - first[0]) == 1:
+                    lo, hi = sorted((first, second))
+                    cpu = lo[1] | (hi[1] << 8)
+                    if cpu >= 0x8000:
+                        for ctx in banks if cpu < 0xC000 else {None}:
+                            add(prg, cpu, ctx, "immediate pair", False)
+                    break
+                p += lengths[rom[p]]
+    return out
+
+
+# A store into ROM space is a write to the MMC1's registers, not a read.
+_MAPPER_WRITES = (0x8C, 0x8D, 0x8E, 0x99, 0x9D)
+_STORE_FOR_LOAD = {0xA9: (0x85, 0x8D), 0xA2: (0x86, 0x8E), 0xA0: (0x84, 0x8C)}
+_ENDS_PAIR_SEARCH = (JSR, JMP_ABS, JMP_IND, RTS, RTI)
+
+
+def _immediate_store(rom: bytes, prg: int) -> tuple[int, int] | None:
+    """(address, value) for `LDx #value` / `STx address`, else None."""
+    stores = _STORE_FOR_LOAD.get(rom[prg])
+    if stores is None or rom[prg + 2] not in stores:
+        return None
+    addr = rom[prg + 3]
+    if rom[prg + 2] == stores[1]:
+        addr |= rom[prg + 4] << 8
+    return addr, rom[prg + 1]
+
+
+def mark_uncalled(reader, labels, result: TraceResult) -> TraceResult:
+    """Mark the code that only unreached single-address labels lead to.
+
+    A code label nothing reaches is code someone named without finding its
+    caller: dead, or reached through a pointer nobody has found. Its bytes are
+    marked `UNCALLED`, which `coverage` counts apart and `gaps` skips, so the
+    gaps are the bytes nobody has explained. Returns the trace from those
+    labels, whose conflicts say a label is on something that isn't code.
+    """
+    seeds = [
+        s
+        for s in label_seeds(labels)
+        if (prg := _to_prg(s.cpu, s.ctx)) is not None and result.marks[prg] == NONE
+    ]
+    sub = trace(reader, labels, seeds, pointer_tables=())
+    for prg, mark in enumerate(sub.marks):
+        if mark != NONE and result.marks[prg] == NONE:
+            result.marks[prg] = UNCALLED
+    return sub
 
 
 def unreached_roots(reader, labels, seeds: list[Seed]) -> dict[int, set[int]]:

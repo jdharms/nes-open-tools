@@ -50,8 +50,12 @@ from golf.core.rom_analysis import (
 )
 from golf.core.rom_reader import RomReader
 from golf.core.rom_trace import (
+    NONE,
+    UNCALLED,
     Seed,
+    data_readers,
     label_seeds,
+    mark_uncalled,
     trace,
     unreached_roots,
     vector_seeds,
@@ -416,6 +420,9 @@ def cmd_trace(reader: RomReader, args, labels: LabelStore | None) -> None:
         )
         for problem in walk.problems:
             print(f"  script problem: {problem.kind} at ${problem.cpu:04X}")
+    uncalled = None
+    if labels is not None and not args.start and not args.seed_labels:
+        uncalled = mark_uncalled(reader, labels, result)
     show = None if args.bank is None or args.start else args.bank
 
     def wanted(prg: int) -> bool:
@@ -425,18 +432,25 @@ def cmd_trace(reader: RomReader, args, labels: LabelStore | None) -> None:
         f"seeds: {len(seeds)} ({'vectors' if not args.seed_labels else 'vectors + labels'}"
         f"{', one address' if args.start else ''})"
     )
-    print("\nbank   code   data   both  neither")
-    totals = dict.fromkeys(("code", "data", "both", "neither"), 0)
+    print("\nbank   code   data   both  uncalled  neither")
+    totals = dict.fromkeys(("code", "data", "both", "uncalled", "neither"), 0)
     for b in range(result.banks):
         c = result.coverage(b)
         for k in totals:
             totals[k] += c[k]
-        print(f"{b:4}  {c['code']:5}  {c['data']:5}  {c['both']:5}  {c['neither']:7}")
+        print(
+            f"{b:4}  {c['code']:5}  {c['data']:5}  {c['both']:5}  {c['uncalled']:8}  "
+            f"{c['neither']:7}"
+        )
     print(
         f" all  {totals['code']:5}  {totals['data']:5}  {totals['both']:5}  "
-        f"{totals['neither']:7}"
+        f"{totals['uncalled']:8}  {totals['neither']:7}"
     )
-    print("\n  code = reached as code; data = inside a range label; both = a conflict")
+    print(
+        "\n  code = reached as code; data = inside a range label; both = a conflict;"
+        "\n  uncalled = code only unreached code labels lead to (dead, or a caller "
+        "not yet found)"
+    )
 
     unresolved = [f for f in result.unresolved if wanted(f.prg)]
     print(f"\nunresolved control flow ({len(unresolved)}):")
@@ -453,6 +467,12 @@ def cmd_trace(reader: RomReader, args, labels: LabelStore | None) -> None:
         print(f"  {f.kind:<38} {_where(labels, f.prg)}  {f.detail}")
         if f.via is not None:
             print(f"  {'':<38}   reached from {_where(labels, f.via)}")
+    if uncalled is not None:
+        bad = [f for f in uncalled.conflicts if wanted(f.prg)]
+        if bad:
+            print(f"\nconflicts tracing the unreached code labels ({len(bad)}):")
+            for f in bad:
+                print(f"  {f.kind:<38} {_where(labels, f.prg)}  {f.detail}")
 
     gaps = sorted((g for g in result.gaps(show)), key=lambda g: g[1], reverse=True)
     print(
@@ -494,7 +514,11 @@ def cmd_trace(reader: RomReader, args, labels: LabelStore | None) -> None:
             if not is_data_range(label) and wanted(label.start)
         ]
         missed = sorted(
-            (label for label in code_labels if result.marks[label.start] == 0),
+            (
+                label
+                for label in code_labels
+                if result.marks[label.start] in (NONE, UNCALLED)
+            ),
             key=lambda lb: lb.start,
         )
         print(
@@ -517,6 +541,41 @@ def cmd_trace(reader: RomReader, args, labels: LabelStore | None) -> None:
                     print(f"      {_where(None, label.start)}  {label.name}  ({under})")
                 else:
                     print(f"  ROOT {_where(None, label.start)}  {label.name}")
+
+
+def cmd_readers(reader: RomReader, args, labels: LabelStore | None) -> None:
+    result, _, _ = trace_everything(reader, labels)
+    rom = reader.read_prg(0, reader.prg_size)
+    found = data_readers(rom, result)
+    if labels is not None:
+        found += data_readers(rom, mark_uncalled(reader, labels, result))
+    gaps = [(s, n) for s, n in result.gaps(args.bank) if n >= args.min]
+    print(
+        f"gaps: {len(gaps)} of {args.min}+ bytes; readers: absolute operands in "
+        f"the bank mapped when they run, indexed bases up to {args.reach} bytes "
+        "before a gap, immediate pairs (candidates)"
+    )
+    for start, n in gaps:
+        end = start + n
+        near = sorted(
+            (
+                r
+                for r in found
+                if start <= r.target < end
+                or (r.indexed and start - args.reach <= r.target < start)
+            ),
+            key=lambda r: (r.target, r.site),
+        )
+        print(f"\n{n:5} bytes  {_where(labels, start)}  {_nearest_label_before(labels, start)}")
+        if not near:
+            print("       no direct reader")
+        for r in near:
+            offset = r.target - start
+            at = f"+{offset}" if offset >= 0 else str(offset)
+            bank = "" if r.ctx is None else f"  [bank {r.ctx} mapped]"
+            rows = disassemble(reader, r.site, count=1, expand_data=False).rows
+            line = rows[0].text if rows else ""
+            print(f"  {at:>6}  {_where(labels, r.site)}  {line}  ; {r.how}{bank}")
 
 
 def cmd_known_data(reader: RomReader, args, labels: LabelStore | None) -> None:
@@ -772,6 +831,23 @@ def main():
         help="List single-address labels the trace never decoded as code",
     )
 
+    readers_parser = subparsers.add_parser(
+        "readers",
+        help="List each gap with the traced instructions that name it as data",
+    )
+    readers_parser.add_argument(
+        "--bank", type=int, help="Only gaps in this bank (15 for the fixed bank)"
+    )
+    readers_parser.add_argument(
+        "--min", type=int, default=1, help="Only gaps of at least N bytes"
+    )
+    readers_parser.add_argument(
+        "--reach",
+        type=int,
+        default=0,
+        help="Also list indexed bases up to N bytes before a gap that could run into it",
+    )
+
     known_parser = subparsers.add_parser(
         "known-data",
         help="Compare the data regions the repo can locate with the label file",
@@ -822,6 +898,7 @@ def main():
         "find-refs": cmd_find_refs,
         "trace": cmd_trace,
         "known-data": cmd_known_data,
+        "readers": cmd_readers,
     }
     try:
         commands[args.command](reader, args, labels)

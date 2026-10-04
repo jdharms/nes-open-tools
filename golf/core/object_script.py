@@ -46,6 +46,8 @@ ALLOCATORS = {
     0xF7F3: "LF7F3",
     0xF826: "LF826",
 }
+# $F856 copies a short record from SramPtr, with x, y and A in registers; its
+# records come through RECORD_POINTER_TABLES with size 7.
 SHORT_RECORD = RECORD_SIZE - 2
 
 
@@ -61,6 +63,7 @@ class RecordPointerTable:
     counts: tuple[int, ...]
     site: int
     why: str
+    size: int = 9  # 7 for the short records $F856 copies, x and y in X and Y
 
 
 RECORD_POINTER_TABLES = (
@@ -74,8 +77,49 @@ RECORD_POINTER_TABLES = (
     RecordPointerTable(
         0xB871, (1,) * 4, 0xB86B, "CurrentPlayerIndex*4, +2 for clubs 4 and up"
     ),
+    RecordPointerTable(
+        0x96D5, (2,) * 7, 0x953A, "CourseIntroPortraitObjPtrTable, by $071D*2"
+    ),
+    RecordPointerTable(
+        0xBAA7,
+        (1,) * 3,
+        0xBA93,
+        "MaybeWagerChoiceRecordPtrTable, by $06BC*2, $06BC = 0-2",
+        size=7,
+    ),
 )
 TABLE_BANK = 12
+
+
+@dataclass(frozen=True)
+class RecordList:
+    """Records found other than through a traced allocator's arguments.
+
+    `count` 9-byte records from `cpu` in `bank`; `site` is the `JSR LF7EE`
+    that reaches them through a RAM pointer, or None when no allocator is known
+    (their streams are still decoded, so the bytes they name are accounted for).
+    """
+
+    bank: int
+    cpu: int
+    count: int
+    site: int | None
+    why: str
+
+
+RECORD_LISTS = (
+    RecordList(
+        12,
+        0x8F10,
+        4,
+        0x85A8,
+        "MenuSpriteInitData: MenuEntryTablePtr set at $8592, stepped 9 bytes a "
+        "record while MenuOptionCount counts 3 down to 0",
+    ),
+    RecordList(12, 0xB740, 2, None, "no allocator or pointer found"),
+    RecordList(12, 0xB77F, 2, None, "no allocator or pointer found"),
+    RecordList(12, 0xB7BE, 3, None, "pointed at only by MaybeObjectRecordPairTable"),
+)
 
 # Control opcodes both streams share (LFB08): opcode -> (length, flow).
 NEXT, JUMP, BRANCH, CALL, RETURN, STOP, NATIVE = (
@@ -261,10 +305,20 @@ def object_records(rom, result: TraceResult) -> list[Record]:
         for i, count in enumerate(table.counts):
             first = bank_word(rom, TABLE_BANK, table.cpu + 2 * i)
             for j in range(count):
-                cpu = first + RECORD_SIZE * j
-                raw = bank_read(rom, TABLE_BANK, cpu, RECORD_SIZE)
+                cpu = first + table.size * j
+                raw = bytes(RECORD_SIZE - table.size) + bank_read(
+                    rom, TABLE_BANK, cpu, table.size
+                )
                 found = f"entry {i} of bank 12 ${table.cpu:04X} ({table.why})"
-                records.append(Record(TABLE_BANK, cpu, raw, found, site))
+                records.append(Record(TABLE_BANK, cpu, raw, found, site, table.size))
+    for listed in RECORD_LISTS:
+        # Without an allocator, the records' own place stands in for the site.
+        at = listed.cpu if listed.site is None else listed.site
+        site = listed.bank * PRG_BANK_SIZE + at - 0x8000
+        for j in range(listed.count):
+            cpu = listed.cpu + RECORD_SIZE * j
+            raw = bank_read(rom, listed.bank, cpu, RECORD_SIZE)
+            records.append(Record(listed.bank, cpu, raw, listed.why, site))
     return records
 
 
@@ -326,6 +380,48 @@ class ObjectWalk:
     problems: list[Problem] = field(default_factory=list)
 
 
+UNKNOWN_SPRITE = 0x80  # bit 7: frames recorded against it are skipped
+# (lo array, hi array, animation?) - the slot arrays a stream pointer lives in.
+STREAM_ARRAYS = ((0x7A41, 0x7A51, False), (0x7A61, 0x7A71, True))
+STREAM_STORE_REACH = 4  # instructions from the low store to the high one
+
+
+def code_streams(rom, result: TraceResult) -> list[tuple[int, int, bool, int]]:
+    """(bank, stream, anim?, site) for each stream object-bank code installs.
+
+    Native code in an object bank (a scene callback, an `$ED` call) can point a
+    slot at a new stream: `LDA #lo / STA $7A41,X` then `LDA #hi / STA $7A51,X`
+    (motion), or `$7A61/$7A71` (animation). The stream is in the code's bank.
+    """
+    data = rom.read_prg(0, rom.prg_size)
+    found = []
+
+    def store(prg):  # (value, array) for LDA #v / STA abs,X|Y, else None
+        if data[prg] != 0xA9 or data[prg + 2] not in (0x9D, 0x99):
+            return None
+        return data[prg + 1], data[prg + 3] | data[prg + 4] << 8
+
+    for bank in OBJECT_BANKS:
+        base = bank * PRG_BANK_SIZE
+        for prg in range(base, base + PRG_BANK_SIZE - 5):
+            if result.marks[prg] != OPCODE or (low := store(prg)) is None:
+                continue
+            for lo_array, hi_array, anim in STREAM_ARRAYS:
+                if low[1] != lo_array:
+                    continue
+                p = prg
+                for _ in range(STREAM_STORE_REACH):
+                    p += 1
+                    while p < base + PRG_BANK_SIZE - 5 and result.marks[p] != OPCODE:
+                        p += 1
+                    high = store(p) if result.marks[p] == OPCODE else None
+                    if high is not None and high[1] == hi_array:
+                        site = 0x8000 + prg % PRG_BANK_SIZE
+                        found.append((bank, low[0] | high[0] << 8, anim, site))
+                        break
+    return found
+
+
 def walk_objects(rom, result: TraceResult) -> ObjectWalk:
     """Decode every record, settle its bank, and gather what it reads."""
     walk = ObjectWalk(records=object_records(rom, result))
@@ -353,6 +449,23 @@ def walk_objects(rom, result: TraceResult) -> ObjectWalk:
         detail = "fits neither bank" if not clean else "fits both banks"
         first = next((f.problems[0] for f in options.values() if f.problems), "")
         walk.problems.append(Problem(detail, rec.bank, rec.cpu, first))
+
+    for bank, start, anim, site in code_streams(rom, result):
+        stream = walk_stream(rom, bank, start, anim=anim, sprite=UNKNOWN_SPRITE)
+        if stream.problems:
+            walk.problems.append(
+                Problem("stream set by code", bank, start, stream.problems[0])
+            )
+            continue
+        walk.covered.setdefault(bank, set()).update(stream.covered)
+        kind = "animation" if anim else "motion"
+        walk.stream_starts.setdefault(
+            (bank, start), f"{kind} stream; set by code at bank {bank} ${site:04X}"
+        )
+        for cpu in stream.native:
+            walk.native.setdefault(
+                (bank, cpu), f"object $ED call; stream at ${start:04X}"
+            )
 
     for i, bank in walk.banks.items():
         rec, chosen = walk.records[i], fits[i][bank]

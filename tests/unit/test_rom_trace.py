@@ -7,6 +7,7 @@ from golf.core.rom_trace import (
     OPCODE,
     CodePointerTable,
     Seed,
+    data_readers,
     trace,
     unreached_roots,
 )
@@ -210,3 +211,52 @@ class TestUnreachedRoots:
         upstream = unreached_roots(rom, None, seeds)
         assert upstream[FIXED + 0x400] == set()
         assert upstream[FIXED + 0x500] == {FIXED + 0x400}
+
+
+class TestDataReaders:
+    def test_switchable_operand_resolves_in_the_mapped_bank(self):
+        rom = MockReader()
+        rom.write_bank(13, 0x8000, [0x60])
+        # LDA #$0D / JSR BankSwitchRoutine / LDA $9275,X / RTS
+        prg, result = run(rom, [0xA9, 0x0D, 0x20, 0x52, 0xD3, 0xBD, 0x75, 0x92, 0x60])
+        found = [r for r in data_readers(rom.data, result) if r.site == prg + 5]
+        assert [(r.target, r.ctx, r.indexed) for r in found] == [
+            (13 * BANK_SIZE + 0x1275, 13, True)
+        ]
+
+    def test_unknown_bank_names_nothing(self):
+        rom = MockReader()
+        # LDA $27 / JSR BankSwitchRoutine / LDA $9275 / RTS
+        prg, result = run(rom, [0xA5, 0x27, 0x20, 0x52, 0xD3, 0xAD, 0x75, 0x92, 0x60])
+        assert not [r for r in data_readers(rom.data, result) if r.site == prg + 5]
+
+    def test_switchable_code_reads_its_own_bank_and_the_fixed_bank(self):
+        rom = MockReader()
+        # LDA $9000 / LDA $EA7C,Y / RTS
+        rom.write_bank(4, 0x8000, [0xAD, 0x00, 0x90, 0xB9, 0x7C, 0xEA, 0x60])
+        result = trace(rom, seeds=[Seed(0x8000, 4, "test")], pointer_tables=())
+        assert {(r.target, r.how) for r in data_readers(rom.data, result)} == {
+            (4 * BANK_SIZE + 0x1000, "LDA"),
+            (FIXED + 0x2A7C, "LDA abs,Y"),
+        }
+
+    def test_immediate_pair_is_a_candidate_pointer(self):
+        rom = MockReader()
+        # LDA #$7C / STA $20 / LDA #$EA / STA $21 / RTS
+        prg, result = run(rom, [0xA9, 0x7C, 0x85, 0x20, 0xA9, 0xEA, 0x85, 0x21, 0x60])
+        pairs = [r for r in data_readers(rom.data, result) if r.how == "immediate pair"]
+        assert [(r.site, r.target) for r in pairs] == [(prg, FIXED + 0x2A7C)]
+
+    def test_pairs_go_by_where_the_bytes_are_stored(self):
+        rom = MockReader()
+        # LDA #$58 / STA $06E7 / LDA #$96 / STA $06E8 / LDA #$EA / STA $06E7 / RTS:
+        # $9658, then $96EA - never $EA96, the two loads that sit side by side
+        code = [0xA9, 0x58, 0x8D, 0xE7, 0x06, 0xA9, 0x96, 0x8D, 0xE8, 0x06]
+        code += [0xA9, 0xEA, 0x8D, 0xE7, 0x06, 0x60]
+        rom.write_bank(12, 0x8000, code)
+        result = trace(rom, seeds=[Seed(0x8000, 12, "test")], pointer_tables=())
+        pairs = [r for r in data_readers(rom.data, result) if r.how == "immediate pair"]
+        assert sorted(r.target for r in pairs) == [
+            12 * BANK_SIZE + 0x1658,
+            12 * BANK_SIZE + 0x16EA,
+        ]
