@@ -26,8 +26,16 @@ description: |
 | 3 | All greens + decompression tables + code | $81C0-$A773 | 9,652 bytes |
 | 15 | Fixed bank (pointer tables, metadata, decompression tables) | $C000-$FFFF | N/A |
 
+Bank 10 is scene object data for the cutscenes: sprite and frame tables, metasprites,
+animation streams and a little code (`docs/scene_objects.md`).
+
+The "lookup tables" after the terrain in banks 0-2 are compressed graphics tables,
+starting with a golfer's sprite CHR (`LuigiSpriteChrTable` at bank 0 $A238 and so on).
+`golf-rom-peek known-data` measures every one and labels them.
+
 ### Bank 2 (UK) Special Layout
-- $8000-$837E: Pre-terrain lookup tables (895 bytes) - MUST PRESERVE
+- $8000-$837E: Scene object sprite data and streams for the menu screens (895 bytes),
+  see `docs/scene_objects.md` - MUST PRESERVE
 - $837F-$A553: Terrain data region
 - $A554-$BFFF: Post-terrain lookup tables - MUST PRESERVE
 
@@ -37,7 +45,9 @@ description: |
   - $80C0-$817F: Vertical continuation table (192 bytes)
   - $8180-$81BF: Dictionary table (64 bytes)
 - $81C0-$A773: Greens data for all 54 holes (9,652 bytes max)
-- $A774-$BFFF: Executable code (6,284 bytes) - MUST PRESERVE
+- $A774-$BFFF: Code and data (6,284 bytes) - MUST PRESERVE: the replay code at
+  $A774-$A922, the CPU opponents' recorded shots at $A923-$BEE7
+  (`docs/opponent_shots.md`), then code from $BEE8.
 
 ## Fixed Bank Pointer Tables ($C000-$FFFF)
 

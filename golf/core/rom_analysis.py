@@ -106,13 +106,30 @@ INLINE_ARG_ROUTINES: dict[tuple[int | None, int], InlineArgSpec] = {
     # cross-checking against the sidecar's pre-existing "3 x 9 bytes, allocated
     # via LF7C0" note on CourseIntroObjectDefs.
     (None, 0xF7C0): InlineArgSpec("AllocateObjectRecords", FIXED, 2, "word"),
+    # The same $D8A2 idiom: each of these reaches `JSR $D8A2` before pushing
+    # anything, so the word $D8A2 reads is the one after the JSR to *them*.
+    # Found by `golf-rom-peek trace`, whose decode of each call site ran into
+    # undocumented opcodes; e.g. every `JSR $D7DB` is followed by `.dw $0476`.
+    (None, 0xD7DB): InlineArgSpec("LD7DB", FIXED, 2, "word"),
+    (None, 0xF7F3): InlineArgSpec("LF7F3", FIXED, 2, "word"),
+    (None, 0xF826): InlineArgSpec("LF826", FIXED, 2, "word"),
+    (None, 0xF881): InlineArgSpec("LF881", FIXED, 2, "word"),
+    (None, 0xF8A2): InlineArgSpec("LF8A2", FIXED, 2, "word"),
+    (9, 0xB4C6): InlineArgSpec("L9_B4C6", FIXED, 2, "word"),
+    (9, 0xB4CF): InlineArgSpec("L9_B4CF", FIXED, 2, "word"),
+    (9, 0xB4E3): InlineArgSpec("L9_B4E3", FIXED, 2, "word"),
+    (9, 0xB4F7): InlineArgSpec("L9_B4F7", FIXED, 2, "word"),
+    (13, 0xA5C9): InlineArgSpec("LD_A5C9", FIXED, 2, "word"),
     # NOT listed: $D8A2 ReadInlineWordParameter and $D436. Both TSX and read
     # $0103,X - skipping their own return address - so the inline word belongs
     # to whoever called *their* caller. A `JSR $D8A2` consumes nothing itself;
     # it is the enclosing routine (e.g. $D80A below) that takes the 2 bytes.
-    (None, 0xD227): InlineArgSpec(
-        "DispatchInlineJumpTable", TRIPLES, style="key_addr", returns=False
-    ),
+    # Control comes back after the table: the tail at $D24F pushes the
+    # post-table address before JMP ($24), so a handler's RTS lands there, and
+    # with no match the tail RTSes there itself. (A handler that PLA PLAs first
+    # leaves the enclosing routine instead.) The course intro's $9275 relies on
+    # it: every handler RTSes into the JMP $9478 after the table.
+    (None, 0xD227): InlineArgSpec("DispatchInlineJumpTable", TRIPLES, style="key_addr"),
     # Same dispatcher body as $D227 (they share the tail at $D24F) but the
     # table ends on $FF, so key $00 is usable. Control does come back: the
     # tail pushes the post-table address before JMP ($24).
@@ -121,6 +138,8 @@ INLINE_ARG_ROUTINES: dict[tuple[int | None, int], InlineArgSpec] = {
     ),
     (12, 0x8A14): InlineArgSpec("LookupInlineByteTable", PAIRS),
     (12, 0x8A56): InlineArgSpec("LookupInlineRangeTable", TRIPLES),
+    # A byte-for-byte copy of $8A56; ScriptCharRangeTable is its one table.
+    (11, 0x9490): InlineArgSpec("LookupInlineRangeTableBank11", TRIPLES),
 }
 
 # The dispatchers whose inline tables find_references can actually search.

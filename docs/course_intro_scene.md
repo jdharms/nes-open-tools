@@ -191,72 +191,11 @@ copied from the step list, then `$02` as the fill byte.
 
 ## The text script
 
-The dialogue is a byte-code program, not a string table. Text is stored as **plain
-lowercase-and-uppercase ASCII** inline in the script, which is why a search for
-`TRY TO GOLF WELL` in the ROM finds nothing — it is stored as `Try to golf well`.
-
-The stroke-play script starts at bank 11 `$A0EE` (PRG `0x2E0DE`):
-
-```
-$A0EE  F9 02              ; select text window 2
-$A0F0  F2 AD 61 F8 A0     ; if [$61AD] == 0 -> $A0F8
-$A0F5  F5 FD A0           ; jump $A0FD
-$A0F8  F2 AE 61 77 A1     ; if [$61AE] == 0 -> $A177
-$A0FD  F6 0F 07 00        ; poke $00 -> $070F
-$A101  "The following are your latest 2 scores" ...
-...
-$A177  F4 03 60 02 80 A1  ; if [$6003] >= $02 -> $A180
-$A180  F6 0F 07 00
-$A184  "Try to golf well, as a" FB "lower score may give "
-       "youa higher player rank." F6 0F 07 FF FC
-```
-
-`$61AD/$61AE` are the cumulative-score words in SRAM, so a save with no rounds played gets
-the "Try to golf well…" line and an established save gets its last two scores, its average
-and its rank instead.
-
-### Interpreter
-
-Bank 11 `$9033`, called once per frame from scene phase 5. `$06E7/$06E8` is the script
-program counter. `$06E5` is a countdown: it starts at `$16` (a pause before the first
-character) and thereafter sits at 1, so one token is consumed per frame — the typewriter
-effect. Bytes below `$F0` are characters; `$F0`-`$FF` dispatch through
-`DispatchInlineJumpTable` at `$906C`.
-
-| Op | Bytes | Handler | Meaning |
-|---|---|---|---|
-| `$00`-`$EF` | 1 | `$90AE` | print character |
-| `$F1 n` | 2 | `$9373` | start portrait animation `n` from `$947C`; sets bit 6 of `$06E5` |
-| `$F2 lo hi tlo thi` | 5 | `$9343` | if `[lo/hi] == 0` jump to `t` |
-| `$F3 x y` | 3 | `$9324` | set cursor (`$06EC`, `$06ED`) |
-| `$F4 lo hi v tlo thi` | 6 | `$92E7` | compare `v` against `[lo/hi]`, branch |
-| `$F5 lo hi` | 3 | `$9162` | jump |
-| `$F6 lo hi v` | 4 | `$92C3` | store `v` to RAM `lo/hi` |
-| `$F7` | | `$92A4` | (not traced) |
-| `$F8 lo hi` | 3 | `$9285` | call native 6502 code (`JMP ($22)`) |
-| `$F9 n` | 2 | `$924E` | select window geometry `n` from `$9648` (x, y, right, bottom) |
-| `$FA` | | `$91F4` | (not traced) |
-| `$FB` | 1 | `$91D0` | newline — x back to `$06EE`, y += 2 |
-| `$FC` | | `$9176` | (not traced) — used as the "wait / end of page" terminator |
-| `$FD` | | `$9170` | (not traced) |
-| `$FE lo hi` | 3 | `$914B` | call script subroutine (return address saved in `$06FB/$06FC`) |
-| `$FF` | 1 | `$913E` | return from script subroutine |
-
-`FE FF 06` — seen at the head of several lines — calls a script fragment assembled in RAM
-at `$06FF`, which is how the player's registered name gets spliced into a sentence.
-
-Characters are remapped by an inline `(lo, hi, delta)` range table at `$90B1` (the
-`LookupInlineRangeTable` idiom):
-
-```
-41 5A BF   ; 'A'-'Z'  -> $00-$19
-61 7A B9   ; 'a'-'z'  -> $1A-$33
-2C 3A 08   ; ','-':'  -> $34-$42   (covers '.', '/' and '0'-'9')
-21 24 22   ; '!'-'$'  -> $43-$46
-3F 3F 08   ; '?'      -> $47
-27 27 21   ; '\''     -> $48
-00
-```
+The dialogue is a bank 11 text script, run one token a frame by `RunTextScript` (bank 11
+`$9033`) from scene phase 5. The table under "Scene setup" says which script each game mode
+starts; the interpreter, its opcodes, the character encoding and every script's entry point
+are in `docs/text_scripts.md`, which also walks through the stroke-play script `$A0EE` as
+an example.
 
 ## Breakpoints
 

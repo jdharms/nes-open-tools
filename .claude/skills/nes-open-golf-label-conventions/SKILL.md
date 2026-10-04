@@ -78,8 +78,8 @@ Examples: `WindSpeedAnchor`, `CompressionLookbackPtr`, `MaybeWindDelayCounter`,
 user keeps in git and reviews with `git diff`. It refuses a name another label
 already uses and warns when a range overlaps another label; don't paper over
 the warning - fix the range unless one label is nested in the other on purpose.
-(`--target sidecar` and `merge` still exist for keeping entries apart; see the
-tool's docstring.) When proposing a name for that command:
+Add labels to the label file directly; don't use `--target sidecar`. When
+proposing a name for that command:
 
 - For `prg` addresses that are jump targets: default to leaving the
   auto-generated stub name as-is unless it's clearly tier 2 or 3.

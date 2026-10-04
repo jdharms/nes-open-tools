@@ -479,6 +479,9 @@ class GreensDecompressor:
             else:
                 output.append(byte)
 
+        # How many compressed bytes the game reads before its buffer is full.
+        self.consumed = src_idx
+
         # Truncate output to exactly 576 tiles if we overshot during decompression
         output = output[:GREENS_TOTAL_TILES]
 

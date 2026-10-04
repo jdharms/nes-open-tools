@@ -23,10 +23,8 @@ uv run golf-rom-peek <rom.nes> [--labels <file.mlb>] <subcommand> ...
 ```
 
 Always pass `--labels "NES Open Tournament Golf (USA).mlb"`, so output is
-annotated with everything the project has named so far. A sidecar
-(`...sidecar.mlb`) next to it, if there is one, loads automatically and shadows
-the label file. `--labels`
-and `--sidecar` are top-level options and must come **before** the subcommand.
+annotated with everything the project has named so far. `--labels` is a
+top-level option and must come **before** the subcommand.
 
 ## Address grammar
 
@@ -49,6 +47,8 @@ reading anything.
 | `addr <addr> [--bank N]` | CPU address ↔ PRG offset, no ROM read. |
 | `disasm <addr> [--bank N] [--count N \| --routine] [--max N]` | Disassemble. See below. |
 | `find-refs <addr> [--bank N] [--type prg\|ram] [--reach N]` | Find references across every encoding. See below. |
+| `trace [--from <addr> --bank N] [--bank N] [--gaps N] [--unnamed] [--unreached]` | Follow control flow from the vectors and map code, data and gaps. See below. |
+| `known-data [--list] [--write]` | Compare the data regions the repo can locate with the label file; `--write` adds them as range labels. See below. |
 | `label <addr> [--type ...] [--bank N]` | Look up the label at an address. |
 | `find-label <substring>` | Search labels by name. |
 
@@ -76,17 +76,23 @@ instructions.
 | `WriteNametableTilesMode2` `$CE7E` | fixed | 2 bytes: descriptor pointer (no PPU address in the descriptor) |
 | `Load32BytesToBuffer` `$D80A` | fixed | 2 bytes: source pointer |
 | `CopyInlineMemoryBlock` `$D41A` | fixed | 6 bytes: src, dst, length |
-| `DispatchInlineJumpTable` `$D227` | fixed | `(key, lo, hi)` triples, `$00`-terminated — **and it JMPs instead of returning** |
+| `DispatchInlineJumpTable` `$D227` | fixed | `(key, lo, hi)` triples, `$00`-terminated; it JMPs to the handler with the post-table address stacked, so a handler's `RTS` (or no match) continues after the table |
 | `DispatchInlineJumpTableFF` `$D267` | fixed | the same, but `$FF`-terminated, so `$00` is a usable key |
 | `LookupInlineByteTable` `$8A14` | 12 | `(key, value)` pairs, `$00`-terminated |
 | `LookupInlineRangeTable` `$8A56` | 12 | `(lo, hi, value)` triples, `$00`-terminated |
+| `LookupInlineRangeTableBank11` `$9490` | 11 | the same, a byte-for-byte copy |
+| `$D7DB`, `$F7F3`, `$F826`, `$F881`, `$F8A2` | fixed | 2 bytes: word (they reach `JSR $D8A2` before pushing anything) |
+| `$B4C6`, `$B4CF`, `$B4E3`, `$B4F7` | 9 | 2 bytes: word, the same way |
+| `$A5C9` | 13 | 2 bytes: word, the same way |
 
 **`$D8A2 ReadInlineWordParameter` and `$D436` are not on this list, and must not be
 added to it.** Both do `TSX` then read `$0103,X`, skipping their own return address — so
 the inline word belongs to whoever called *their* caller. A `JSR $D8A2` consumes nothing
 itself; it is the enclosing routine (`$D80A`, `$D41A`, and a dozen others) that carries
 the inline bytes. Listing `$D8A2` here desynchronizes every direct call site by two
-bytes. Check for this `$0103,X` pattern before adding any new entry.
+bytes. Check for this `$0103,X` pattern before adding any new entry. Conversely, any
+routine that reaches `JSR $D8A2` before pushing anything takes a word, and belongs on
+the list.
 
 ```
 $8F85  20 5F D4    JSR LoadCompressedGraphics[$D45F]
@@ -168,7 +174,7 @@ count — you usually know an address, and bytes-to-instructions isn't
 computable without decoding.
 
 Stops at: a terminator (`RTS`/`RTI`/`JMP`) once no forward branch is still
-pending; a non-returning call (`JSR DispatchInlineJumpTable`); or the start of
+pending; a call registered as non-returning (none are, today); or the start of
 a labeled data range. Always prints why it stopped.
 
 `--max N` (default 200) caps the output so a wrong guess about where code
@@ -228,6 +234,90 @@ read, not findings.
 ```bash
 uv run golf-rom-peek rom.nes --labels notes.mlb find-refs '05BB' --type ram --reach 48
 ```
+
+## `trace`
+
+Recursive descent from the reset, NMI and IRQ vectors (logic in
+`golf/core/rom_trace.py`). It follows branches, `JSR`/`JMP`, far calls, the inline
+dispatch tables and the confirmed jump tables in `CODE_POINTER_TABLES`, skipping
+inline arguments, and carries which bank is mapped at `$8000`: `LDA #n` /
+`JSR BankSwitchRoutine` sets it, a switch from anything but an immediate makes it
+unknown. Recognizes the unconditional branch idioms (`BEQ`/`BNE` pairs, `CLC`/`BCC`,
+`LDA #nonzero`/`BNE`). It prints:
+
+- **coverage** per bank: bytes reached as code, inside range labels, both
+  (a conflict), and neither.
+- **unresolved control flow**: every `JMP (ind)` it couldn't follow. If you
+  work one out, add the table to `CODE_POINTER_TABLES` (with the reasoning) rather
+  than labeling around it.
+- **conflicts**: decodes into undocumented opcodes or `BRK` (the IRQ handler is a
+  bare `RTI`, so `BRK` is never real), mid-instruction entries, code running into a
+  range label. Each names the transfer that started the straight run and the last
+  `JSR` in it, which is usually the culprit: a routine with inline arguments nobody
+  has registered, or a call that doesn't return.
+- **gaps**, largest first, and with `--unnamed` the routine entries (`JSR`, far
+  call, dispatch targets) that still have no tier-3 name.
+- with `--unreached`, every single-address label the trace never decoded, marked
+  `ROOT` when no other unreached label leads to it. The roots are the to-do list:
+  data labeled without a range, dead code, or code behind unresolved control flow.
+
+Unless given `--from`, it also walks the bank 11 dialogue scripts
+(`golf/core/text_script.py`): it finds the script addresses traced code loads into
+`ScriptPtr` (immediates, plus the tables in `SCRIPT_POINTER_TABLES`), follows every
+script opcode that moves the script counter, and traces the native code the `$F8` and
+`$F7` opcodes name - which is the only way that code is reached - repeating until
+nothing new turns up. A script that the walker can't decode is printed as a script
+problem. When you find another table that feeds `ScriptPtr`, add it to
+`SCRIPT_POINTER_TABLES` with the index range its loader uses.
+
+It also walks the scene objects (`golf/core/object_script.py`,
+`docs/scene_objects.md`): the records traced code allocates, their motion and animation
+streams, and the sprite data in bank 2 or 10, settling each record's bank by which one
+decodes cleanly. `$ED` calls and the `$F950` scene callback feed more code to the trace.
+Record lists reached through a table go in `RECORD_POINTER_TABLES`.
+
+A conditional branch that falls straight into a range label is read as always
+taken (`LDA table,X / BNE` over the table), so labeling the table is how you
+resolve that kind of conflict. As with `find-refs`, a byte the trace didn't reach
+is a question, not dead code.
+
+## `known-data`
+
+Gathers the data the repository already knows how to find (logic in
+`golf/core/known_data.py`), each measured from the ROM:
+
+- **graphics tables**, from the inline arguments of every `LoadCompressedGraphics`
+  call the trace reaches, the pointer tables in `GRAPHICS_POINTER_TABLES`, and the
+  tables `golfer_sprites` and `signpost` name. Each is decoded, so a table's extent
+  is exact. A run holds one table's header and its own streams; streams two tables
+  share get their own `...Streams` run.
+- **course data**: each course's terrain and the attribute bytes its holes use, the
+  greens (measured by how far the decompressor reads), and both sets of
+  decompression tables.
+- **text scripts**: what the script walker read, cut at each entry point
+  (`TextScriptBA0EE`), the script pointer tables, and `ScriptWindowGeometryTable`
+  sized by the highest window a script selects.
+- **scene objects**: record lists, each object bank's sprite and frame tables,
+  metasprites (grouped by sprite) and the motion and animation streams.
+- **metasprites drawn directly**: split Lo/Hi pointer tables or immediates loaded into
+  `PointerToSpriteData` (`$45/$46`) ahead of a renderer call, measured in that
+  renderer's format - chunked for `RenderMetasprite`/`RenderMetaspriteClipped`, a count
+  and 3 bytes a sprite for `RenderMetaspriteWithAttr`. A Lo/Hi pair's entry count is the
+  distance between them.
+- **palettes**: the inline word of every `Load32BytesToBuffer` call, 32 bytes each.
+- **nametable descriptors**: the inline word of every `WriteNametableTiles` (and Mode1 /
+  Mode2) call, measured from its header - width x height tiles inline, one in repeat
+  mode, or a pointer to source data labeled separately (`docs/menu_system.md`).
+- **CPU opponent shots** in bank 3 (`docs/opponent_shots.md`).
+- **padding**: the `$FF` run before each bank's reset stub, named `Maybe...`
+  because nothing proves it unread.
+
+It subtracts whatever range labels already cover, widens a single-address label
+that sits at a region's start, and refuses to write if a region overlaps traced
+code, holds another single-address label, or overlaps another region. Names it can't take from an existing
+label follow `ChrGraphicsTable7BAD5` / `NametableGraphicsStreams6B47E` (PPU kind,
+bank as one hex digit, address); rename one when you learn its purpose. A rerun
+after `--write` should find nothing new.
 
 ## Recipes
 
