@@ -95,6 +95,7 @@ python_functions = ["test_*"]
 addopts = [
     "-n",
     "auto",
+    "--dist=worksteal",
     "--strict-markers",
     "--tb=short",
     "--cov=golf",

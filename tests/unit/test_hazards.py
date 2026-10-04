@@ -8,7 +8,7 @@ from golf.algorithms.features import Kind, feature_groups
 from golf.algorithms.hazards import HAZARD_PALETTE, redraw_hazards, uniform, weighted
 from golf.formats.hole_data import HoleData
 from tests.synthetic_holes import synthetic_hole
-from tests.vanilla_holes import vanilla_holes
+from tests.vanilla_holes import VANILLA_IDS
 
 STYLES = pytest.mark.parametrize(
     "redraw",
@@ -31,31 +31,19 @@ def feature_hole(sand_palette: int = 2, water_palette: int = 3) -> HoleData:
     return hole
 
 
-def lake_hole() -> HoleData:
-    """Deep rough with one 4 x 4 supertile lake, 4096 pixels, in supertiles (8-11, 0-3)."""
-    hole = feature_hole()
-    hole.terrain = [[0xDF] * 22 for _ in range(30)]
-    for row in range(16, 24):
-        for col in range(8):
-            hole.terrain[row][col] = 0x27
-    for row in range(8, 12):
-        for col in range(4):
-            hole.attributes[row][col] = 3
-    return hole
-
-
 @STYLES
 def test_redraws_only_hazard_supertiles(redraw):
+    hole = feature_hole()
     outcomes = set()
     for seed in range(40):
-        out = redraw(feature_hole(), seed)
+        out = redraw(hole, seed)
         assert out.attributes[0][0] == 1  # the fairway is never touched
         outcomes.add((out.attributes[2][2], out.attributes[4][4]))
         changed = {
             (r, c)
             for r in range(15)
             for c in range(11)
-            if out.attributes[r][c] != feature_hole().attributes[r][c]
+            if out.attributes[r][c] != hole.attributes[r][c]
         }
         assert changed <= {(2, 2), (4, 4)}
     assert outcomes == {(2, 2), (2, 3), (3, 2), (3, 3)}
@@ -81,54 +69,51 @@ def test_leaves_the_original_alone(redraw):
     assert hole.to_dict() == before
 
 
-@pytest.fixture(scope="module")
-def every_vanilla_hole(vanilla_courses, vanilla_jp_courses):
-    return list(vanilla_holes())
-
-
 @STYLES
-def test_every_vanilla_hole_redraws_consistently(redraw, every_vanilla_hole):
-    for hole_id, hole in every_vanilla_hole:
-        hazard = {
-            supertile
-            for group in feature_groups(hole)
-            if Kind.FAIRWAY not in group.kinds
-            for supertile in group.supertiles
-        }
-        for seed in (0, 1, 2):
-            out = redraw(hole, seed)
-            assert out.terrain == hole.terrain, hole_id
-            for r, row in enumerate(hole.attributes):
-                for c, palette in enumerate(row):
-                    new = out.attributes[r][c]
-                    if (r, c) not in hazard:
-                        assert new == palette, hole_id
-                    elif new != palette:
-                        assert new in HAZARD_PALETTE.values(), hole_id
-            # every group still reads as one kind of feature
-            for group in feature_groups(out):
-                assert len(group.kinds) == 1, hole_id
+@pytest.mark.parametrize("vanilla_hole", VANILLA_IDS, indirect=True)
+def test_every_vanilla_hole_redraws_consistently(redraw, vanilla_hole):
+    hole_id, hole = vanilla_hole
+    hazard = {
+        supertile
+        for group in feature_groups(hole)
+        if Kind.FAIRWAY not in group.kinds
+        for supertile in group.supertiles
+    }
+    for seed in (0, 1, 2):
+        out = redraw(hole, seed)
+        assert out.terrain == hole.terrain, hole_id
+        for r, row in enumerate(hole.attributes):
+            for c, palette in enumerate(row):
+                new = out.attributes[r][c]
+                if (r, c) not in hazard:
+                    assert new == palette, hole_id
+                elif new != palette:
+                    assert new in HAZARD_PALETTE.values(), hole_id
+        # every group still reads as one kind of feature
+        for group in feature_groups(out):
+            assert len(group.kinds) == 1, hole_id
 
 
-def dried_out(draw, hole: HoleData, supertile: tuple[int, int]) -> float:
-    """How often, over 400 seeds, `draw` turns the water at `supertile` to sand."""
-    row, col = supertile
-    return (
-        sum(
-            redraw_hazards(hole, seed, draw).attributes[row][col] == 2
-            for seed in range(400)
-        )
-        / 400
-    )
+@pytest.mark.parametrize("kind", [Kind.SAND, Kind.WATER])
+@pytest.mark.parametrize("size", [1, 256, 1000, 4096])
+def test_uniform_ignores_size(kind, size):
+    # Exact cutoff, independent of both current kind and area. Seeded PRNG
+    # integration is already covered by redraw and golden-output tests.
+    assert uniform(kind, size, 0.35 - 1e-9) is Kind.WATER
+    assert uniform(kind, size, 0.35) is Kind.SAND
+    assert uniform(kind, size, 0.35 + 1e-9) is Kind.SAND
 
 
-def test_uniform_ignores_size():
-    # 1 - 0.35 for the lake and the one-supertile pond alike
-    assert 0.58 < dried_out(uniform, lake_hole(), (8, 0)) < 0.72
-    assert 0.58 < dried_out(uniform, feature_hole(), (4, 4)) < 0.72
-
-
-def test_weighted_flips_large_groups_less_often():
-    # 0.5 * 1000 / 4096, about 12%, against 50% for the pond
-    assert 0.08 < dried_out(weighted, lake_hole(), (8, 0)) < 0.17
-    assert 0.42 < dried_out(weighted, feature_hole(), (4, 4)) < 0.58
+@pytest.mark.parametrize(
+    ("kind", "other", "base"),
+    [(Kind.SAND, Kind.WATER, 0.3), (Kind.WATER, Kind.SAND, 0.5)],
+)
+@pytest.mark.parametrize(
+    ("size", "factor"),
+    [(256, 1.0), (1000, 1.0), (4096, 1000 / 4096)],
+)
+def test_weighted_flips_large_groups_less_often(kind, other, base, size, factor):
+    chance = base * factor
+    assert weighted(kind, size, chance - 1e-9) is other
+    assert weighted(kind, size, chance) is kind
+    assert weighted(kind, size, chance + 1e-9) is kind

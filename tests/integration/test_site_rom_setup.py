@@ -20,20 +20,9 @@ US_ROM_PATH = ROOT / "nes_open_us.nes"
 TIMEOUT_MS = 15_000
 
 
-def _chromium_launches() -> bool:
-    try:
-        from playwright.sync_api import sync_playwright
-
-        with sync_playwright() as playwright:
-            playwright.chromium.launch().close()
-        return True
-    except Exception:
-        return False
-
-
 pytestmark = [
     pytest.mark.skipif(not US_ROM_PATH.exists(), reason="the vanilla US ROM is absent"),
-    pytest.mark.skipif(not _chromium_launches(), reason="no Playwright Chromium"),
+    pytest.mark.usefixtures("chromium_available"),
 ]
 
 # an iNES 1.0 header for the same cartridge, as older dumps carry

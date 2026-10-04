@@ -13,20 +13,7 @@ JP_ROM_PATH = ROOT / "mario_open_jp.nes"
 PNG_SIGNATURE = b"\x89PNG\r\n\x1a\n"
 
 
-def _chromium_launches() -> bool:
-    try:
-        from playwright.sync_api import sync_playwright
-
-        with sync_playwright() as playwright:
-            playwright.chromium.launch().close()
-        return True
-    except Exception:
-        return False
-
-
-pytestmark = pytest.mark.skipif(
-    not _chromium_launches(), reason="no Playwright Chromium"
-)
+pytestmark = pytest.mark.usefixtures("chromium_available")
 
 
 def run(*args) -> subprocess.CompletedProcess:

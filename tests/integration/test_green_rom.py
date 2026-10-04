@@ -12,12 +12,14 @@ from golf.difficulty.player import (
     EVERY_UNIT,
     RNG_STATES,
     Hole,
+    Intent,
     Position,
     Skill,
     outcomes,
 )
 from golf.formats.hole_data import HoleData
 from golf.physics import Flag, HoleGround, Lie, PhysicsTables
+from golf.physics.state import PUTTER
 from golf.physics.terrain import TerrainTables
 
 ROM_PATH = "nes_open_us.nes"
@@ -42,45 +44,60 @@ def _pin(hole: Hole) -> tuple[int, int]:
     return hole.flag.x >> 8, hole.flag.y >> 8
 
 
-@pytest.fixture(scope="module")
-def table(hole) -> GreenTable:
-    """Two pixels of the US 1st's green, some way from the pin, in a narrow window."""
+@pytest.fixture(params=[(6, 4), (-3, -3)], ids=["below-pin", "above-pin"])
+def position(hole, request) -> Position:
     pin_x, pin_y = _pin(hole)
-    pixels = [
-        (x, y)
-        for x, y in ((pin_x + 6, pin_y + 4), (pin_x - 3, pin_y - 3))
-        if hole.ground.classify(x, 0, y, 0).lie == Lie.GREEN
-    ]
-    assert len(pixels) == 2
-    with pytest.MonkeyPatch.context() as patch:
-        patch.setattr(green, "AIM_WINDOW", 12)
-        patch.setattr(green, "AIMS", 25)
-        rows = []
-        centers = []
-        for x, y in pixels:
-            center = aim_at(Position(x, y), _pin(hole))
-            rows.append(build_pixel(hole, Position(x, y), center))
-            centers.append(center)
+    dx, dy = request.param
+    return Position(pin_x + dx, pin_y + dy)
+
+
+@pytest.fixture(params=range(3), ids=["slow", "medium", "fast"])
+def speed(request) -> int:
+    return request.param
+
+
+@pytest.fixture
+def table(hole, position, speed, monkeypatch) -> GreenTable:
+    """Build the tested pixel/speed only; the other speeds stay UNREACHED.
+
+    Each case still plays every reachable stop and all 25 aims at its speed.
+    Narrowing the build lets xdist distribute six independent pieces of work.
+    """
+    x, y = position.x, position.y
+    assert hole.ground.classify(x, 0, y, 0).lie == Lie.GREEN
+    monkeypatch.setattr(green, "AIM_WINDOW", 12)
+    monkeypatch.setattr(green, "AIMS", 25)
+    reachable = green.reachable
+    monkeypatch.setattr(
+        green,
+        "reachable",
+        lambda tables, at: reachable(tables, at) if at == speed else frozenset(),
+    )
+    center = aim_at(position, _pin(hole))
+    rests, strokes = build_pixel(hole, position, center)
     return GreenTable(
-        np.array(pixels, dtype=np.int16),
-        np.array(centers, dtype=np.int16),
-        np.stack([r for r, _ in rows]),
-        np.stack([s for _, s in rows]),
+        np.array([(x, y)], dtype=np.int16),
+        np.array([center], dtype=np.int16),
+        rests[np.newaxis],
+        strokes[np.newaxis],
     )
 
 
-@pytest.mark.parametrize("scale", [1.0, 3.0])
-def test_the_table_gives_what_outcomes_gives(hole, table, scale, monkeypatch):
-    monkeypatch.setattr(green, "AIM_WINDOW", 12)
-    monkeypatch.setattr(green, "AIMS", 25)
-    skill = Skill.scaled(scale)
-    solver = GreenSolver(table, hole.tables, skill)
+def test_the_table_gives_what_outcomes_gives(hole, table, speed):
+    # Both skills share the table built in this worker; parametrizing skills as
+    # separate tests would build the expensive table again on another worker.
     checked = 0
-    for pixel, (x, y) in enumerate(table.pixels):
-        for speed in range(3):
+    for scale in (1.0, 3.0):
+        skill = Skill.scaled(scale)
+        solver = GreenSolver(table, hole.tables, skill)
+        for pixel, (x, y) in enumerate(table.pixels):
             rows = len(solver.frames[speed])
             for row in (0, rows // 3, rows // 2, rows - 1):
-                for column in (0, len(solver.offsets) // 2, len(solver.offsets) - 1):
+                for column in (
+                    0,
+                    len(solver.offsets) // 2,
+                    len(solver.offsets) - 1,
+                ):
                     intent = solver.intent(pixel, speed, row, column)
                     exact = outcomes(
                         intent,
@@ -94,18 +111,28 @@ def test_the_table_gives_what_outcomes_gives(hole, table, scale, monkeypatch):
                     looked_up = solver._outcomes(pixel, speed, row, column)
                     assert looked_up.keys() == exact.keys(), intent
                     for result, p in exact.items():
-                        assert looked_up[result] == pytest.approx(p), (intent, result)
+                        assert looked_up[result] == pytest.approx(p), (
+                            intent,
+                            result,
+                        )
                     checked += 1
-    assert checked == 2 * 3 * 4 * 3
+    assert checked == 2 * 4 * 3
 
 
-def test_putts_feel_no_wind(hole, table):
-    """Every putt in the table, played again in a strong wind, stops in the same place."""
-    x, y = (int(v) for v in table.pixels[0])
-    position = Position(x, y)
-    solver = GreenSolver(table, hole.tables, Skill.scaled(1.0))
+def test_putts_feel_no_wind(hole):
+    """A putt at each speed, played in strong winds, stops in the same place."""
+    pin_x, pin_y = _pin(hole)
+    position = Position(pin_x + 6, pin_y + 4)
     for speed in range(3):
-        intent = solver.intent(0, speed, len(solver.frames[speed]) // 2, 0)
+        frames = green.aimed_frames(hole.tables, speed)
+        frame = frames[len(frames) // 2]
+        stop = green.frame_stops(hole.tables, speed)[frame - 1]
+        intent = Intent(
+            PUTTER,
+            (aim_at(position, _pin(hole)) - 10) & 0xFF,
+            stop,
+            swing_speed=speed,
+        )
         calm = outcomes(intent, position, hole, (0, 0), Skill.scaled(1.0))
         for wind in ((0, 15), (64, 15), (160, 9)):
             assert outcomes(intent, position, hole, wind, Skill.scaled(1.0)) == calm

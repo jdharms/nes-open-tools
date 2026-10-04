@@ -86,57 +86,46 @@ def matrix_rows(machine: Machine) -> list[list[int]]:
 # --------------------------------------------------------------------------
 
 
-def test_payload_and_mac_match_the_oracle(program, rounds) -> None:
-    for round_payload, key in rounds:
-        machine = staged(program, round_payload, key)
-        machine.call("QrBuildPayload", a=0)
-        built = machine.read(layout.PAYLOAD, PAYLOAD_LEN)
-        assert built == round_payload.to_bytes(key)
-        assert verify(built, key)
+@pytest.mark.parametrize("round_index", range(ROUNDS))
+def test_each_stage_matches_the_oracle_and_the_code_decodes(
+    program, rounds, round_index
+) -> None:
+    """One fresh emulation per round, inspecting buffers before they are reused.
 
+    The payload, URL and codewords are overlaid by the final nametable, so
+    checking only the finished machine would lose the stage-level assertions.
+    """
+    round_payload, key = rounds[round_index]
+    url = round_payload.to_url(key)
+    stages = encoder.encode_stages(url, submission.FIXED_MASK)
+    machine = staged(program, round_payload, key)
 
-def test_url_matches_the_oracle(program, rounds) -> None:
-    for round_payload, key in rounds:
-        machine = staged(program, round_payload, key)
-        machine.call("QrBuildPayload", a=0)
-        machine.call("QrBuildUrl")
-        url = machine.read(layout.URL, URL_LEN).decode("ascii")
-        assert url == round_payload.to_url(key)
+    machine.call("QrBuildPayload", a=0)
+    built = machine.read(layout.PAYLOAD, PAYLOAD_LEN)
+    assert built == round_payload.to_bytes(key)
+    assert verify(built, key)
 
+    machine.call("QrBuildUrl")
+    assert machine.read(layout.URL, URL_LEN).decode("ascii") == url
+    machine.call("QrBuildCodewords")
+    assert machine.read(layout.DATA_CODEWORDS, 86) == stages.data_codewords
+    machine.call("QrReedSolomon")
+    assert machine.read(layout.EC_CODEWORDS, 48) == b"".join(stages.ec_codewords)
+    machine.call("QrInterleaveCodewords")
+    assert machine.read(layout.INTERLEAVED, 134) == stages.interleaved
 
-def test_code_words_error_correction_and_interleave_match(program, rounds) -> None:
-    for round_payload, key in rounds:
-        machine = staged(program, round_payload, key)
-        stages = encoder.encode_stages(round_payload.to_url(key), submission.FIXED_MASK)
-        machine.call("QrBuildPayload", a=0)
-        machine.call("QrBuildUrl")
-        machine.call("QrBuildCodewords")
-        assert machine.read(layout.DATA_CODEWORDS, 86) == stages.data_codewords
-        machine.call("QrReedSolomon")
-        assert machine.read(layout.EC_CODEWORDS, 48) == b"".join(stages.ec_codewords)
-        machine.call("QrInterleaveCodewords")
-        assert machine.read(layout.INTERLEAVED, 134) == stages.interleaved
+    machine.call("QrCopyMatrix")
+    machine.call("QrWalkMatrix")
+    expected_matrix = encoder.encode(url, submission.FIXED_MASK).rows()
+    assert matrix_rows(machine) == expected_matrix
 
-
-def test_matrix_matches_the_oracle(program, rounds) -> None:
-    for round_payload, key in rounds:
-        machine = staged(program, round_payload, key)
-        run_all(machine)
-        expected = encoder.encode(
-            round_payload.to_url(key), submission.FIXED_MASK
-        ).rows()
-        assert matrix_rows(machine) == expected
-
-
-def test_nametable_matches_the_oracle(program, rounds) -> None:
-    for round_payload, key in rounds:
-        machine = staged(program, round_payload, key)
-        run_all(machine)
-        expected = nes.build_nametable(
-            encoder.encode(round_payload.to_url(key), submission.FIXED_MASK).rows(),
-            base_tile=layout.TILE_BASE,
-        )
-        assert machine.read(layout.NAMETABLE, len(expected)) == expected
+    machine.call("QrBuildNametable")
+    expected = nes.build_nametable(expected_matrix, base_tile=layout.TILE_BASE)
+    nametable = machine.read(layout.NAMETABLE, len(expected))
+    assert nametable == expected
+    rows = nes.render_modules(tables.chr_table(), nametable, layout.TILE_BASE)
+    image = render_screen(encoder.QrMatrix(bytearray(sum(rows, [])), 0))
+    assert DECODERS["zxing"](image) == url
 
 
 def test_the_entry_point_runs_the_same_pipeline(program, rounds) -> None:
@@ -149,26 +138,6 @@ def test_the_entry_point_runs_the_same_pipeline(program, rounds) -> None:
     assert whole.read(layout.MATRIX, layout.MATRIX_BYTES) == stepwise.read(
         layout.MATRIX, layout.MATRIX_BYTES
     )
-
-
-# --------------------------------------------------------------------------
-# End to end
-# --------------------------------------------------------------------------
-
-
-def test_the_code_the_rom_builds_actually_decodes(program, rounds) -> None:
-    """
-    Straight from the 6502's own nametable through the CHR pipeline to a real
-    decoder — the check that a self-consistently wrong port cannot pass.
-    """
-    chr_data = tables.chr_table()
-    for round_payload, key in rounds:
-        machine = staged(program, round_payload, key)
-        run_all(machine)
-        nametable = machine.read(layout.NAMETABLE, 361)
-        rows = nes.render_modules(chr_data, nametable, layout.TILE_BASE)
-        image = render_screen(encoder.QrMatrix(bytearray(sum(rows, [])), 0))
-        assert DECODERS["zxing"](image) == round_payload.to_url(key)
 
 
 # --------------------------------------------------------------------------

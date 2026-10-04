@@ -14,7 +14,14 @@ import pytest
 
 from golf.core.decompressor import GreensDecompressor, TerrainDecompressor
 from golf.formats.hole_data import HoleData
-from golf.randomizer.catalog import DEFAULT_COURSES, JP_ROM, US_ROM, Catalog
+from golf.randomizer.catalog import (
+    DEFAULT_COURSES,
+    JP_ROM,
+    US_ROM,
+    Catalog,
+    HoleId,
+    HoleStore,
+)
 from golf.randomizer.rehydrate import (
     RehydrateError,
     check_rangefinder,
@@ -30,6 +37,22 @@ VANILLA_DATA_FIXTURES = frozenset(
 
 
 PHYSICS_TESTS = ROOT / "tests" / "physics"
+
+
+@pytest.fixture(scope="session")
+def chromium_available():
+    """Probe once on workers running browser tests, never during collection.
+
+    Every xdist worker imports every test module. Import-time launch probes in
+    four modules launched 96 browsers with 24 workers, even for unrelated tests.
+    """
+    try:
+        from playwright.sync_api import sync_playwright
+
+        with sync_playwright() as playwright:
+            playwright.chromium.launch().close()
+    except Exception:
+        pytest.skip("no Playwright Chromium")
 
 
 def pytest_addoption(parser):
@@ -82,6 +105,13 @@ def vanilla_courses() -> Path:
 def vanilla_jp_courses() -> Path:
     """The courses root, holding the Mario Open courses under jp/, verified."""
     return _rehydrated(JP_ROM)
+
+
+@pytest.fixture
+def vanilla_hole(request, vanilla_courses, vanilla_jp_courses):
+    """One independently loaded hole, parametrized by catalog id by the caller."""
+    entry = Catalog.load().entries[HoleId.parse(request.param)]
+    return request.param, HoleStore(vanilla_courses).load(entry)
 
 
 @pytest.fixture(scope="session")
