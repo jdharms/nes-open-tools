@@ -125,7 +125,7 @@ class CodePointerTable:
     handler" and is skipped.
     """
 
-    name: str
+    name: str  # the table's label; known-data labels it with this name
     bank: int
     start: int  # CPU address of the first (low) byte
     count: int
@@ -154,11 +154,15 @@ CODE_POINTER_TABLES: tuple[CodePointerTable, ...] = (
     ),
     # Indexed by a 4-bit match mask shifted left once ($9E23-$9E32), so X is
     # even and 0-30: 16 words, and the first points at the byte after the table.
-    CodePointerTable("bank 9 $9E41", 9, 0x9E41, 16, dispatch_sites=(0x9E3E,)),
+    CodePointerTable(
+        "SceneTileMatchRoutinePtrTable", 9, 0x9E41, 16, dispatch_sites=(0x9E3E,)
+    ),
     # The scene callback at bank 10 $9B57 indexes $9BA2 by the object's $7AC1,
     # which is never 0 there (BEQ at $9B73); entry 0 is the JMP's own operand,
     # and the code after entry 3 starts at the first target, $9BAA.
-    CodePointerTable("bank 10 $9BA4", 10, 0x9BA4, 3, dispatch_sites=(0x9BA1,)),
+    CodePointerTable(
+        "SceneCallbackHandlerPtrTable", 10, 0x9BA4, 3, dispatch_sites=(0x9BA1,)
+    ),
 )
 
 
@@ -543,7 +547,7 @@ class DataReader:
 PAIR_REACH = 6  # instructions after a `LDx #lo` to look for its `LDx #hi`
 
 
-def data_readers(rom: bytes, result: TraceResult) -> list[DataReader]:
+def data_readers(rom: bytes | bytearray, result: TraceResult) -> list[DataReader]:
     """Every traced absolute operand and immediate pointer pair naming ROM.
 
     An operand in `$8000-$BFFF` resolves against each bank the instruction was
@@ -595,7 +599,7 @@ _STORE_FOR_LOAD = {0xA9: (0x85, 0x8D), 0xA2: (0x86, 0x8E), 0xA0: (0x84, 0x8C)}
 _ENDS_PAIR_SEARCH = (JSR, JMP_ABS, JMP_IND, RTS, RTI)
 
 
-def _immediate_store(rom: bytes, prg: int) -> tuple[int, int] | None:
+def _immediate_store(rom: bytes | bytearray, prg: int) -> tuple[int, int] | None:
     """(address, value) for `LDx #value` / `STx address`, else None."""
     stores = _STORE_FOR_LOAD.get(rom[prg])
     if stores is None or rom[prg + 2] not in stores:
@@ -613,12 +617,16 @@ def mark_uncalled(reader, labels, result: TraceResult) -> TraceResult:
     caller: dead, or reached through a pointer nobody has found. Its bytes are
     marked `UNCALLED`, which `coverage` counts apart and `gaps` skips, so the
     gaps are the bytes nobody has explained. Returns the trace from those
-    labels, whose conflicts say a label is on something that isn't code.
+    labels, whose conflicts say a label is on something that isn't code. A
+    label inside a range label marks a place in that data (an entry in a string
+    list), so it isn't traced.
     """
     seeds = [
         s
         for s in label_seeds(labels)
-        if (prg := _to_prg(s.cpu, s.ctx)) is not None and result.marks[prg] == NONE
+        if (prg := _to_prg(s.cpu, s.ctx)) is not None
+        and result.marks[prg] == NONE
+        and result.data_names[prg] is None
     ]
     sub = trace(reader, labels, seeds, pointer_tables=())
     for prg, mark in enumerate(sub.marks):

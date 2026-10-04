@@ -145,6 +145,7 @@ CONTROL = {
     0xFE: (3, JUMP),  # go to target
     0xFF: (1, STOP),  # free the object
 }
+STORE = 0xF6
 MOTION_OPS = {0xDD: (3, NEXT)}  # $FCB2: set velocity
 ANIM_OPS = {0xEF: (2, NEXT), 0xED: (3, NATIVE)}  # $FCD5: sprite id, native call
 MOTION_STEP, ANIM_STEP = 3, 2
@@ -166,6 +167,7 @@ class StreamWalk:
     covered: set[int] = field(default_factory=set)  # CPU addresses
     uses: set[tuple[int, int]] = field(default_factory=set)  # (sprite id, frame)
     native: set[int] = field(default_factory=set)
+    stores: dict[int, tuple[int, int]] = field(default_factory=dict)  # $F6 at: (a, v)
     problems: list[str] = field(default_factory=list)
 
 
@@ -221,6 +223,8 @@ def walk_stream(rom, bank: int, start: int, anim: bool, sprite: int = 0) -> Stre
                 work.append((args[-2] | args[-1] << 8, sprite))
             elif flow == NATIVE:
                 walk.native.add(args[0] | args[1] << 8)
+            elif op == STORE:
+                walk.stores[pc] = (args[0] | args[1] << 8, args[2])
             elif op == 0xEF and anim:
                 sprite = args[0]
             if flow in (JUMP, RETURN, STOP):
@@ -377,6 +381,7 @@ class ObjectWalk:
     stream_starts: dict[tuple[int, int], str] = field(default_factory=dict)
     frames: dict[tuple[int, int], set[int]] = field(default_factory=dict)  # (bank, id)
     native: dict[tuple[int, int], str] = field(default_factory=dict)  # (bank, cpu)
+    stores: dict[tuple[int, int], tuple[int, int]] = field(default_factory=dict)
     problems: list[Problem] = field(default_factory=list)
 
 
@@ -466,6 +471,7 @@ def walk_objects(rom, result: TraceResult) -> ObjectWalk:
             walk.native.setdefault(
                 (bank, cpu), f"object $ED call; stream at ${start:04X}"
             )
+        walk.stores.update({(bank, pc): st for pc, st in stream.stores.items()})
 
     for i, bank in walk.banks.items():
         rec, chosen = walk.records[i], fits[i][bank]
@@ -480,7 +486,30 @@ def walk_objects(rom, result: TraceResult) -> ObjectWalk:
                 walk.frames.setdefault((bank, sprite), set()).add(frame)
         for cpu in chosen.anim.native:
             walk.native.setdefault((bank, cpu), f"object $ED call; {how}")
+        for stream in (chosen.motion, chosen.anim):
+            walk.stores.update({(bank, pc): st for pc, st in stream.stores.items()})
     return walk
+
+
+def stream_scripts(walk: ObjectWalk) -> dict[int, str]:
+    """Text scripts a stream starts by storing their address into `ScriptPtr`.
+
+    The tournament win scene's animation (bank 10 `$BB0A`) ends with `$F6` stores
+    of the prize-award script's address into `ScriptPtr` and `ScriptPtr+1`, then
+    `ScriptDelayCounter`: the only place that script is named.
+    """
+    from golf.core.text_script import SCRIPT_PTR
+
+    found = {}
+    for (bank, pc), (addr, lo) in sorted(walk.stores.items()):
+        high = walk.stores.get((bank, pc + 4))
+        if addr == SCRIPT_PTR and high is not None and high[0] == SCRIPT_PTR + 1:
+            cpu = lo | high[1] << 8
+            if 0x8000 <= cpu < 0xC000:
+                found.setdefault(
+                    cpu, f"set by an object stream at bank {bank} ${pc:04X}"
+                )
+    return found
 
 
 def scene_callbacks(rom, result: TraceResult, walk: ObjectWalk) -> dict:
@@ -523,15 +552,24 @@ def trace_everything(reader, labels=None, seeds=None):
 
     base = vector_seeds(reader) if seeds is None else list(seeds)
     extra: dict[tuple[int, int], str] = {}
+    scripts_from_streams: dict[int, str] = {}
     while True:
         more = [Seed(cpu, bank, how) for (bank, cpu), how in sorted(extra.items())]
-        result, scripts = trace_with_scripts(reader, labels, base + more)
+        result, scripts = trace_with_scripts(
+            reader, labels, base + more, scripts_from_streams
+        )
         objects = walk_objects(reader, result)
         found = {**objects.native, **scene_callbacks(reader, result, objects)}
         new = {k: v for k, v in found.items() if k not in extra}
-        if not new:
+        new_scripts = {
+            k: v
+            for k, v in stream_scripts(objects).items()
+            if k not in scripts_from_streams
+        }
+        if not new and not new_scripts:
             break
         extra.update(new)
+        scripts_from_streams.update(new_scripts)
     answered = {_prg_of(15, OBJECT_NATIVE_SITE)}
     if any("scene callback" in how for how in extra.values()):
         answered.add(_prg_of(15, SCENE_CALLBACK_SITE))

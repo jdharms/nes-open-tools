@@ -1,12 +1,15 @@
-# Hand-off: Explaining the Remaining ROM Bytes
+# Hand-off: Explaining the ROM Bytes
 
 > **Note**: This document was written by Claude for the next agent picking up this work,
 > at jdharms's request.
 
 The goal is a full disassembly of the US ROM. Every byte of the 256KB PRG is now traced
-code, covered by a range label, or uncalled code under a named label, except for **1,133
-bytes in 42 runs**. This document says where things stand, the tools, the method that
-worked, and the traps already found.
+code, covered by a range label, or uncalled code under a named label, except **one byte**:
+bank 13 `$8F35`, an unread `$FF` between `ViewOffsetSpriteYHiTable` and `LD_8F36`, which
+can't be labeled because a one-byte range is a code label in this file (the Hi table's
+comment explains it). What is left is confirming the guesses, not finding bytes. This
+document says where things stand, the tools, the method that worked, and the traps
+already found.
 
 ## Where things stand
 
@@ -14,17 +17,18 @@ worked, and the traps already found.
 
 | Bank | Code | Labeled data | Uncalled | Unexplained |
 |---|---|---|---|---|
-| 0, 1, 5, 6, 7 | stubs | everything | 0 | 0 |
-| 2 | 2,433 | 13,846 | 0 | 105 |
-| 3 | 403 | 15,965 | 0 | 16 |
-| 4 | 109 | 16,211 | 0 | 64 |
-| 8 | 478 | 15,902 | 0 | 4 |
-| 9 | 10,466 | 5,746 | 0 | 172 |
-| 10 | 183 | 16,189 | 0 | 12 |
-| 11 | 5,424 | 10,268 | 0 | **692** |
-| 12 | 9,791 | 6,543 | 0 | 50 |
-| 13 | 12,410 | 3,755 | 202 | 17 |
-| 14 | 6,109 | 10,223 | 51 | 1 |
+| 0, 1, 6, 7 | stubs | everything | 0 | 0 |
+| 2 | 2,433 | 13,951 | 0 | 0 |
+| 3 | 403 | 15,981 | 0 | 0 |
+| 4 | 109 | 16,275 | 0 | 0 |
+| 5 | 373 | 16,011 | 0 | 0 |
+| 8 | 478 | 15,906 | 0 | 0 |
+| 9 | 10,466 | 5,880 | 38 | 0 |
+| 10 | 183 | 16,201 | 0 | 0 |
+| 11 | 5,445 | 10,936 | 3 | 0 |
+| 12 | 9,791 | 6,593 | 0 | 0 |
+| 13 | 12,410 | 3,771 | 202 | 1 |
+| 14 | 6,109 | 10,224 | 51 | 0 |
 | 15 (fixed) | 7,526 | 8,019 | 839 | 0 |
 
 **Uncalled** is code that only single-address labels nothing reaches lead to: routines
@@ -39,16 +43,9 @@ Invariants that hold now and should keep holding:
 - **No unresolved control flow and no conflicts** in the trace.
 - **No two range labels overlap**, and no label name repeats (check below).
 - **`known-data` is idempotent**: a dry run reports 0 new labels.
-- One object problem is reported and expected: the bank 10 `$9D65` stream (see its label).
-
-**Not yet run since the last code changes**: `uv run golf-check` and the full
-`uv run pytest`. `tests/unit` and `tests/meta` passed partway through the session, before
-the clip-window collector, the frame-table sizing, `code_streams` and the record registries
-were added; the unit tests for `test_known_data.py` and `test_rom_trace.py` pass with
-them. Run both first. Also still owed: the `nes-open-golf-rom-peek` skill does not yet
-describe `readers` or the `uncalled` column, and `docs/scene_objects.md` does not describe
-`RECORD_LISTS`, short records in `RECORD_POINTER_TABLES`, or `code_streams`, and its open
-question about sprite `$00` is answered (`MenuSpriteInitData`).
+- One object problem is reported and expected: the bank 10 `$9D65` stream (see its label);
+  `test_object_script_rom.py` pins it.
+- `golf-check` and the full `pytest` pass.
 
 ## The tools
 
@@ -58,8 +55,10 @@ All in `golf-rom-peek` (see the `nes-open-golf-rom-peek` skill):
   text-script walker and the scene-object walker, repeated until neither finds new code.
   `mark_uncalled` then traces from the unreached single-address labels and marks what only
   they reach `UNCALLED`: its own coverage column, left out of the gaps. Conflicts from that
-  sub-trace are printed separately; today they are the three data labels listed under
-  leads. `--unreached` lists labels never decoded, marking roots.
+  sub-trace are printed separately (there are none today). A single-address label inside
+  a range label marks a place in that data (`CourseOneMenuStr`, a string in
+  `MenuTextListData`) and isn't traced. `--unreached` lists labels never decoded, marking
+  roots.
 - **`readers [--bank N] [--min N] [--reach N]`** - each gap with the traced instructions
   that name it (`data_readers` in `rom_trace.py`): absolute and indexed operands resolved in
   every bank the instruction ran with mapped (`TraceResult.contexts`), indexed bases up to
@@ -74,13 +73,20 @@ All in `golf-rom-peek` (see the `nes-open-golf-rom-peek` skill):
   - `clip_window_regions`: the 5-byte record named by `SetObjectClipWindow`'s inline word
     (`$F881`, formerly `LF881`).
   - `vector_regions`: every bank's last 6 bytes.
+  - `code_pointer_table_regions`: the tables in `CODE_POINTER_TABLES`, labeled with each
+    entry's `name` (`<name>Lo`/`<name>Hi` for split tables).
   - Palettes, copies and clip windows share `_inline_word_targets`, which resolves a
     fixed-bank site's switchable address through the banks the trace saw mapped.
   - Metasprite renderers are keyed by (bank, address); bank 13's
     `RenderGreenViewMetasprite` (`$9492`, count + 4 bytes a sprite) is registered, and
-    `_renderer_after` looks one call deep (`RENDERER_REACH` 16).
+    `_renderer_after` looks one call deep (`RENDERER_REACH` 24: bank 4's `$BF02` and
+    `$BF4F` reach `RenderMetasprite` 21 instructions on).
   - Object frame tables are sized by `_frame_count`: on up to the lowest metasprite they
     point at, not just the highest frame a record uses.
+- **Scripts started by object streams**: `stream_scripts` (`object_script.py`) pairs a
+  stream's `$F6` stores into `ScriptPtr`/`ScriptPtr+1`, and `trace_everything` hands the
+  addresses to `trace_with_scripts` as extra script entries. That is how
+  `PrizeAwardTextScript` (bank 11 `$B997`) and its natives `$9504` and `$B8D5` are reached.
 - **Object walker registries** (`golf/core/object_script.py`): `RECORD_POINTER_TABLES`
   entries now carry a record `size` (7 for the short records `$F856` copies);
   `RECORD_LISTS` holds records reached through a RAM pointer (`MenuSpriteInitData`) or with
@@ -125,25 +131,33 @@ print('overlaps',[(a[2],b[2]) for a,b in zip(rs,rs[1:]) if b[0]<=a[1]],
       'dupes',[n for n,k in c.items() if k>1])"
 ```
 
-## Leads on what is left
+## What is left
 
-- **Bank 11 (692)** - the biggest: `$8982` (186, after `PaletteDataB8962`), `$8F51` (136),
-  `$B997` (126; the prize-award script "We hereby award you...", which nothing found loads -
-  a Mesen breakpoint on a `ScriptPtr` write during a tournament win would find its setter),
-  `$8887` (74; a table of `$60xx` SRAM addresses), `$88D6` (54), `$946A` (38), `$894C`
-  (22), and small ones. `ScriptAnimationPtrTable` (`$947C`) is a single-address label on
-  data: give it a range.
-- **Bank 9 (172)** - `$98A2` (72), `$942B` (49, after `SceneTileClassKeyTable`), unreached
-  code at `$B4E3`, `$BF76`, `$A63C`; leftovers listed in `docs/perspective_scene.md`'s open
-  questions.
-- **Bank 2 (105)** - `$BD35` (83) and `$BC73` (16), both after
-  `Scorecard36HoleMatchNametableTable`.
-- **Bank 4 (64)** - `$BF62`, after `L4_BF4F`.
-- **Bank 12 (50)** - `$BE3A` (40, after `MaybeWagerFlashPalettes`), `$8293` (6), `$ADA0`
-  (4). `CourseOneMenuStr` (`$8C6E`) is a single-address label on data: give it a range.
-- **Bank 13 (17)**, **bank 3 (16)** (`$A859`, after `ReplayShotSpinTable`), **bank 8 (4)**,
-  **bank 10 (12)**: small leftovers; bank 13's `$AC85` (3) and `$B3A0` (6) have no reader.
-- **Bank 14** - `NoiseDrumParamTable` is now a range; the 1 byte left is `$8886`.
+No bytes to find; three kinds of follow-up:
+
+1. **The uncalled code has had one Mesen pass** (2026-10-04, jdharms): execute
+   breakpoints over every uncalled block's whole range - all 13 in the fixed bank and
+   the 7 in banks 9, 13 and 14 - and none hit through the credits combo, every club house
+   screen (options saved, money deposited with DK, replays, stats), a one-hole tournament
+   bet against a CPU opponent, practice, two-player stroke play and one-player match play
+   with saves. Each block's entry label records this. Not covered: a full tournament or
+   the earned ending, a hole-in-one or albatross, rank promotion, a new save file. The
+   blocks stay "maybe dead" until something covers those, but nothing ordinary reaches
+   them. Two uncalled fragments weren't covered and need no breakpoint: bank 11 `LB_80C7`
+   and bank 14 `LE_8A44` each follow a `JMP` with nothing branching to them. Use
+   **execute-only** breakpoints: a read breakpoint on a label right after an
+   `RTS` fires on every return, because the 6502 reads and discards the byte after a
+   one-byte instruction (`$D131` after the `RTS` at `$D130`).
+2. **Confirm the `Maybe` data that nothing reads**, the same way with read breakpoints:
+   `MaybeUnusedSceneFlagTable` (bank 9 `$942B`), `MaybeUnusedData9B38B`,
+   `MaybeUnusedDataC8293`, `MaybeUnusedDataAA296`, `MaybeUnusedDataDAC85`,
+   `MaybeUnusedDataDB3A0`, and the unreachable table tails `MaybeUnusedPutterDistanceSpeed34`,
+   `MaybeUnusedPutterDistAltSpeed34` and `MaybeBunkerExitClubThresholdTable` (only entry 1
+   read). Each comment records the static search that came up empty.
+3. **Name what is only measured**: generated names (`Metasprites4BF7F`,
+   `ObjectAnimStreamAA278`, `TextScriptBA089`, ...) and the 725 routine entries without a
+   tier-3 name (`trace --unnamed`). Bank 9's 32-bit math works on three registers, high
+   byte first: MathA `$62`, MathB `$66`, MathC `$6A` (see `ClearMathA`'s comment).
 
 ## Traps already found
 
@@ -170,6 +184,17 @@ print('overlaps',[(a[2],b[2]) for a,b in zip(rs,rs[1:]) if b[0]<=a[1]],
   a variant index or animation pointer elsewhere; `SceneTileMap` covers many unrelated
   arrays (the object slot arrays at `$7811`-`$7B01` among them). Read the code, not the
   label.
+- **A script or stream can be named only inside other data.** `PrizeAwardTextScript` has
+  no code pointer at all; its address sits in an object stream's `$F6` operands. When a gap
+  has no reader, `find` its raw pointer and read what holds it.
+- **Padding can be read.** Bank 11 `$85BB` points a 2-byte attribute descriptor at `$FFEE`,
+  inside `MaybeBank15TailPadding`.
+- **Label extents can be off by one entry.** `NoiseDecayEnvelopeTable` was read as
+  indexed 1-15, but its counter is set to 16 and decremented before each read (2-16);
+  `SignpostBannerDescriptorTable` stopped 4 bytes short of its fifth descriptor; and
+  `ReplayDestPtrLoTable`/`HiTable` were two word tables read with a stride (now
+  `ReplaySaveHeaderPtrTable`/`ReplaySaveDataPtrTable`). A small gap right after a table
+  is worth checking against the table's own reader first.
 - **`golf-labels edit` can't change a range**; remove and re-add (it inserts in address
   order).
 

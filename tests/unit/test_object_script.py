@@ -1,6 +1,11 @@
 """Unit tests for the scene object stream and metasprite decoders."""
 
-from golf.core.object_script import metasprite_length, walk_stream
+from golf.core.object_script import (
+    ObjectWalk,
+    metasprite_length,
+    stream_scripts,
+    walk_stream,
+)
 
 
 class FakeRom:
@@ -90,3 +95,29 @@ class TestWalkStream:
         rom.put(0x9000, bytes([0xE4]))
         walk = walk_stream(rom, 10, 0x9000, anim=True)
         assert walk.problems == ["no handler for $E4 at $9000"]
+
+    def test_stores_are_recorded(self):
+        rom = FakeRom()
+        rom.put(0x9000, bytes([0xF6, 0xE7, 0x06, 0x97, 0xFF]))
+        walk = walk_stream(rom, 10, 0x9000, anim=True)
+        assert walk.stores == {0x9000: (0x06E7, 0x97)}
+
+
+class TestStreamScripts:
+    def test_a_store_pair_into_script_ptr_names_a_script(self):
+        walk = ObjectWalk(
+            stores={(10, 0xBB0A): (0x06E7, 0x97), (10, 0xBB0E): (0x06E8, 0xB9)}
+        )
+        assert list(stream_scripts(walk)) == [0xB997]
+
+    def test_a_lone_low_store_names_nothing(self):
+        walk = ObjectWalk(
+            stores={(10, 0xBB0A): (0x06E7, 0x97), (10, 0xBB0E): (0x0700, 0xB9)}
+        )
+        assert stream_scripts(walk) == {}
+
+    def test_the_pair_must_be_adjacent_in_one_bank(self):
+        walk = ObjectWalk(
+            stores={(10, 0xBB0A): (0x06E7, 0x97), (2, 0xBB0E): (0x06E8, 0xB9)}
+        )
+        assert stream_scripts(walk) == {}

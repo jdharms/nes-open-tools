@@ -67,6 +67,9 @@ entries) by that mask. Each routine points `$20` at a `SceneTileMatchTable` bloc
 - 18 result tiles follow. A result of 0 falls back to `SceneTileByClassTable` (`$A28D`, by
   class); `SceneTileMatchShared9F1E` serves four routines without the +9.
 
+`SceneNeighborOffsetPairs` (`$9FF7`) holds three more offset pairs for `L9_A2D8`, which
+the routines at `$9FB1` and `$A067` try in turn.
+
 `SceneClassPriorityTable` (`$9E18`) ranks the seven classes where two meet, and
 `SceneNeighborOffsetTableA`/`B` (`$9DC8`) are the offsets one more routine checks.
 
@@ -89,14 +92,25 @@ The ball is composited into the tile map as background tiles, at a size set by i
    and `SceneBallOverlapTileTable` (`$9478`) gives the tile for the pair. Class `$0D`
    scenery picks one of four `SceneClass0DTileTable` tiles at random.
 
-The 49 bytes between the two class tables (`$942B`-`$945B`, all 0 or 1) have no reader.
+The 49 bytes between the two class tables (`MaybeUnusedSceneFlagTable`, `$942B`-`$945B`,
+all 0 or 1) have no reader: `L9_93FE` stops at the key table's 28 entries, no immediate pair
+names them, and the raw pointer hits in bank 9 are mid-instruction coincidences.
+
+## Blocks in the sky - `L9_9785`
+
+Before the scene goes to the nametable (`$9707`), `L9_9785` stamps six fixed tile blocks
+from `MaybeSceneSkyBlockTiles` (`$98A2`) into the tile map through `L9_97F8`, at fixed
+columns and rows near the top. A block is written only when every tile under it is still the
+blank `$3A` (`$9831`), so scenery that reaches that high hides it. Read as clouds, but not
+confirmed.
 
 ## Probably the flagstick
 
 `L9_99B2` draws a strip of tiles at `$078E`/`$078F` chosen by `$0790`: a count and
 (dY, tile) pairs from `MaybeSceneFlagstickLists`, six lists of one to six tiles, offset by
 `MaybeSceneFlagstickXOffsetTable`. `MaybeSceneFlagTileTable` (`$9B59`, 3 x 3) adds a tile
-by `$0792`, which `$9960`-`$996E` raises as the target gets nearer. Read as the flagstick
+by `$0792`, which `$9960`-`$996E` raises as the target gets nearer, on the row
+`MaybeSceneFlagYBaseTable` (`$9BCE`) places by the same index. Read as the flagstick
 growing with distance, but not confirmed.
 
 `GreenCornerXOffsetTable`/`YOffsetTable` (`$99AA`) are the four points around the green
@@ -104,6 +118,6 @@ the loop at `$9971` checks.
 
 ## Open questions
 
-- What `$942B`-`$945B` is, and what reads it.
+- What `$942B`-`$945B` was for; nothing reads it.
 - Whether the flagstick reading is right, and what `$0790`-`$0794` are.
 - What `LE638` computes from the probe and row bytes.

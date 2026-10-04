@@ -1,8 +1,14 @@
 """Unit tests for comparing known data regions with a label file."""
 
-from golf.core.known_data import KnownRegion, padding_regions, plan_labels
+from golf.core import known_data
+from golf.core.known_data import (
+    KnownRegion,
+    code_pointer_table_regions,
+    padding_regions,
+    plan_labels,
+)
 from golf.core.mlb_labels import Label, LabelIndex, LabelStore
-from golf.core.rom_trace import OPCODE, TraceResult
+from golf.core.rom_trace import OPCODE, CodePointerTable, TraceResult
 
 SIZE = 0x40000
 
@@ -169,3 +175,24 @@ def test_clip_window_records_follow_the_inline_word():
     result.marks[prg] = OPCODE
     [found] = clip_window_regions(rom, result)
     assert (found.bank, found.cpu, found.length) == (14, 0xB2E3, 5)
+
+
+class TestCodePointerTableRegions:
+    def test_interleaved_words(self, monkeypatch):
+        table = CodePointerTable("JumpTable", 10, 0x9BA4, 3, dispatch_sites=(0x9BA1,))
+        monkeypatch.setattr(known_data, "CODE_POINTER_TABLES", (table,))
+        [found] = code_pointer_table_regions()
+        assert (found.start, found.length, found.name) == (
+            10 * 0x4000 + 0x1BA4,
+            6,
+            "JumpTable",
+        )
+
+    def test_split_lo_hi_is_two_regions(self, monkeypatch):
+        table = CodePointerTable("JumpTable", 9, 0x9000, 4, hi_offset=4)
+        monkeypatch.setattr(known_data, "CODE_POINTER_TABLES", (table,))
+        found = code_pointer_table_regions()
+        assert [(r.cpu, r.length, r.name) for r in found] == [
+            (0x9000, 4, "JumpTableLo"),
+            (0x9004, 4, "JumpTableHi"),
+        ]

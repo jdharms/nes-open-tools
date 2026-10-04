@@ -10,7 +10,7 @@ One line per document. Command-line tools are indexed in the top-level `README.m
 | [randomizer.md](randomizer.md) | Randomizer design: goals, logic, what gets randomized |
 | [randomizer_devplan.md](randomizer_devplan.md) | Randomizer site architecture, data model, routes and the ordered development plan |
 | [planning/download_settings.md](planning/download_settings.md) | Plan: saved download settings, the new SRAM option defaults and finish ABI 2 |
-| [planning/rom_coverage_handoff.md](planning/rom_coverage_handoff.md) | Hand-off: the ROM bytes not yet explained, the tools and method, and the traps found |
+| [planning/rom_coverage_handoff.md](planning/rom_coverage_handoff.md) | Hand-off: ROM byte coverage (complete but one byte), the tools and method, the traps found, and what is left to confirm in Mesen |
 | [deployment.md](deployment.md) | Running the randomizer site on its server: setup, releases, rollback and database restores |
 | [documentation.md](documentation.md) | Philosophy and practices followed for documentation for the development process |
 | [catalog.md](catalog.md) | The randomizer hole catalog: frozen index, curation, ids, versions and families |

@@ -48,6 +48,7 @@ reading anything.
 | `disasm <addr> [--bank N] [--count N \| --routine] [--max N]` | Disassemble. See below. |
 | `find-refs <addr> [--bank N] [--type prg\|ram] [--reach N]` | Find references across every encoding. See below. |
 | `trace [--from <addr> --bank N] [--bank N] [--gaps N] [--unnamed] [--unreached]` | Follow control flow from the vectors and map code, data and gaps. See below. |
+| `readers [--bank N] [--min N] [--reach N]` | Each gap the trace leaves, with the traced instructions that name it. See below. |
 | `known-data [--list] [--write]` | Compare the data regions the repo can locate with the label file; `--write` adds them as range labels. See below. |
 | `label <addr> [--type ...] [--bank N]` | Look up the label at an address. |
 | `find-label <substring>` | Search labels by name. |
@@ -246,7 +247,13 @@ unknown. Recognizes the unconditional branch idioms (`BEQ`/`BNE` pairs, `CLC`/`B
 `LDA #nonzero`/`BNE`). It prints:
 
 - **coverage** per bank: bytes reached as code, inside range labels, both
-  (a conflict), and neither.
+  (a conflict), **uncalled**, and neither. Uncalled is code that only the
+  single-address labels nothing reaches lead to: after the main trace,
+  `mark_uncalled` traces from those labels and gives what only they reach its own
+  column, out of the gaps. It is dead code or code behind a pointer nobody has found;
+  name such a routine with a comment starting "maybe dead". Conflicts from that
+  sub-trace are printed in their own list. A single-address label inside a range label
+  marks a place in that data (a string in a list) and isn't traced.
 - **unresolved control flow**: every `JMP (ind)` it couldn't follow. If you
   work one out, add the table to `CODE_POINTER_TABLES` (with the reasoning) rather
   than labeling around it.
@@ -266,7 +273,8 @@ Unless given `--from`, it also walks the bank 11 dialogue scripts
 `ScriptPtr` (immediates, plus the tables in `SCRIPT_POINTER_TABLES`), follows every
 script opcode that moves the script counter, and traces the native code the `$F8` and
 `$F7` opcodes name - which is the only way that code is reached - repeating until
-nothing new turns up. A script that the walker can't decode is printed as a script
+nothing new turns up. An object stream can start a script too, with `$F6` stores into
+`ScriptPtr` (`stream_scripts`; the prize-award script is reached only that way). A script that the walker can't decode is printed as a script
 problem. When you find another table that feeds `ScriptPtr`, add it to
 `SCRIPT_POINTER_TABLES` with the index range its loader uses.
 
@@ -274,12 +282,34 @@ It also walks the scene objects (`golf/core/object_script.py`,
 `docs/scene_objects.md`): the records traced code allocates, their motion and animation
 streams, and the sprite data in bank 2 or 10, settling each record's bank by which one
 decodes cleanly. `$ED` calls and the `$F950` scene callback feed more code to the trace.
-Record lists reached through a table go in `RECORD_POINTER_TABLES`.
+Record lists reached through a table go in `RECORD_POINTER_TABLES` (with a record
+`size`, 7 for the short records `$F856` copies), and lists reached through a RAM pointer
+or with no allocator found in `RECORD_LISTS`. `code_streams` follows streams that
+object-bank code points a slot at (`LDA #lo / STA $7A41,X` ... `$7A51,X`, or
+`$7A61/$7A71` for animation).
 
 A conditional branch that falls straight into a range label is read as always
 taken (`LDA table,X / BNE` over the table), so labeling the table is how you
 resolve that kind of conflict. As with `find-refs`, a byte the trace didn't reach
 is a question, not dead code.
+
+## `readers`
+
+For each gap the trace leaves (largest first, filtered by `--bank` and `--min`), the
+traced instructions that name it (`data_readers` in `golf/core/rom_trace.py`):
+
+- absolute and indexed operands, resolved in every bank the instruction ran with mapped,
+  so a fixed-bank reader is listed once per bank it can see (and not at all when that
+  bank is unknown); stores to `$8000+` are mapper writes and left out;
+- with `--reach N`, indexed bases up to N bytes before the gap, which might run into it;
+- immediate pairs - `LDx #lo / STx a` and `LDx #hi / STx a+-1` within six instructions -
+  as candidate pointers.
+
+Readers inside uncalled code count. Read the code before each reader for the index range
+(loop bound, the `ASL` that doubles it, a `CMP #n` cap) and size the table from that,
+checking it against where the next thing starts. "No direct reader" is a prompt to
+search the raw pointer (`find 'lo hi'`) - streams and scripts are often named only
+inside other data - and, failing that, to record the search in the label's comment.
 
 ## `known-data`
 
@@ -295,7 +325,7 @@ Gathers the data the repository already knows how to find (logic in
   greens (measured by how far the decompressor reads), and both sets of
   decompression tables.
 - **text scripts**: what the script walker read, cut at each entry point
-  (`TextScriptBA0EE`), the script pointer tables, and `ScriptWindowGeometryTable`
+  (`TextScriptB9658`), the script pointer tables, and `ScriptWindowGeometryTable`
   sized by the highest window a script selects.
 - **scene objects**: record lists, each object bank's sprite and frame tables,
   metasprites (grouped by sprite) and the motion and animation streams.
@@ -309,13 +339,14 @@ Gathers the data the repository already knows how to find (logic in
   Mode2) call, measured from its header - width x height tiles inline, one in repeat
   mode, or a pointer to source data labeled separately (`docs/menu_system.md`).
 - **CPU opponent shots** in bank 3 (`docs/opponent_shots.md`).
+- **jump tables**: the entries in `CODE_POINTER_TABLES`, under each entry's `name`.
 - **padding**: the `$FF` run before each bank's reset stub, named `Maybe...`
   because nothing proves it unread.
 
 It subtracts whatever range labels already cover, widens a single-address label
 that sits at a region's start, and refuses to write if a region overlaps traced
 code, holds another single-address label, or overlaps another region. Names it can't take from an existing
-label follow `ChrGraphicsTable7BAD5` / `NametableGraphicsStreams6B47E` (PPU kind,
+label follow `ChrGraphicsTable0B2E2` / `NametableGraphicsStreams6B47E` (PPU kind,
 bank as one hex digit, address); rename one when you learn its purpose. A rerun
 after `--write` should find nothing new.
 

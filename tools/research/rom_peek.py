@@ -566,7 +566,9 @@ def cmd_readers(reader: RomReader, args, labels: LabelStore | None) -> None:
             ),
             key=lambda r: (r.target, r.site),
         )
-        print(f"\n{n:5} bytes  {_where(labels, start)}  {_nearest_label_before(labels, start)}")
+        print(
+            f"\n{n:5} bytes  {_where(labels, start)}  {_nearest_label_before(labels, start)}"
+        )
         if not near:
             print("       no direct reader")
         for r in near:

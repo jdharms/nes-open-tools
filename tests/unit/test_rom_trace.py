@@ -5,9 +5,11 @@ from golf.core.rom_trace import (
     INLINE,
     NONE,
     OPCODE,
+    UNCALLED,
     CodePointerTable,
     Seed,
     data_readers,
+    mark_uncalled,
     trace,
     unreached_roots,
 )
@@ -187,6 +189,29 @@ class TestLabels:
         assert coverage["code"] == 3  # NOP, RTS, and the RTI at $FF00
         assert coverage["data"] == 16
         assert coverage["both"] == 0
+
+
+class TestMarkUncalled:
+    def test_code_only_an_unreached_label_leads_to_is_uncalled(self):
+        rom = MockReader()
+        rom.write_fixed(0xC100, [0xEA, 0x60])  # NOP / RTS, nothing calls it
+        labels = store(Label("NesPrgRom", FIXED + 0x100, None, "MaybeDead"))
+        _, result = run(rom, [0x60], labels=labels)
+        mark_uncalled(rom, labels, result)
+        assert result.marks[FIXED + 0x100] == UNCALLED
+        assert result.marks[FIXED + 0x101] == UNCALLED
+
+    def test_a_label_inside_a_range_label_marks_data_not_code(self):
+        rom = MockReader()
+        rom.write_fixed(0xC100, [0x02, 0x55, 0x55])  # a string, not code
+        labels = store(
+            Label("NesPrgRom", FIXED + 0xF0, FIXED + 0x10F, "StringList"),
+            Label("NesPrgRom", FIXED + 0x100, None, "OneString"),
+        )
+        _, result = run(rom, [0x60], labels=labels)
+        sub = mark_uncalled(rom, labels, result)
+        assert sub.conflicts == []
+        assert result.marks[FIXED + 0x100] == NONE
 
 
 class TestPointerTables:

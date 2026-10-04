@@ -17,7 +17,7 @@ and Right for about two seconds plays the credits.
 1. `LCDB3` blanks the screen and `NametableDescriptorC8269` writes 32 palette bytes to
    `$3F00`.
 2. `LC_80B7` clears the object slots, sets a clip window (`ObjectClipWindowC8264`, through
-   `LF881`), maps object bank 10 (`$3A`), clears `SceneExitFlag` and the input byte, and
+   `SetObjectClipWindow`, `$F881`), maps object bank 10 (`$3A`), clears `SceneExitFlag` and the input byte, and
    sets `$0686` to 0 so fades are computed rather than read from a table.
 3. Three graphics tables from bank 5:
 
@@ -28,7 +28,7 @@ and Right for about two seconds plays the credits.
    | `$9576` | `$2000`-`$23FF` | the nametable and attributes |
 
 4. `Load32BytesToBuffer` copies `PaletteDataC8299` to `PaletteBuffer`.
-5. **The rank letter.** If SRAM `$6003` (the player rank) is non-zero, `$8041` takes its
+5. **The rank letter.** If `PlayerRank` (SRAM `$6003`) is non-zero, `$8041` takes its
    entry from `TitleSignpostRankLetterPtrTable` and writes 64 bytes - a 2x2-tile letter -
    over tiles `$CA`-`$CD` at CHR `$1CA0`. Rank 0 skips the write and keeps the letter
    already in `TitleScreenBackgroundChrTable` there:
@@ -96,7 +96,8 @@ over from the menus from showing.
 ## The credits combo
 
 `$A7D3` is the second entry to the ending scene. The normal entry, `$A7BF`, is reached from
-bank 9 `$B0D7` when the player reaches a top rank: it clears the phase, requests music
+bank 9 `$B0D7` once `TotalMoney` reaches $1,000,000 (its millions digit, `$6012`, is
+non-zero): it clears the phase, requests music
 `$09`, and plays the portrait scene with the script "I knew you could do it! Now you are
 one of the top-ranked players!" before moving on to the closing part at `$A940` (bank 7
 and 8 graphics, palette `PaletteDataCAA01`, ten objects from `ObjectRecordsCAB2D`) and the

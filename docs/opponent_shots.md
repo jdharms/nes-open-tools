@@ -20,7 +20,7 @@ Bank 13 `$8142` far-calls bank 3 `$A869` for the opponent's turn:
    the entry shifted right once is the choice, 0-3. The level is the opponent number
    (`OpponentGolferIdentity - 1`, capped at 4), except in tournament match play
    (`GolfGameMode` 5 and 6), where `OpponentMatchLevelTable` (`$A9A9`) maps
-   `opponent * 4 | SRAM $6003` to a level 0-7.
+   `opponent * 4 | PlayerRank` (SRAM `$6003`) to a level 0-7.
 3. Otherwise the choice is `(OpponentGolferIdentity - 1) AND 3`.
 
 ## A shot list
@@ -36,7 +36,7 @@ is a seed plus a whole number of records, and the last one ends at `$BEE7`.
 | 0 | `PlayerSavedAiming` (`$0513`) and `Aiming` |
 | 1 | `$0515` |
 | 2 | low nibble: club (`$0519`); high nibble: swing speed and spin through `ReplayShotSwingSpeedTable` / `ReplayShotSpinTable` |
-| 3 | low 6 bits: `$051D`; top 2 bits: 0 clears `$0523`, 1 sets it to `$A859[club]`, 2 to its negative |
+| 3 | low 6 bits: `$051D`; top 2 bits: the sign of the shot's `SwingHiLo` (`$D8`, packed at bank 8 `$9AFD`), unpacked into `$0523,X` - 0 clears it, 1 sets it to `$A859[club]` (Down, a higher launch), 2 to its negative (Up). `$A859` is a copy of `ClubHiLoStepTable` (bank 13 `$ACFA`) |
 | 4 | low 7 bits: `$0521`; bit 7 sets `$051F` |
 
 ## Tables
@@ -54,5 +54,4 @@ is a seed plus a whole number of records, and the last one ends at `$BEE7`.
 - What record bytes 1, 3 and 4 are (`$0515`, `$051D`, `$0521`, `$051F`); the topspin
   notes name the inputs a replay saves - aiming, club, swing speed, spin, hi/lo and wind -
   but not which byte holds which.
-- What `$052F` and SRAM `$6003` are.
-- The 16-byte table at `$A859` the hi/lo adjustment reads, indexed by club.
+- What `$052F` is.

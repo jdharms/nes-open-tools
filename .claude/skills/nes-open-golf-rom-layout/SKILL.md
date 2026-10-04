@@ -12,7 +12,8 @@ description: |
 
 ## ROM Structure
 
-- **Format**: iNES (16-byte header + PRG ROM + CHR ROM)
+- **Format**: iNES (16-byte header + PRG ROM), mapper 1 (MMC1). No CHR ROM: the
+  cartridge has CHR RAM, filled from compressed graphics in the PRG
 - **PRG ROM**: 16 banks × 16KB = 256KB
 - **Bank switching**: Fixed bank ($C000-$FFFF = bank 15) + switchable bank ($8000-$BFFF)
 
@@ -45,8 +46,8 @@ starting with a golfer's sprite CHR (`LuigiSpriteChrTable` at bank 0 $A238 and s
   - $80C0-$817F: Vertical continuation table (192 bytes)
   - $8180-$81BF: Dictionary table (64 bytes)
 - $81C0-$A773: Greens data for all 54 holes (9,652 bytes max)
-- $A774-$BFFF: Code and data (6,284 bytes) - MUST PRESERVE: the replay code at
-  $A774-$A922, the CPU opponents' recorded shots at $A923-$BEE7
+- $A774-$BFFF: Code and data (6,284 bytes) - MUST PRESERVE: the replay code and its
+  tables at $A774-$A922, the CPU opponents' recorded shots at $A923-$BEE7
   (`docs/opponent_shots.md`), then code from $BEE8.
 
 ## Fixed Bank Pointer Tables ($C000-$FFFF)

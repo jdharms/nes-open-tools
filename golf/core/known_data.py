@@ -37,7 +37,7 @@ from golf.core.object_script import (
     metasprite_length,
 )
 from golf.core.palettes import ATTR_TOTAL_BYTES
-from golf.core.rom_trace import OPCODE, TraceResult
+from golf.core.rom_trace import CODE_POINTER_TABLES, OPCODE, TraceResult
 from golf.core.rom_utils import PRG_BANK_SIZE
 from golf.core.text_script import (
     SCRIPT_BANK,
@@ -358,6 +358,28 @@ def vector_regions(rom) -> list[KnownRegion]:
     ]
 
 
+def code_pointer_table_regions() -> list[KnownRegion]:
+    """The jump tables in `CODE_POINTER_TABLES`, whose size each entry records.
+
+    A split Lo/Hi table is two regions, `<name>Lo` and `<name>Hi`.
+    """
+    regions = []
+    for table in CODE_POINTER_TABLES:
+        name = table.name
+        sites = ", ".join(f"${site:04X}" for site in table.dispatch_sites)
+        comment = f"{table.count} code addresses for the JMP (ind) at {sites}"
+        if table.hi_offset is None:
+            regions.append(
+                _region(table.bank, table.start, 2 * table.count, "jump", name, comment)
+            )
+            continue
+        for part, cpu in (("Lo", table.start), ("Hi", table.start + table.hi_offset)):
+            regions.append(
+                _region(table.bank, cpu, table.count, "jump", name + part, comment)
+            )
+    return regions
+
+
 @dataclass
 class LabelPlan:
     """How the known regions compare with a label file."""
@@ -535,7 +557,7 @@ def script_regions(walk: ScriptWalk) -> list[KnownRegion]:
 SPRITE_PTR = 0x45  # PointerToSpriteData
 LDA_ABS_X, LDA_ABS_Y, LDA_IMM, STA_ZP = 0xBD, 0xB9, 0xA9, 0x85
 MAX_SPLIT_TABLE = 64
-RENDERER_REACH = 16  # instructions to look ahead from the pointer load
+RENDERER_REACH = 24  # instructions to look ahead from the pointer load
 
 # (bank, renderer) -> its metasprite format; bank None for the fixed bank's.
 # RenderMetasprite and RenderMetaspriteClipped read chunked metasprites
@@ -1069,7 +1091,7 @@ def object_regions(rom, walk: ObjectWalk) -> list[KnownRegion]:
             table.cpu,
             table.cpu + 2 * len(table.counts) - 1,
             f"ObjectRecordPtrTable{TABLE_BANK:X}{table.cpu:04X}",
-            f"{len(table.counts)} record lists for LF7EE or \$F856; {table.why}",
+            f"{len(table.counts)} record lists for LF7EE or $F856; {table.why}",
         )
     for bank in {b for b, _ in walk.frames}:
         end, low, n = OBJECT_DATA_END[bank], OBJECT_DATA_END[bank], 0
@@ -1178,6 +1200,7 @@ def known_regions(
     measured += copied_block_regions(rom, result)
     measured += descriptor_regions(rom, result)
     measured += vector_regions(rom)
+    measured += code_pointer_table_regions()
     regions = list(measured)
     for pad in padding_regions(rom):
         # A graphics stream ends in its own $FF terminator, which the scan

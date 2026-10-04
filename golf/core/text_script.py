@@ -239,9 +239,16 @@ def writes_script_ptr(rom, labels, cpu: int) -> bool:
 
 
 def trace_with_scripts(
-    reader, labels=None, seeds: list[Seed] | None = None
+    reader,
+    labels=None,
+    seeds: list[Seed] | None = None,
+    scripts: dict[int, str] | None = None,
 ) -> tuple[TraceResult, ScriptWalk]:
-    """Trace, walk the scripts, trace again from their native code, until stable."""
+    """Trace, walk the scripts, trace again from their native code, until stable.
+
+    `scripts` are script entries found some other way than code storing to
+    `ScriptPtr` (an object stream's `$F6` stores: `stream_scripts`).
+    """
     base = vector_seeds(reader) if seeds is None else seeds
     extra: dict[int, str] = {}
     redirects: set[int] = set()
@@ -251,9 +258,8 @@ def trace_with_scripts(
             labels,
             base + [Seed(cpu, SCRIPT_BANK, how) for cpu, how in sorted(extra.items())],
         )
-        walk = walk_scripts(
-            reader, script_entries(reader, result), frozenset(redirects)
-        )
+        entries = {**(scripts or {}), **script_entries(reader, result)}
+        walk = walk_scripts(reader, entries, frozenset(redirects))
         new = {cpu: how for cpu, how in walk.native.items() if cpu not in extra}
         if not new:
             break

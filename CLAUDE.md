@@ -89,8 +89,9 @@ course data. `RomReader` translates CPU addresses to PRG ROM offsets.
 | 2 | UK terrain + tables | $837F-$A553 | 8,661 bytes |
 | 3 | All greens + code | $81C0-$A773 | 9,652 bytes |
 
-Bank 2 has tables *before* terrain at $8000-$837E. Bank 3 has decompression tables at
-$8000-$81BF and executable code at $A774-$BFFF. `CoursePatch` (`golf/core/patches/course.py`) enforces these
+Bank 2 has scene object data *before* terrain at $8000-$837E. Bank 3 has decompression
+tables at $8000-$81BF, and code and data at $A774-$BFFF (the replay code and the CPU
+opponents' recorded shots). `CoursePatch` (`golf/core/patches/course.py`) enforces these
 boundaries, and uses only banks 0 and 1 for terrain. Full details: the `nes-open-golf-rom-layout` skill.
 
 **One course per ROM**: `golf-write` writes a single 18-hole course with `CoursePatch`,
