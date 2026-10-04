@@ -138,8 +138,12 @@ Byte-level layout of the course data banks: the `nes-open-golf-rom-layout` skill
 |---|---|---|---|
 | Dialogue scripts | 11 | `$9033` `RunTextScript`, `$90AE` `PrintScriptCharacter`, opcodes `$913E`-`$9373`; `ScriptPtr` (`$06E7`) | `text_scripts.md` |
 | Menu strings | 12 | `MenuTextListData` (`$8B8D`), drawn by `$8845` `DrawMenuEntryText` | `menu_system.md` |
+| Stroke play coach (before and after each round) | 11, 12 | before: `StrokePlayIntroScript` (`$A0EE`); after: `$AA2F` ("Nice Round!", promotion offer) or `$B105` ("a disappointing score", when the round is worse than the average of the last two), chosen at bank 12 `$931D` | `text_scripts.md` |
 | Money as text | 11 | `$9504` `FormatCurrentWagerString`, `$9511` `FormatTotalMoneyString` | |
 | Default roster names | 9 | `DefaultRosterNamesTable` (`$AD65`) | |
+| Club house screen text (training, clear data, hall of fame, name entry) | 7, 14 | bank 7 nametable tables `$98C3`-`$BAD5`, `ClearSavedDataMessages` and `HallOfFameScoreNames` in bank 14; the `clubhouse` font | |
+| Stats and options screen text | 7, 9 | bank 7 nametables `$B6BD`-`$BECE`; `MaybeStatsHeaderDescriptor` in bank 9; the `stats` font | |
+| Any on-screen text | all | `golf-rom-peek ... find-text "<text>"` searches every encoding, decoded nametables included | rom-peek skill |
 
 ## Audio (bank 14)
 

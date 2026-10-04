@@ -6,8 +6,9 @@ The dialogue in the course intro and the money cutscenes is a byte-code program 
 not a string table. Text is stored as **plain mixed-case ASCII** inline in the script (a
 search for `TRY TO GOLF WELL` finds nothing; it is stored as `Try to golf well`), mixed with
 opcodes that branch on RAM, call script subroutines and call into 6502 code.
-`golf-rom-peek trace` walks every script (`golf/core/text_script.py`) and
-`golf-rom-peek known-data` labels them.
+`golf-rom-peek trace` walks every script (`golf/core/text_script.py`),
+`golf-rom-peek known-data` labels them, and `golf-rom-peek script <addr>` lists one,
+with every script it can reach, as readable text.
 
 The scenes that run scripts are documented in `docs/course_intro_scene.md` and
 `docs/prize_money.md`; this document is the interpreter and its data.

@@ -30,6 +30,11 @@ Examples:
     golf-rom-peek rom.nes --labels notes.mlb label '001A' --type ram
     golf-rom-peek rom.nes --labels notes.mlb find-label ScrollX
 
+    # Text, in every encoding the game stores it in (golf.core.rom_text).
+    golf-rom-peek rom.nes --labels notes.mlb strings --bank 12
+    golf-rom-peek rom.nes --labels notes.mlb find-text 'select the course'
+    golf-rom-peek rom.nes --labels notes.mlb find-text 'DRIVER' --relative
+
 The `disasm` subcommand decodes opcodes with py65, a project dependency - it is
 installed by `uv sync` along with everything else, so `disasm` always works.
 """
@@ -49,6 +54,14 @@ from golf.core.rom_analysis import (
     is_data_range,
 )
 from golf.core.rom_reader import RomReader
+from golf.core.rom_text import (
+    TextRun,
+    encodings,
+    find_text,
+    nametable_screens,
+    relative_search,
+    scan,
+)
 from golf.core.rom_trace import (
     NONE,
     UNCALLED,
@@ -70,6 +83,7 @@ from golf.core.rom_utils import (
 from golf.core.rom_utils import (
     parse_cpu_or_prg_address as parse_address,
 )
+from golf.core.text_script import script_listing
 
 
 def format_bytes(data: bytes, fmt: str) -> str:
@@ -684,6 +698,91 @@ def cmd_find_label(_reader: RomReader, args, labels: LabelStore | None) -> None:
         print(f"{label.type} {label.address_str}: {describe(label, label.start)}")
 
 
+def _text_sources(reader: RomReader, args):
+    """(PRG banks to read, decoded screens to read) for `strings` and `find-text`."""
+    banks = set(args.bank) if args.bank else None
+    prg_banks = set() if args.source == "nametables" else banks
+    screens = None
+    if args.source != "prg":
+        screens = [
+            s for s in nametable_screens(reader) if banks is None or s.bank in banks
+        ]
+    return prg_banks, screens
+
+
+def _chosen_encodings(args):
+    known = encodings()
+    names = args.encoding or list(known)
+    unknown = [n for n in names if n not in known]
+    if unknown:
+        raise ValueError(
+            f"unknown encoding {', '.join(unknown)}; known: {', '.join(known)}"
+        )
+    return [known[n] for n in names]
+
+
+def _text_label(run: TextRun, labels: LabelStore | None) -> str:
+    if labels is None:
+        return ""
+    if run.screen is not None:
+        s = run.screen
+        prg = s.bank * PRG_BANK_SIZE + s.cpu - 0x8000
+        label = labels.lookup("NesPrgRom", prg)
+        name = describe(label, prg).split("  (")[0] if label else "unlabeled table"
+        return f"  [{name}, decoded]"
+    assert run.prg is not None
+    label = labels.lookup("NesPrgRom", run.prg)
+    return f"  [{describe(label, run.prg).split('  (')[0]}]" if label else ""
+
+
+def _print_runs(runs: list[TextRun], labels: LabelStore | None) -> None:
+    def order(run: TextRun):
+        if run.screen is not None:
+            return (1, run.screen.bank, run.screen.cpu, run.ppu)
+        return (0, run.prg, 0, 0)
+
+    for run in sorted(runs, key=order):
+        print(
+            f"{run.where():<28} {run.encoding:<15} {run.score:4.2f}  "
+            f"{run.text!r}{_text_label(run, labels)}"
+        )
+
+
+def cmd_strings(reader: RomReader, args, labels: LabelStore | None) -> None:
+    prg_banks, screens = _text_sources(reader, args)
+    runs = scan(reader, _chosen_encodings(args), args.min, prg_banks, screens)
+    if not args.all:
+        runs = [r for r in runs if r.score >= args.min_score]
+    _print_runs(runs, labels)
+    print(f"\n{len(runs)} strings", end="")
+    if not args.all:
+        print(f" scoring {args.min_score} or more (--all for every run)", end="")
+    print(".")
+
+
+def cmd_find_text(reader: RomReader, args, labels: LabelStore | None) -> None:
+    prg_banks, screens = _text_sources(reader, args)
+    if args.relative:
+        runs = relative_search(
+            reader, args.text, prg_banks, screens, list(encodings().values())
+        )
+    else:
+        runs = find_text(reader, args.text, _chosen_encodings(args), prg_banks, screens)
+    if not runs:
+        print("No matches found.", end="")
+        if not args.relative:
+            print(" Try --relative, which finds text in fonts not yet named.", end="")
+        print()
+        return
+    _print_runs(runs, labels)
+
+
+def cmd_script(reader: RomReader, args, labels: LabelStore | None) -> None:
+    entries = [int(a.lstrip("$"), 16) for a in args.address]
+    for line in script_listing(reader, entries, labels):
+        print(line)
+
+
 def main():
     parser = argparse.ArgumentParser(
         description="Targeted reads/searches of ROM bytes for RE work"
@@ -886,6 +985,76 @@ def main():
         "name", help="Substring to search for (case-insensitive)"
     )
 
+    def add_text_options(sub) -> None:
+        sub.add_argument(
+            "--bank",
+            type=int,
+            action="append",
+            help="Only this bank (repeatable); 15 is the fixed bank",
+        )
+        sub.add_argument(
+            "--source",
+            choices=["both", "prg", "nametables"],
+            default="both",
+            help="Search the PRG bytes, the nametables the graphics codec "
+            "decompresses, or both (default)",
+        )
+
+    strings_parser = subparsers.add_parser(
+        "strings",
+        help="List text in every known encoding, in the PRG and in decoded nametables",
+        description="List runs of bytes that decode as text. Encodings: ascii; "
+        "clubhouse (A-Z at $00, a-z at $1A, 0-9 at $37); scorecard (0-9 at $00, "
+        "A-Z at $0A); digits30 (0-9 at $30, A-Z at $3A); stats (A-Z at $9E). "
+        "Each run is scored "
+        "0-1 by how English its letter pairs look, and shown when it scores "
+        "--min-score or more.",
+    )
+    add_text_options(strings_parser)
+    strings_parser.add_argument(
+        "--encoding", action="append", help="Only this encoding (repeatable)"
+    )
+    strings_parser.add_argument(
+        "--min", type=int, default=5, help="Shortest run to list (default 5)"
+    )
+    strings_parser.add_argument(
+        "--min-score", type=float, default=0.65, help="Lowest score to list (0.65)"
+    )
+    strings_parser.add_argument(
+        "--all", action="store_true", help="List every run, whatever its score"
+    )
+
+    find_text_parser = subparsers.add_parser(
+        "find-text",
+        help="Find text in every known encoding, or (--relative) in any font",
+        description="Find TEXT encoded in each known encoding, tried as typed, "
+        "upper case, lower case and capitalized, in the PRG and in decoded "
+        "nametables. Each hit shows the whole string around it. --relative "
+        "instead matches the differences between TEXT's letters, finding it in any "
+        "font that keeps A-Z in order and reporting where that font puts A.",
+    )
+    find_text_parser.add_argument("text")
+    add_text_options(find_text_parser)
+    find_text_parser.add_argument(
+        "--encoding", action="append", help="Only this encoding (repeatable)"
+    )
+    find_text_parser.add_argument(
+        "--relative",
+        action="store_true",
+        help="Match letter differences: finds the text in fonts not yet named",
+    )
+
+    script_parser = subparsers.add_parser(
+        "script",
+        help="List a bank 11 text script and every script it can reach",
+        description="List the text scripts reachable from each bank 11 ADDRESS: "
+        "text in quotes with [nl], [wait] and [clear] inline, one line per other "
+        "opcode. Branches, calls and jumps are followed, and so are natives that "
+        "pick the next script from a pointer table. docs/text_scripts.md has the "
+        "opcodes.",
+    )
+    script_parser.add_argument("address", nargs="+", help="'$XXXX' in bank 11")
+
     args = parser.parse_args()
     reader = RomReader(args.rom_file)
     labels = LabelStore.load(args.labels, args.sidecar) if args.labels else None
@@ -901,6 +1070,9 @@ def main():
         "trace": cmd_trace,
         "known-data": cmd_known_data,
         "readers": cmd_readers,
+        "strings": cmd_strings,
+        "find-text": cmd_find_text,
+        "script": cmd_script,
     }
     try:
         commands[args.command](reader, args, labels)

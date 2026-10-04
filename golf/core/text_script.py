@@ -269,3 +269,151 @@ def trace_with_scripts(
     answered = {_prg(CALL_NATIVE_SITE), _prg(RESUME_CALLBACK_SITE)}
     result.unresolved = [f for f in result.unresolved if f.prg not in answered]
     return result, walk
+
+
+# --- Listing -------------------------------------------------------------------
+
+# Opcodes that only change how text appears, shown inline as [tags].
+_INLINE = {0xFA: "clear", 0xFB: "nl", 0xFC: "wait"}
+_INDEXED_LOADS = {0xBD, 0xB9, 0xBE, 0xBC}  # LDA/LDX/LDY abs,X or abs,Y
+
+
+def native_script_tables(rom, labels, cpu: int) -> list[ScriptPointerTable]:
+    """The bank 11 `SCRIPT_POINTER_TABLES` that the native code at `cpu` reads."""
+    sub = trace(rom, labels, [Seed(cpu, SCRIPT_BANK, "native")], pointer_tables=())
+    data = rom.read_prg(0, rom.prg_size)
+    read = set()
+    for prg in range(
+        SCRIPT_BANK * PRG_BANK_SIZE, (SCRIPT_BANK + 1) * PRG_BANK_SIZE - 2
+    ):
+        if sub.marks[prg] == OPCODE and data[prg] in _INDEXED_LOADS:
+            read.add(data[prg + 1] | data[prg + 2] << 8)
+    return [
+        t
+        for t in SCRIPT_POINTER_TABLES
+        if t.bank == SCRIPT_BANK and {t.cpu, t.cpu + 1} & read
+    ]
+
+
+def _character(op: int) -> str:
+    if op in _INLINE:
+        return f"[{_INLINE[op]}]"
+    return chr(op) if 0x20 <= op < 0x7F else f"[${op:02X}]"
+
+
+def _flush_text(lines: list[str], text: list[tuple[int, str]]) -> None:
+    """Add the pending text as one quoted line, and clear it."""
+    if text:
+        lines.append(f'  ${text[0][0]:04X}  "{"".join(c for _, c in text)}"')
+        text.clear()
+
+
+def _describe(op: int, args: bytes) -> str:
+    word = args[0] | args[1] << 8 if len(args) >= 2 else 0
+    if op == 0xF1:
+        return f"choice prompt {args[0]}"
+    if op == 0xF2:
+        return f"if [${word:04X}] == 0 go to ${args[2] | args[3] << 8:04X}"
+    if op == 0xF3:
+        return f"cursor to {args[0]}, {args[1]}"
+    if op == 0xF4:
+        target = args[3] | args[4] << 8
+        return f"if ${args[2]:02X} >= [${word:04X}] go to ${target:04X}"
+    if op == 0xF5:
+        return f"go to ${word:04X}"
+    if op == 0xF6:
+        return f"store ${args[2]:02X} to ${word:04X}"
+    if op == 0xF7:
+        return f"per-frame callback ${word:04X}"
+    if op == 0xF8:
+        return f"native ${word:04X}"
+    if op == 0xF9:
+        return f"window {args[0]}"
+    if op == 0xFD:
+        return "stop"
+    if op == 0xFE:
+        return (
+            "call the RAM fragment (a name or number)"
+            if word == NAME_FRAGMENT
+            else (f"call ${word:04X}")
+        )
+    if op == 0xFF:
+        return "return"
+    return f"${op:02X}"
+
+
+def script_listing(rom, entries: list[int], labels=None) -> list[str]:
+    """A readable listing of every script reachable from `entries`.
+
+    Text is shown in quotes with `[nl]`, `[wait]` and `[clear]` inline; each
+    other opcode gets a line. Branches, calls and jumps are followed, and so is a
+    native that picks the next script from one of `SCRIPT_POINTER_TABLES`: its
+    table's entries are listed after it. Blocks print in address order.
+    """
+    bank = rom.read_switched(0x8000, SCRIPT_BANK, PRG_BANK_SIZE)
+    data = rom.read_prg(0, rom.prg_size)
+    blocks: dict[int, list[str]] = {}
+    work = list(entries)
+    seen: set[int] = set()
+    natives: dict[int, tuple[bool, list[ScriptPointerTable]]] = {}
+
+    def native(cpu: int) -> tuple[bool, list[ScriptPointerTable]]:
+        if cpu not in natives:
+            natives[cpu] = (
+                writes_script_ptr(rom, labels, cpu),
+                native_script_tables(rom, labels, cpu),
+            )
+        return natives[cpu]
+
+    while work:
+        start = work.pop()
+        if start in seen or not 0x8000 <= start < 0xC000:
+            continue
+        lines = blocks.setdefault(start, [])
+        pc, text = start, []  # text: (address, characters) since the last opcode line
+        while pc not in seen and 0x8000 <= pc < 0xC000:
+            if pc != start and pc in blocks:
+                break  # another block starts here; it lists the rest
+            seen.add(pc)
+            op = bank[pc - 0x8000]
+            if op < 0xF0 or op in _INLINE:
+                text.append((pc, _character(op)))
+                pc += 1
+                continue
+            _flush_text(lines, text)
+            length, flow = OPCODES.get(op, (1, STOP))
+            args = bank[pc - 0x8000 + 1 : pc - 0x8000 + length]
+            lines.append(f"  ${pc:04X}  {_describe(op, args)}")
+            word = args[0] | args[1] << 8 if len(args) >= 2 else 0
+            if flow in (JUMP, CALL):
+                work.append(word)
+            elif flow == BRANCH:
+                work.append(args[-2] | args[-1] << 8)
+            elif op == 0xF8:
+                redirects, tables = native(word)
+                for table in tables:
+                    at = table.bank * PRG_BANK_SIZE + table.cpu - 0x8000
+                    targets = [
+                        data[at + 2 * i] | data[at + 2 * i + 1] << 8
+                        for i in range(table.count)
+                    ]
+                    lines.append(
+                        f"          picks from ${table.cpu:04X}: "
+                        + ", ".join(f"${t:04X}" for t in targets)
+                    )
+                    work.extend(targets)
+                if redirects:
+                    break
+            if flow in (JUMP, RETURN, STOP) or op not in OPCODES:
+                break
+            pc += length
+        _flush_text(lines, text)
+        if pc in blocks and pc != start:
+            lines.append(f"  (continues at ${pc:04X})")
+
+    out = []
+    for start in sorted(blocks):
+        if blocks[start]:
+            out.append(f"${start:04X}:")
+            out.extend(blocks[start])
+    return out

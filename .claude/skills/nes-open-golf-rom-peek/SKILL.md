@@ -56,6 +56,9 @@ reading anything.
 | `trace [--from <addr> --bank N] [--bank N] [--gaps N] [--unnamed] [--unreached]` | Follow control flow from the vectors and map code, data and gaps. See below. |
 | `readers [--bank N] [--min N] [--reach N]` | Each gap the trace leaves, with the traced instructions that name it. See below. |
 | `known-data [--list] [--write]` | Compare the data regions the repo can locate with the label file; `--write` adds them as range labels. See below. |
+| `strings [--bank N] [--encoding E] [--source prg\|nametables\|both] [--min N] [--min-score F] [--all]` | Text in every known encoding, in the PRG and in decoded nametables. See below. |
+| `find-text <text> [--bank N] [--encoding E] [--source ...] [--relative]` | Where a piece of on-screen text is stored. See below. |
+| `script <addr>...` | A bank 11 dialogue script and every script it reaches, readable. See below. |
 | `label <addr> [--type ...] [--bank N]` | Look up the label at an address. |
 | `find-label <substring>` | Search labels by name. |
 
@@ -362,6 +365,46 @@ code, holds another single-address label, or overlaps another region. Names it c
 label follow `ChrGraphicsTable0B2E2` / `NametableGraphicsStreams6B47E` (PPU kind,
 bank as one hex digit, address); rename one when you learn its purpose. A rerun
 after `--write` should find nothing new.
+
+## `strings` and `find-text`
+
+Text is stored several ways (logic in `golf/core/rom_text.py`), and a plain ASCII
+search finds only some of it:
+
+| Encoding | Bytes | Where |
+|---|---|---|
+| `ascii` | ASCII | dialogue scripts (bank 11), menu strings (bank 12), roster names (bank 9) |
+| `clubhouse` | A-Z `$00`, a-z `$1A`, `,` `$34`, `.` `$35`, `-` `$36`, 0-9 `$37`, `?` `$42`, space `$FF` | club house screens (bank 7 nametables), bank 14 messages |
+| `scorecard` | 0-9 `$00`, A-Z `$0A`, space `$24` | the scorecard (bank 2), the in-game menu (bank 4) |
+| `digits30` | 0-9 `$30`, A-Z `$3A`, space `$03` | tournament screens (banks 1, 2, 6) |
+| `stats` | A-Z `$9E`, 1-9 `$B8`, space `$45` | player stats and options screens (banks 7, 9) |
+
+Each tile font was read from the screen's glyphs, not guessed. The club house font
+is **not** the dialogue printer's range table (`$90B1`): from `-` onward that table
+is one tile off.
+
+Both commands also search every nametable the graphics codec decompresses
+(`--source`): text inside a compressed nametable is split up by codec opcodes and
+can't be found in the raw bytes. A decoded hit reads `bank 7 $AEB2 PPU $20CB`, the
+graphics table and where on screen the text lands.
+
+- **`find-text "<text>"`** is the usual entry point: it tries the text as typed,
+  upper case, lower case and capitalized in each encoding, and prints the whole
+  string around each hit. For a font no one has named, **`--relative`** matches the
+  differences between the letters and reports where that font puts A (`A=$80`).
+  If one turns up, add it to `encodings()` with where it was seen.
+- **`strings`** lists runs of text, scored 0-1 by how English (or romanized
+  Japanese) their letter pairs look. Expect some noise from pattern data at the
+  default `--min-score 0.65`, and use `--all` to drop the filter. Banks 11 and
+  12 are almost all real text; anywhere else, check the label before trusting a
+  hit.
+- **`script '$A0EE'`** lists dialogue in full once `find-text` has found one line of
+  it. A script's text is split by opcodes (a line break is `$FB`), so `find-text`
+  only matches within a line. The listing shows text in quotes with `[nl]`,
+  `[wait]` and `[clear]` inline, and one line for each branch, call and native. It
+  follows every path, including natives that pick the next script from a
+  `SCRIPT_POINTER_TABLES` table. Pass several addresses to list a scene's scripts
+  together.
 
 ## Recipes
 
