@@ -20,6 +20,13 @@ V5.0 - Randomization Updates
 V6.0 - Seed of the Day
 V7.0 - Graphics and artwork
 
+Ideas for Dale/Coach's dialogue:
+* Golf fun facts
+* Excuses, superstitions, credit-taking (one flavor of a bad coach)
+* Vague, ominous koans: "You choose the club, the shot chooses you."
+* Wrong sport coach.  Gives advice for bowling, badminton, swimming, chess, starcraft (another flavor of bad coach)
+* 4th wall breaking coach (kind of like the triforce text)
+
 
 In-game/vanilla rom investigations:
 * Do bunker lips do anything?
@@ -62,7 +69,6 @@ Editor Todos:
 * linter/validator of some sort
 * Investigate assigning corners to multiple banks
   * Most of the complexity here is with the cycle tool
-
 
 
 
