@@ -139,9 +139,10 @@ uv run golf-rom-peek nes_open_us.nes --labels "NES Open Tournament Golf (USA).ml
     disasm '$81C4' --bank 9 --count 200   # e.g. the cup routine
 ```
 
-The label file and its sidecar (`NES Open Tournament Golf (USA)*.mlb`) are gitignored
-and local to this checkout. This work added a lot of sidecar labels; if they are missing,
-the addresses in the docs still work but disassembly will be less annotated.
+The label file (`NES Open Tournament Golf (USA).mlb`) is gitignored here: it lives in a
+separate private repository, symlinked into the checkout. This work added a lot of labels;
+if the file is missing, the addresses in the docs still work but disassembly will be less
+annotated.
 
 **Code map**, `golf/physics/` (exact ports, each checked against the game):
 

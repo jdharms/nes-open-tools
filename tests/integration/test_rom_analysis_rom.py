@@ -124,13 +124,12 @@ class TestFindCodeReferences:
         assert report.empty
         assert [r.aligned for r in report.refs] == [False]
 
-    def test_unanchorable_false_positive_is_flagged_not_asserted(self, reader, labels):
-        """$A64D -> JMP ($9190) is also a coincidence, but it sits in an
-        unlabeled data region with no code label to anchor a check. The tool
-        must report it as unverified rather than silently confirming it."""
+    def test_a_false_positive_in_labeled_data_is_discarded(self, reader, labels):
+        """$A64D -> JMP ($9190) is also a coincidence: it sits inside a tile
+        frame (MaybeBetSceneFrames), so it is discarded, never confirmed."""
         report = find_code_references(reader, 0x9190, 12, labels)
-        assert len(report.unverified) == 1
         assert not any(r.verified for r in report.refs)
+        assert any(r.in_data_range for r in report.refs if r.cpu == 0xA64D)
 
     def test_dispatch_sites_are_actually_searched(self, reader, labels):
         report = find_code_references(reader, 0xAA09, 13, labels)

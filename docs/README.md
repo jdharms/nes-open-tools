@@ -10,6 +10,7 @@ One line per document. Command-line tools are indexed in the top-level `README.m
 | [randomizer.md](randomizer.md) | Randomizer design: goals, logic, what gets randomized |
 | [randomizer_devplan.md](randomizer_devplan.md) | Randomizer site architecture, data model, routes and the ordered development plan |
 | [planning/download_settings.md](planning/download_settings.md) | Plan: saved download settings, the new SRAM option defaults and finish ABI 2 |
+| [planning/rom_coverage_handoff.md](planning/rom_coverage_handoff.md) | Hand-off: ROM byte coverage (complete but one byte), the tools and method, the traps found, and what is left to confirm in Mesen |
 | [deployment.md](deployment.md) | Running the randomizer site on its server: setup, releases, rollback and database restores |
 | [documentation.md](documentation.md) | Philosophy and practices followed for documentation for the development process |
 | [catalog.md](catalog.md) | The randomizer hole catalog: frozen index, curation, ids, versions and families |
@@ -25,14 +26,19 @@ One line per document. Command-line tools are indexed in the top-level `README.m
 | [../golf/core/compression.md](../golf/core/compression.md) | Course terrain/greens compression: RLE + dictionary, horizontal transitions, vertical fill |
 | [terrain_data_locations.md](terrain_data_locations.md) | Byte ranges of the three vanilla courses' compressed terrain |
 | [course_data.md](course_data.md) | The hole data model and JSON format the tools and editor share |
+| [title_screen.md](title_screen.md) | The title screen: setup, the rank letter, its pattern-table split, and the credits combo |
 | [menu_system.md](menu_system.md) | The data-driven title-screen menu chain |
 | [course_intro_scene.md](course_intro_scene.md) | The full-screen landscape shown after picking a course |
 | [golfer_sprites.md](golfer_sprites.md) | How the swinging golfer and club are drawn |
 | [scorecard.md](scorecard.md) | The pause-menu scorecard screen |
 | [prize_money.md](prize_money.md) | The PRIZE MONEY clubhouse cutscene |
+| [text_scripts.md](text_scripts.md) | The bank 11 dialogue scripts: interpreter, opcodes, entry points and native calls |
+| [scene_objects.md](scene_objects.md) | The object engine that animates menu and cutscene sprites: records, streams, metasprites |
+| [perspective_scene.md](perspective_scene.md) | The behind-the-golfer scene in bank 9: course probes, neighbor tile passes and drawing the ball in |
 | [hud_course_abbrev.md](hud_course_abbrev.md) | The course abbreviation in the in-game HUD |
 | [music_format.md](music_format.md) | The audio engine and track format, including inserting tracks |
 | [topspin.md](topspin.md) | Why the TOP 1 / TOP 2 spin settings have no effect on play |
+| [opponent_shots.md](opponent_shots.md) | How CPU opponents play: recorded shot lists replayed per hole, chosen by level and chance |
 | [wind.md](wind.md) | Wind anchors, per-swing speed, flight physics and the crosswind bug |
 | [shot_physics.md](shot_physics.md) | Ball physics from swing to rest: launch, wind, lift, curve, bounce and roll, and the Python model of it |
 | [hole_difficulty.md](hole_difficulty.md) | Rating holes by expected strokes from the tee, solved over that model: how it was built, and every NES Open and Mario Open hole against par |

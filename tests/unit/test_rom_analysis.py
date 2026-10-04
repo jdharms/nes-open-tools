@@ -101,8 +101,9 @@ class TestInlineSpecLookup:
     def test_unknown_target(self):
         assert inline_spec_for(0x8000, 13) is None
 
-    def test_dispatch_table_does_not_return(self):
-        assert known_spec(0xD227, None).returns is False
+    def test_dispatch_table_returns_after_its_table(self):
+        # The shared tail at $D24F stacks the post-table address first.
+        assert known_spec(0xD227, None).returns is True
 
     def test_ff_terminated_dispatcher_is_registered(self):
         spec = known_spec(0xD267, None)
@@ -245,8 +246,8 @@ class TestRoutineMode:
         assert not listing.complete
         assert "cap" in listing.stop_reason
 
-    def test_non_returning_call_terminates(self):
-        """JSR DispatchInlineJumpTable JMPs away instead of returning."""
+    def test_a_dispatch_table_does_not_end_the_routine(self):
+        """A handler's RTS lands after the inline table, so decoding goes on."""
         rom = MockReader()
         rom.write(
             13 * BANK_SIZE,
@@ -264,9 +265,9 @@ class TestRoutineMode:
                 ]
             ),
         )
-        listing = disassemble(rom, 13 * BANK_SIZE, routine=True)
-        assert [r.kind for r in listing.rows] == ["code", "inline"]
-        assert listing.complete
+        listing = disassemble(rom, 13 * BANK_SIZE, count=4)
+        assert [r.kind for r in listing.rows] == ["code", "inline", "code", "code"]
+        assert listing.rows[2].text.startswith("NOP")
 
     def test_count_mode_is_never_flagged_incomplete(self):
         rom = MockReader()
@@ -280,6 +281,13 @@ class TestFindCodeReferences:
         rom.write(13 * BANK_SIZE + 0x100, bytes([0x20, 0x00, 0xA0]))  # JSR $A000
         report = find_code_references(rom, 0xA000, 13)
         assert [r.kind for r in report.confirmed] == ["JSR"]
+
+    def test_a_hit_with_no_code_label_to_anchor_on_is_unverified(self):
+        rom = MockReader()
+        rom.write(13 * BANK_SIZE + 0x100, bytes([0x20, 0x00, 0xA0]))  # JSR $A000
+        report = find_code_references(rom, 0xA000, 13, store())
+        assert len(report.unverified) == 1
+        assert not any(r.verified for r in report.refs)
 
     def test_ignores_a_same_address_jsr_in_another_bank(self):
         """Bank 5's $A000 is not bank 13's $A000."""

@@ -36,7 +36,10 @@ A toolset for reverse engineering, editing and patching the NES Open Tournament 
 
 - `golf/` - shared library
   - `core/` - ROM reading/writing, both compression codecs, NES graphics, golfer sprites,
-    signpost, audio, `asm6502.py` assembler, `rom_analysis.py`, `ips.py` (IPS patch files),
+    signpost, audio, `asm6502.py` assembler, `rom_analysis.py`, `rom_trace.py` (code
+    reachability), `text_script.py` (the bank 11 dialogue script walker), `object_script.py`
+    (the scene object walker), `known_data.py`
+    (data regions the repo can locate), `ips.py` (IPS patch files),
     `rng.py` (the game's RNG and wind) and `clubs.py`, kept out of `patches/` so the
     physics and the difficulty solver can run under PyPy
   - `golf/core/patches/` - ROM patches (`ROMPatch`, `BytePatch`, `CompositePatch`), and
@@ -86,8 +89,9 @@ course data. `RomReader` translates CPU addresses to PRG ROM offsets.
 | 2 | UK terrain + tables | $837F-$A553 | 8,661 bytes |
 | 3 | All greens + code | $81C0-$A773 | 9,652 bytes |
 
-Bank 2 has tables *before* terrain at $8000-$837E. Bank 3 has decompression tables at
-$8000-$81BF and executable code at $A774-$BFFF. `CoursePatch` (`golf/core/patches/course.py`) enforces these
+Bank 2 has scene object data *before* terrain at $8000-$837E. Bank 3 has decompression
+tables at $8000-$81BF, and code and data at $A774-$BFFF (the replay code and the CPU
+opponents' recorded shots). `CoursePatch` (`golf/core/patches/course.py`) enforces these
 boundaries, and uses only banks 0 and 1 for terrain. Full details: the `nes-open-golf-rom-layout` skill.
 
 **One course per ROM**: `golf-write` writes a single 18-hole course with `CoursePatch`,

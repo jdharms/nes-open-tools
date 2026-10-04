@@ -24,9 +24,7 @@ Examples:
     golf-rom-peek rom.nes disasm '$AD43' --bank 2 --count 15
 
     # Annotate output with symbol names from a Mesen .mlb label file.
-    # --labels/--sidecar must come before the subcommand (top-level options).
-    # Any "notes.sidecar.mlb" next to notes.mlb is loaded automatically and
-    # shadows notes.mlb at matching addresses - see golf-labels for adding to it.
+    # --labels must come before the subcommand (a top-level option).
     golf-rom-peek rom.nes --labels notes.mlb disasm '$AD43' --bank 2 --count 15
     golf-rom-peek rom.nes --labels notes.mlb label '$AD5D'
     golf-rom-peek rom.nes --labels notes.mlb label '001A' --type ram
@@ -40,14 +38,28 @@ import argparse
 import re
 import sys
 
+from golf.core.known_data import known_regions, plan_labels
 from golf.core.mlb_labels import TYPE_ALIASES, Label, LabelStore, describe
+from golf.core.object_script import trace_everything
 from golf.core.rom_analysis import (
     disassemble,
     find_code_references,
     find_data_references,
     find_pointer_references,
+    is_data_range,
 )
 from golf.core.rom_reader import RomReader
+from golf.core.rom_trace import (
+    NONE,
+    UNCALLED,
+    Seed,
+    data_readers,
+    label_seeds,
+    mark_uncalled,
+    trace,
+    unreached_roots,
+    vector_seeds,
+)
 from golf.core.rom_utils import (
     FIXED_BANK_PRG_START,
     PRG_BANK_SIZE,
@@ -346,6 +358,304 @@ def _print_null_warning(reader, addr, labels, args, code: bool, report=None) -> 
     )
 
 
+_STUB_RE = re.compile(r"^L[0-9A-F]?_?[0-9A-F]{4}(_|$)")
+
+
+def _where(labels: LabelStore | None, prg: int) -> str:
+    bank, cpu = prg_to_bank_and_cpu(prg)
+    text = f"bank {bank:2}  ${cpu:04X}  prg 0x{prg:05X}"
+    if labels is not None:
+        label = labels.lookup("NesPrgRom", prg)
+        if label is not None:
+            text += f"  {label.name}" + (
+                "" if label.start == prg else f"+{prg - label.start}"
+            )
+    return text
+
+
+def _nearest_label_before(labels: LabelStore | None, prg: int) -> str:
+    if labels is None:
+        return ""
+    best = None
+    for label, _ in labels.iter_merged():
+        if (
+            label.type == "NesPrgRom"
+            and label.start <= prg
+            and prg - label.start < 0x4000
+            and (best is None or label.start > best.start)
+        ):
+            best = label
+    return f"after {best.name}" if best is not None else ""
+
+
+def cmd_trace(reader: RomReader, args, labels: LabelStore | None) -> None:
+    if args.start:
+        prg = parse_address(args.start, args.bank)
+        bank, cpu = prg_to_bank_and_cpu(prg)
+        seeds = [Seed(cpu, None if bank == 15 else bank, f"--from {args.start}")]
+    else:
+        seeds = vector_seeds(reader)
+        if args.seed_labels:
+            if labels is None:
+                print("Error: --seed-labels needs --labels", file=sys.stderr)
+                sys.exit(1)
+            seeds += label_seeds(labels)
+    if args.start:
+        result = trace(reader, labels, seeds)
+    else:
+        result, walk, objects = trace_everything(reader, labels, seeds)
+        print(
+            f"scene objects: {len(objects.records)} records, "
+            f"{sum(len(c) for c in objects.covered.values())} stream bytes, "
+            f"{len(objects.frames)} sprites"
+        )
+        for problem in objects.problems:
+            print(
+                f"  object problem: {problem.kind} at bank {problem.bank} "
+                f"${problem.cpu:04X} {problem.detail}"
+            )
+        print(
+            f"text scripts: {len(walk.entries)} entry points, {len(walk.covered)} "
+            f"bytes, {len(walk.native)} native code addresses"
+        )
+        for problem in walk.problems:
+            print(f"  script problem: {problem.kind} at ${problem.cpu:04X}")
+    uncalled = None
+    if labels is not None and not args.start and not args.seed_labels:
+        uncalled = mark_uncalled(reader, labels, result)
+    show = None if args.bank is None or args.start else args.bank
+
+    def wanted(prg: int) -> bool:
+        return show is None or prg_to_bank_and_cpu(prg)[0] == show
+
+    print(
+        f"seeds: {len(seeds)} ({'vectors' if not args.seed_labels else 'vectors + labels'}"
+        f"{', one address' if args.start else ''})"
+    )
+    print("\nbank   code   data   both  uncalled  neither")
+    totals = dict.fromkeys(("code", "data", "both", "uncalled", "neither"), 0)
+    for b in range(result.banks):
+        c = result.coverage(b)
+        for k in totals:
+            totals[k] += c[k]
+        print(
+            f"{b:4}  {c['code']:5}  {c['data']:5}  {c['both']:5}  {c['uncalled']:8}  "
+            f"{c['neither']:7}"
+        )
+    print(
+        f" all  {totals['code']:5}  {totals['data']:5}  {totals['both']:5}  "
+        f"{totals['uncalled']:8}  {totals['neither']:7}"
+    )
+    print(
+        "\n  code = reached as code; data = inside a range label; both = a conflict;"
+        "\n  uncalled = code only unreached code labels lead to (dead, or a caller "
+        "not yet found)"
+    )
+
+    unresolved = [f for f in result.unresolved if wanted(f.prg)]
+    print(f"\nunresolved control flow ({len(unresolved)}):")
+    for f in unresolved:
+        ctx = "" if f.ctx is None else f"  [bank {f.ctx} mapped]"
+        print(f"  {f.kind:<38} {_where(labels, f.prg)}  {f.detail}{ctx}")
+
+    conflicts = [f for f in result.conflicts if wanted(f.prg)]
+    print(
+        f"\nconflicts ({len(conflicts)}) - a mis-trace, a wrong label, or a call that "
+        "doesn't return:"
+    )
+    for f in conflicts:
+        print(f"  {f.kind:<38} {_where(labels, f.prg)}  {f.detail}")
+        if f.via is not None:
+            print(f"  {'':<38}   reached from {_where(labels, f.via)}")
+    if uncalled is not None:
+        bad = [f for f in uncalled.conflicts if wanted(f.prg)]
+        if bad:
+            print(f"\nconflicts tracing the unreached code labels ({len(bad)}):")
+            for f in bad:
+                print(f"  {f.kind:<38} {_where(labels, f.prg)}  {f.detail}")
+
+    gaps = sorted((g for g in result.gaps(show)), key=lambda g: g[1], reverse=True)
+    print(
+        f"\ngaps: {len(gaps)} runs, {sum(n for _, n in gaps)} bytes "
+        f"(largest {min(args.gaps, len(gaps))} shown)"
+    )
+    for start, n in gaps[: args.gaps]:
+        raw = reader.read_prg(start, n)
+        fill = f"  all ${raw[0]:02X}" if len(set(raw)) == 1 else ""
+        print(
+            f"  {n:6} bytes  {_where(labels, start)}{fill}  {_nearest_label_before(labels, start)}"
+        )
+
+    entries = sorted(p for p in result.entries if wanted(p))
+    exact = (
+        {
+            label.start: label
+            for label, _ in labels.iter_merged()
+            if label.type == "NesPrgRom"
+        }
+        if labels is not None
+        else {}
+    )
+    unnamed = [p for p in entries if p not in exact or _STUB_RE.match(exact[p].name)]
+    print(
+        f"\nroutine entries reached: {len(entries)} "
+        f"({len(unnamed)} without a full name)"
+    )
+    if args.unnamed:
+        for p in unnamed:
+            label = exact.get(p)
+            have = label.name if label else "no label"
+            print(f"  {_where(None, p)}  {have:<28} {result.entries[p]}")
+
+    if labels is not None and not args.seed_labels:
+        code_labels = [
+            label
+            for label in exact.values()
+            if not is_data_range(label) and wanted(label.start)
+        ]
+        missed = sorted(
+            (
+                label
+                for label in code_labels
+                if result.marks[label.start] in (NONE, UNCALLED)
+            ),
+            key=lambda lb: lb.start,
+        )
+        print(
+            f"\nsingle-address labels not reached as code: {len(missed)} of "
+            f"{len(code_labels)} (data labeled without a range, or reached only "
+            "through unresolved control flow)"
+        )
+        if args.unreached:
+            seeds = [
+                s for s in label_seeds(labels) if s.how[6:] in {m.name for m in missed}
+            ]
+            upstream = unreached_roots(reader, labels, seeds)
+            roots = [m for m in missed if not upstream.get(m.start)]
+            print(f"  {len(roots)} roots - nothing else unreached leads to them:")
+            for label in missed:
+                ups = upstream.get(label.start)
+                if ups:
+                    heads = sorted(exact[u].name for u in ups if not upstream.get(u))
+                    under = f"under {', '.join(heads)}" if heads else "in a cycle"
+                    print(f"      {_where(None, label.start)}  {label.name}  ({under})")
+                else:
+                    print(f"  ROOT {_where(None, label.start)}  {label.name}")
+
+
+def cmd_readers(reader: RomReader, args, labels: LabelStore | None) -> None:
+    result, _, _ = trace_everything(reader, labels)
+    rom = reader.read_prg(0, reader.prg_size)
+    found = data_readers(rom, result)
+    if labels is not None:
+        found += data_readers(rom, mark_uncalled(reader, labels, result))
+    gaps = [(s, n) for s, n in result.gaps(args.bank) if n >= args.min]
+    print(
+        f"gaps: {len(gaps)} of {args.min}+ bytes; readers: absolute operands in "
+        f"the bank mapped when they run, indexed bases up to {args.reach} bytes "
+        "before a gap, immediate pairs (candidates)"
+    )
+    for start, n in gaps:
+        end = start + n
+        near = sorted(
+            (
+                r
+                for r in found
+                if start <= r.target < end
+                or (r.indexed and start - args.reach <= r.target < start)
+            ),
+            key=lambda r: (r.target, r.site),
+        )
+        print(
+            f"\n{n:5} bytes  {_where(labels, start)}  {_nearest_label_before(labels, start)}"
+        )
+        if not near:
+            print("       no direct reader")
+        for r in near:
+            offset = r.target - start
+            at = f"+{offset}" if offset >= 0 else str(offset)
+            bank = "" if r.ctx is None else f"  [bank {r.ctx} mapped]"
+            rows = disassemble(reader, r.site, count=1, expand_data=False).rows
+            line = rows[0].text if rows else ""
+            print(f"  {at:>6}  {_where(labels, r.site)}  {line}  ; {r.how}{bank}")
+
+
+def cmd_known_data(reader: RomReader, args, labels: LabelStore | None) -> None:
+    if labels is None:
+        print("Error: known-data needs --labels", file=sys.stderr)
+        sys.exit(1)
+    result, walk, objects = trace_everything(reader, labels)
+    regions = known_regions(reader, result, walk, objects)
+    plan = plan_labels(regions, labels, result)
+
+    print(f"known data regions: {len(regions)}, {sum(r.length for r in regions)} bytes")
+    for kind in sorted({r.kind for r in regions}):
+        of_kind = [r for r in regions if r.kind == kind]
+        print(f"  {kind:<9} {len(of_kind):4}  {sum(r.length for r in of_kind):7} bytes")
+    print(f"\nalready inside range labels: {plan.labeled_bytes} bytes")
+    print(f"new range labels: {len(plan.new)}, {sum(r.length for r in plan.new)} bytes")
+    print(f"single-address labels to widen into ranges: {len(plan.widen)}")
+    for label, region in plan.widen:
+        print(f"  {label.name}  -> {region.length} bytes")
+    if plan.inside:
+        print(f"\nsingle-address labels inside a new range ({len(plan.inside)}):")
+        for label, region in plan.inside:
+            print(f"  {_where(None, label.start)}  {label.name}  in {region.name}")
+    if plan.overlaps:
+        print(
+            f"\nCONTRADICTIONS - regions that claim the same bytes ({len(plan.overlaps)}):"
+        )
+        for first, second in plan.overlaps:
+            print(f"  {first.name} and {second.name} at {_where(None, second.start)}")
+    if plan.code:
+        print(
+            f"\nCONTRADICTIONS - regions the trace decoded as code ({len(plan.code)}):"
+        )
+        for region in plan.code:
+            print(
+                f"  {_where(None, region.start)}  {region.length} bytes  {region.name}"
+            )
+
+    if args.list:
+        print()
+        for region in plan.new:
+            print(
+                f"  {_where(None, region.start)}  {region.length:5}  "
+                f"{region.name}  ; {region.comment}"
+            )
+
+    if not args.write:
+        print("\n(dry run; --write adds the new labels and widens the others)")
+        return
+    if plan.code or plan.inside or plan.overlaps:
+        print(
+            "\nError: resolve the contradictions above before writing", file=sys.stderr
+        )
+        sys.exit(1)
+    for region in plan.new:
+        if region.name is None:
+            print(f"\nError: no name for {_where(None, region.start)}", file=sys.stderr)
+            sys.exit(1)
+        labels.base.add(
+            Label("NesPrgRom", region.start, region.end, region.name, region.comment)
+        )
+    for label, region in plan.widen:
+        labels.base.add(
+            Label(
+                "NesPrgRom",
+                label.start,
+                region.end,
+                label.name,
+                label.comment or region.comment,
+            )
+        )
+    labels.save("base")
+    print(
+        f"\nwrote {len(plan.new)} labels and widened {len(plan.widen)} in "
+        f"{labels.base_path}"
+    )
+
+
 def cmd_label(_reader: RomReader, args, labels: LabelStore | None) -> None:
     if labels is None:
         print("Error: --labels PATH is required for this command", file=sys.stderr)
@@ -490,6 +800,69 @@ def main():
         help="For RAM: also list indexed bases up to N bytes below that could reach it",
     )
 
+    trace_parser = subparsers.add_parser(
+        "trace",
+        help="Follow control flow from the vectors and map code, data and gaps",
+    )
+    trace_parser.add_argument(
+        "--from",
+        dest="start",
+        help="Trace from this one address instead of the vectors",
+    )
+    trace_parser.add_argument(
+        "--bank",
+        type=int,
+        help="Bank for --from; without --from, only list findings in this bank",
+    )
+    trace_parser.add_argument(
+        "--seed-labels",
+        action="store_true",
+        help="Also start from every single-address PRG label (assumes they are code)",
+    )
+    trace_parser.add_argument(
+        "--gaps", type=int, default=20, help="How many of the largest gaps to list"
+    )
+    trace_parser.add_argument(
+        "--unnamed",
+        action="store_true",
+        help="List routine entries with no label, a stub, or a tier-2 label",
+    )
+    trace_parser.add_argument(
+        "--unreached",
+        action="store_true",
+        help="List single-address labels the trace never decoded as code",
+    )
+
+    readers_parser = subparsers.add_parser(
+        "readers",
+        help="List each gap with the traced instructions that name it as data",
+    )
+    readers_parser.add_argument(
+        "--bank", type=int, help="Only gaps in this bank (15 for the fixed bank)"
+    )
+    readers_parser.add_argument(
+        "--min", type=int, default=1, help="Only gaps of at least N bytes"
+    )
+    readers_parser.add_argument(
+        "--reach",
+        type=int,
+        default=0,
+        help="Also list indexed bases up to N bytes before a gap that could run into it",
+    )
+
+    known_parser = subparsers.add_parser(
+        "known-data",
+        help="Compare the data regions the repo can locate with the label file",
+    )
+    known_parser.add_argument(
+        "--list", action="store_true", help="List every new label it would add"
+    )
+    known_parser.add_argument(
+        "--write",
+        action="store_true",
+        help="Add the new range labels and widen single-address ones (base file)",
+    )
+
     label_parser = subparsers.add_parser(
         "label", help="Look up the label at an address (requires --labels)"
     )
@@ -525,6 +898,9 @@ def main():
         "label": cmd_label,
         "find-label": cmd_find_label,
         "find-refs": cmd_find_refs,
+        "trace": cmd_trace,
+        "known-data": cmd_known_data,
+        "readers": cmd_readers,
     }
     try:
         commands[args.command](reader, args, labels)

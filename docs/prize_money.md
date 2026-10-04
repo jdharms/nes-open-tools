@@ -4,8 +4,9 @@
 
 The "PRIZE MONEY" club house entry opens a full-screen scripted cutscene: Mario walks
 into the clubhouse, Donkey Kong tells him his winnings, and (if money is pending) Mario
-hands over a stack of bills. It is one of **four** money/DK cutscenes that share a script
-interpreter in bank 11.
+hands over a stack of bills. It is one of **four** bank 12 scenes that share the text
+script interpreter in bank 11; the others are the course intro, the wager scene and the
+ending.
 
 This document exists mainly as a **space inventory** - the feature is a good candidate for
 removal, and it accounts for roughly 4.8 KB of exclusive data across three banks.
@@ -22,7 +23,7 @@ $8F3A  STA $06DE
 | Entry | Reached from | Mode |
 |---|---|---|
 | `$8F34` (bank 12) | `$84FA` `LC_84FA_OpenPrizeMoney`, club house code `$85` | `$06DE = 0` |
-| `$8F38` (bank 12) | `ExecuteFarCall` at bank 9 `$B0CC`, guarded on `TotalMoney` (`$6011`/`$6012`) having changed | `$06DE = 1` |
+| `$8F38` (bank 12) | `ExecuteFarCall` at bank 9 `$B0CC`, when `TotalMoney`'s hundred-thousands digit (`$6011`) has changed (`$B0C5`) | `$06DE = 1` |
 
 Removing the club house menu entry alone does **not** free the code - bank 9 still calls
 `$8F38` after a round. Both call sites have to go.
@@ -102,35 +103,12 @@ $8FEC  JSR WaitForVblank
 | `$9169`, `$9193`, `$91BD`, `$91E7` | 42 each | Four 6x7 animation cells, pointed at by `$90BC` |
 | `$9211`-`$9261` | 81 | Object definitions |
 
-## The script interpreter lives in bank 11
+## The script
 
-`$06E7`/`$06E8` is a **bank 11** pointer, not bank 12 - bank 11 is switched in by the far
-call before the interpreter dereferences it.
-
-Bank 11 `$9033` walks the script byte by byte. Bytes `< $F0` are text; `>= $F0` dispatch
-through `DispatchInlineJumpTable` (`$D227`) with the inline table at `$906F`:
-
-| Opcode | Handler |
-|---|---|
-| `$FF` | `$913E` |
-| `$FE` | `$914B` |
-| `$FD` | `$9170` |
-| `$FC` | `$9176` |
-| `$FB` | `$91D0` (line break) |
-| `$FA` | `$91F4` |
-| `$F9` | `$924E` |
-| `$F8` | `$9285` (jump to script address, 2-byte operand) |
-| `$F7` | `$92A4` |
-| `$F6` | `$92C3` (store byte to a RAM address, 3-byte operand) |
-| `$F5` | `$9162` |
-| `$F4` | `$92E7` |
-| `$F3` | `$9324` |
-| `$F2` | `$9343` |
-| `$F1` | `$9373` |
-
-Text is **plain mixed-case ASCII**, unlike the menu system's uppercase-only remapping
-(see "Text encoding" in `docs/menu_system.md`). The font for it is presumably in the
-shared bank 6 `$8000` blob.
+The dialogue is a bank 11 text script, run by `RunTextScript` (bank 11 `$9033`) through the
+far call in the frame loop. The interpreter, its opcodes, the native routines the DK
+scripts call and the money-bracket table that picks a milestone script are in
+`docs/text_scripts.md`.
 
 ```
 $9658  F9 00 20 F6 E3 06 00 F8 DC 94 FE FF 06 2C "your total" FB "prize is $" ...
@@ -143,22 +121,11 @@ some money from you?"* and *"You should write to Nintendo Power and tell them of
 incredible feat."* It ends at `$9F1D`; `$9F1E` begins a money-to-digit-string routine
 (repeated subtraction of `$64` and `$0A`).
 
-## The three sibling cutscenes
+## The sibling scenes
 
-The bank 11 interpreter is ticked from four bank 12 sites. All four are money/DK scenes.
-
-| Tick site | Scene entry | Entered from |
-|---|---|---|
-| `$9039` | `$8F34` / `$8F38` | club house `$85`; bank 9 `$B0CC` |
-| `$96A0` | `$9262` | bank 13 `$804F` |
-| `$A462` | `$A35F` / `$A4A4` | bank 9 `$B1A6`, `$B2C8` / `$B1A0` (around `CurrentWager` `$6018`) |
-| `$A87F` | `$A7BF` | bank 9 `$B0D7` (`TotalMoney` high byte) |
-
-Their scripts are also in bank 11: pointers `$A0EE`, `$A2D5`, `$A33C`, `$A8A2`, `$AA2F`,
-`$ABED`, `$AFDB`, `$B105`, `$B656`, `$B6A3`, `$B6F3`, `$B75F`, `$B8DD`, `$B93C`, `$BBAF`,
-`$BC7D`. Bank 11's printable-ASCII span runs `$8886`-`$BEB3` overall, though the tail
-(`$BE42` onward - `MASAYUKI ABE`, `HIROSHI SATO`, ...) is the tournament roster, not
-dialogue.
+The interpreter is ticked from four bank 12 scene loops - this one, the course intro, the
+wager scene and the ending; the table of them, and of every script they start, is in
+`docs/text_scripts.md`.
 
 ## Space inventory
 
@@ -172,12 +139,11 @@ dialogue.
 | bank 5 `$BCD7`-`$BDBC` | 230 | Compressed graphics; only loader is `$8F9D` |
 | bank 11 `$9658`-`$9F1D` | 2,246 | DK dialogue scripts |
 
-### Shared with the sibling cutscenes - freed only if all four go
+### Shared with the sibling scenes - freed only if all four go
 
 | Region | Size | Note |
 |---|---|---|
 | bank 11 `$9033`-`$9657` | 1,573 | The interpreter itself |
-| bank 11 `$9F1E`-`$A07F` | 354 | Money-to-digit-string formatting (shared status not confirmed) |
 | bank 5 `$B9FD`-`$BC1C` | 544 | Also loaded by `$A3C5` and `$A7F2` |
 | bank 12 `$A421` | - | Called only from `$8FC6`, but sits inside the `$A3xx` block |
 
@@ -205,13 +171,11 @@ been individually bounded.
   params of all 139 `JSR $D45F` sites in the ROM.
 - **bank 11 `$9658`-`$9F1D`**: `$9658` is the first script pointer; `$9F1E` is where
   printable text stops and the digit-formatting code starts.
+- **bank 11 `$94DC`-`$9657`**: native routines the scripts call with `$F8` (`$94DC`,
+  `$9504`, `$9511`, `$9554`, `$956B`, `$95D5`, `$95DE`, `$95E7`; `$94DC` and `$9504` serve
+  other scenes' scripts too), then the 13-entry money-bracket
+  script table at `$962E` that `$95E7` indexes, then `ScriptWindowGeometryTable` (`$9648`,
+  four windows).
+- **`$9F1E`'s formatter is not Prize Money's**: its only caller is the stroke-play intro
+  script (`$F8` at `$A13E`), so it stays when Prize Money goes.
 
-## Open questions
-
-- The split between interpreter code and shared sub-script fragments in bank 11
-  `$94DC`-`$9657`. The `$F8` (jump-to-script) operands inside the Prize Money scripts
-  target `$94DC`, `$9511`, `$9554`, `$956B` and `$95D5`, all of which are inside that
-  range.
-- Whether `$9F1E`'s formatter is genuinely shared with the siblings or merely adjacent.
-- Full semantics of opcodes `$FF`-`$F1`; only `$FB` (line break), `$F8` (jump) and `$F6`
-  (store to RAM) were decoded.

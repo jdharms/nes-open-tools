@@ -17,7 +17,7 @@ one site, so there is no in-game pause menu sharing this code.
 ## Driver loop
 
 `$8000` is the menu root: it resets `MenuHistoryDepth` (`$069C`) to 0, sets
-`CurrentMenuID` to 0, and loads the title graphics. The loop proper:
+`CurrentMenuID` to 0, and runs the title screen (`docs/title_screen.md`). The loop proper:
 
 ```
 $848B  JSR InitMainMenu

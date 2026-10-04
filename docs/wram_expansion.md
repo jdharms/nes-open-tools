@@ -81,8 +81,8 @@ This document plans the patches needed to fix this:
   appends a packed `($065D:$065E)` byte to the appropriate `*ReplayHeaders` 5-slot
   FIFO (shifting out the oldest entry if full) and copies a corresponding block from
   a live WRAM scratch area into the matching `*ReplayData` region. The
-  `ReplayDestPtrLoTable`/`ReplayDestPtrHiTable` pointer tables (bytes `9C 6F AB 6F A6
-  6F A1 6F B0 6F 64 70 0F 70 D3 6F`) confirm both the header write and the data write
+  `ReplaySaveHeaderPtrTable`/`ReplaySaveDataPtrTable` word tables (bytes `9C 6F AB 6F A6
+  6F A1 6F B0 6F 64 70 0F 70 D3 6F`, with `ReplaySaveSlotSizeTable` after them) confirm both the header write and the data write
   land inside this reclaimable region - the whole routine is in scope for the
   step-1/2 NOP work, not just the byte the first breakpoint hit landed on.
 - `$AD43` (bank `$02`) updates the driving-distance stats shared by `StrokePlayStats`
@@ -215,14 +215,14 @@ losing track of any one of these would be easy to do by accident.
 | `ViewOffsetToAddrLow` | Per-row byte offset (low) into the terrain buffer, read by the `LE451` windowing/scroll routine | `$E4F9` (fixed bank) | 10 entries | `$CA40` (fixed bank) | 17 entries |
 | `ViewOffsetToAddrHigh` | Same, high byte | `$E503` (fixed bank) | 10 entries | `$CA51` (fixed bank) | 17 entries |
 | `ViewOffsetToAttrIndex` | Per-row attribute-buffer index, read by the same `LE451` routine | `$E50D` (fixed bank) | 10 entries | `$CA62` (fixed bank) | 17 entries |
-| `ScrollThresholdLow` | `BallY` threshold (low) scanned by `LD_8F73` to compute `ViewVerticalOffset` | `$8F91` (bank `$0D`) | 9 entries | `$CA73` (fixed bank) | 16 entries |
-| `ScrollThresholdHigh` | Same, high byte | `$8F9A` (bank `$0D`) | 9 entries | `$CA83` (fixed bank) | 16 entries |
+| `ScrollThresholdLow` (vanilla label `BallScrollThresholdLoTable`) | `BallY` threshold (low) scanned by `LD_8F73` to compute `ViewVerticalOffset` | `$8F91` (bank `$0D`) | 9 entries | `$CA73` (fixed bank) | 16 entries |
+| `ScrollThresholdHigh` (`BallScrollThresholdHiTable`) | Same, high byte | `$8F9A` (bank `$0D`) | 9 entries | `$CA83` (fixed bank) | 16 entries |
 | `TerrainRowOffsetsLo` | Per-row byte offset (low) into the terrain buffer, read by the ball-lie lookup `LEE9F` | `$F66E` (fixed bank) | 48 entries | `$F66E` (fixed bank, **unchanged** - grew in place) | 60 entries |
 | `TerrainRowOffsetsHi` | Same, high byte | `$F69E` (fixed bank) | 48 entries | `$CA97` (fixed bank) | 60 entries |
-| `SpriteScreenOffsetLo` (proposed - no name found in disassembly yet) | `ViewVerticalOffset` -> sprite screen-Y adjustment (low), read by ball/flag/green/tee-block positioning code (`LD_8FCC`, `LD_8ED2`, and 2 more sites, all bank `$0D`) | `$8F21` (bank `$0D`) | 10 entries | `$8F21` (bank `$0D`, **unchanged** - grew in place) | 17 entries |
-| `SpriteScreenOffsetHi` (proposed) | Same, high byte | `$8F2B` (bank `$0D`) | 10 entries | `$CAD3` (fixed bank) | 17 entries |
-| `TerrainBottomYLo` (proposed - no name found in disassembly yet) | The hole's terrain height in pixels (low), compared against `BallY` by the ball-position probe `$EDEA` to decide whether the ball is still on the terrain | `$EFE2` (fixed bank) | 10 entries | `$EFE2` (fixed bank, **unchanged** - grew in place) | 17 entries |
-| `TerrainBottomYHi` (proposed) | Same, high byte | `$EFEC` (fixed bank) | 10 entries | `$E4F9` (fixed bank) | 17 entries |
+| `SpriteScreenOffsetLo` (vanilla label `ViewOffsetSpriteYLoTable`) | `ViewVerticalOffset` -> sprite screen-Y adjustment (low), read by ball/flag/green/tee-block positioning code (`LD_8FCC`, `LD_8ED2`, and 2 more sites, all bank `$0D`) | `$8F21` (bank `$0D`) | 10 entries | `$8F21` (bank `$0D`, **unchanged** - grew in place) | 17 entries |
+| `SpriteScreenOffsetHi` (`ViewOffsetSpriteYHiTable`) | Same, high byte | `$8F2B` (bank `$0D`) | 10 entries | `$CAD3` (fixed bank) | 17 entries |
+| `TerrainBottomYLo` | The hole's terrain height in pixels (low), compared against `BallY` by the ball-position probe `$EDEA` to decide whether the ball is still on the terrain | `$EFE2` (fixed bank) | 10 entries | `$EFE2` (fixed bank, **unchanged** - grew in place) | 17 entries |
+| `TerrainBottomYHi` | Same, high byte | `$EFEC` (fixed bank) | 10 entries | `$E4F9` (fixed bank) | 17 entries |
 
 Five of these tables are indexed by `ViewVerticalOffset` (0-16, **17** possible values, not 16 - see `sprite_screen_offset_tables.py` for why): `ViewOffsetToAddrLow`/`High`, `ViewOffsetToAttrIndex` and `SpriteScreenOffsetLo`/`Hi`. `ScrollThresholdLow`/`High` is indexed by a loop counter that stops one short of `ScrollLimit`, so 16 entries covers it. `TerrainBottomYLo`/`Hi` is indexed by `ScrollLimit` itself, which has the same 0-16 range as `ViewVerticalOffset`. `TerrainRowOffsetsLo`/`Hi` is indexed by absolute terrain row (0-59) instead, which is why it didn't need the same off-by-one fix.
 
