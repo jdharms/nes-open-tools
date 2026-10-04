@@ -483,9 +483,9 @@ class TestFringeGeneratorDeterminism:
             # Convert to hashable form
             results.add(tuple((pos, tile) for pos, tile in result))
 
-        # With multiple candidates, we should see some variation
-        # (may be 1 if all seeds happen to choose same, but usually > 1)
-        assert len(results) >= 1
+        # The extra straight tile is compatible with both neighbors, so ignoring
+        # the shuffle (or always taking the first candidate) must fail this check.
+        assert len(results) > 1
 
 
 # =============================================================================

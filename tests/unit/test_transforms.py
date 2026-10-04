@@ -79,17 +79,16 @@ def test_every_transform_has_golden_output():
     assert {text.partition(":")[0] for text in GOLDEN} == TRANSFORMS.keys()
 
 
-def test_transform_output_is_frozen(vanilla_courses, vanilla_jp_courses):
+@pytest.mark.parametrize("text", GOLDEN)
+def test_transform_output_is_frozen(vanilla_courses, vanilla_jp_courses, text):
     """A failure here means a transform's output changed, and with it the course seeds
     naming it build. Bump `BUILD_VERSION`, bump the transform's version too if what it
     means changed, and update these hashes (ADR 0015, `docs/hole_transforms.md`)."""
     holes = list(vanilla_holes())
-    actual = {}
-    for text in GOLDEN:
-        lines = (
-            f"{hole_id} {content_hash(apply_transforms(hole, [text]))}\n"
-            for hole_id, hole in holes
-        )
-        actual[text] = hashlib.sha256("".join(lines).encode()).hexdigest()
+    lines = (
+        f"{hole_id} {content_hash(apply_transforms(hole, [text]))}\n"
+        for hole_id, hole in holes
+    )
+    actual = hashlib.sha256("".join(lines).encode()).hexdigest()
     assert BUILD_VERSION == 5
-    assert actual == GOLDEN
+    assert actual == GOLDEN[text]

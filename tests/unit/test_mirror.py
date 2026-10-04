@@ -9,7 +9,7 @@ from golf.formats.hole_data import HoleData
 from golf.physics import Flag
 from golf.physics.terrain import FIRST_GREEN_TILE, GREEN_SIZE
 from tests.synthetic_holes import synthetic_hole
-from tests.vanilla_holes import vanilla_holes
+from tests.vanilla_holes import VANILLA_IDS
 
 
 def mappable_hole() -> HoleData:
@@ -68,36 +68,28 @@ def test_unmapped_tile_is_an_error():
         mirror_hole(synthetic_hole())
 
 
-@pytest.fixture(scope="module")
-def mirrored_vanilla(vanilla_courses, vanilla_jp_courses):
-    """(id, hole, mirrored hole) for every vanilla hole."""
-    return [(hole_id, hole, mirror_hole(hole)) for hole_id, hole in vanilla_holes()]
-
-
-def test_every_vanilla_hole_mirrors_back(mirrored_vanilla):
-    for hole_id, hole, mirrored in mirrored_vanilla:
-        twice = mirror_hole(mirrored)
-        assert twice.greens == hole.greens, hole_id
-        assert twice.attributes == hole.attributes, hole_id
-        assert twice.metadata == hole.metadata, hole_id
-        assert twice.green_x == hole.green_x, hole_id
-        for row, back in zip(hole.terrain, twice.terrain, strict=True):
-            for tile, returned in zip(row, back, strict=True):
-                if tile not in ALL_FOREST_TILES:
-                    assert returned == tile, hole_id
+@pytest.mark.parametrize("vanilla_hole", VANILLA_IDS, indirect=True)
+def test_every_vanilla_hole_mirrors_back_and_places_tees_and_pins(vanilla_hole):
+    hole_id, hole = vanilla_hole
+    mirrored = mirror_hole(hole)
+    twice = mirror_hole(mirrored)
+    assert twice.greens == hole.greens, hole_id
+    assert twice.attributes == hole.attributes, hole_id
+    assert twice.metadata == hole.metadata, hole_id
+    assert twice.green_x == hole.green_x, hole_id
+    for row, back in zip(hole.terrain, twice.terrain, strict=True):
+        for tile, returned in zip(row, back, strict=True):
+            if tile not in ALL_FOREST_TILES:
+                assert returned == tile, hole_id
+    tee = mirrored.metadata["tee"]
+    assert mirrored.terrain[tee["y"] // 8][tee["x"] // 8] in TEE_BOX, hole_id
+    for pin in range(4):
+        column, row = pin_pixel(hole, pin)
+        assert pin_pixel(mirrored, pin) == (GREEN_SIZE - 1 - column, row), hole_id
+        assert mirrored.greens[row][GREEN_SIZE - 1 - column] >= FIRST_GREEN_TILE
 
 
 def pin_pixel(hole: HoleData, pin: int) -> tuple[int, int]:
     """The column and row of the green box the pin is in."""
     flag = Flag.for_pin(hole, pin)
     return (flag.x >> 8) - hole.green_x, (flag.y >> 8) - hole.green_y
-
-
-def test_every_vanilla_tee_and_pin_lands_where_it_mirrors_to(mirrored_vanilla):
-    for hole_id, hole, mirrored in mirrored_vanilla:
-        tee = mirrored.metadata["tee"]
-        assert mirrored.terrain[tee["y"] // 8][tee["x"] // 8] in TEE_BOX, hole_id
-        for pin in range(4):
-            column, row = pin_pixel(hole, pin)
-            assert pin_pixel(mirrored, pin) == (GREEN_SIZE - 1 - column, row), hole_id
-            assert mirrored.greens[row][GREEN_SIZE - 1 - column] >= FIRST_GREEN_TILE

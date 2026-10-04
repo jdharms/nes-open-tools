@@ -11,8 +11,9 @@ editor.application, which no other test loads.
 
 import subprocess
 import sys
-from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
+
+import pytest
 
 ROOT = Path(__file__).resolve().parents[2]
 PACKAGES = ("golf", "server", "editor", "tools")
@@ -43,9 +44,16 @@ def _import_alone(module: str) -> tuple[str, str | None]:
     return module, result.stderr.strip().splitlines()[-1]
 
 
-def test_every_module_imports_first():
-    modules = _modules()
-    assert modules, f"found no modules under {', '.join(PACKAGES)}"
-    with ThreadPoolExecutor(max_workers=8) as pool:
-        failures = [(m, err) for m, err in pool.map(_import_alone, modules) if err]
-    assert not failures, "\n".join(f"{m}: {err}" for m, err in failures)
+MODULES = _modules()
+
+
+def test_modules_were_found():
+    assert MODULES, f"found no modules under {', '.join(PACKAGES)}"
+
+
+@pytest.mark.parametrize("module", MODULES)
+def test_every_module_imports_first(module):
+    # Give xdist each fresh interpreter separately, rather than monopolizing
+    # one worker with a thread pool after the rest of the suite has finished.
+    name, error = _import_alone(module)
+    assert error is None, f"{name}: {error}"

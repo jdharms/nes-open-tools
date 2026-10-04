@@ -11,6 +11,7 @@ One line per document. Command-line tools are indexed in the top-level `README.m
 | [randomizer_devplan.md](randomizer_devplan.md) | Randomizer site architecture, data model, routes and the ordered development plan |
 | [planning/download_settings.md](planning/download_settings.md) | Plan: saved download settings, the new SRAM option defaults and finish ABI 2 |
 | [deployment.md](deployment.md) | Running the randomizer site on its server: setup, releases, rollback and database restores |
+| [test_suite_performance.md](test_suite_performance.md) | Test runtime measurements, slow-test coverage review and workload splitting |
 | [documentation.md](documentation.md) | Philosophy and practices followed for documentation for the development process |
 | [catalog.md](catalog.md) | The randomizer hole catalog: frozen index, curation, ids, versions and families |
 | [manifest.md](manifest.md) | Randomizer seed manifests: settings, the concrete course, and how generation fills them |

@@ -1,7 +1,7 @@
 """Unit tests for course layout generation."""
 
 import random
-from itertools import permutations
+from itertools import pairwise, permutations
 from math import factorial, prod
 
 import pytest
@@ -19,23 +19,25 @@ from golf.randomizer.layout import (
 )
 
 
-@pytest.mark.parametrize("par, size", [(72, 188_802), (71, 165_564), (70, 35_574)])
-def test_pins_the_size_of_each_layout_space(par, size):
-    assert len(layouts(par)) == size
-
-
-@pytest.mark.parametrize("par", sorted(COUNTS))
-def test_every_layout_satisfies_every_predicate(par):
+@pytest.mark.parametrize(
+    ("par", "size", "counts"),
+    [(72, 188_802, (4, 10, 4)), (71, 165_564, (4, 11, 3)), (70, 35_574, (4, 12, 2))],
+)
+def test_layout_space_has_the_expected_members(par, size, counts):
+    """Check the entire space without using the generator's predicate helpers."""
     found = layouts(par)
-    assert all(satisfies(layout, COUNTS[par]) for layout in found)
-    assert sum(found[0]) == par
-    assert len(set(found)) == len(found)
-
-
-@pytest.mark.parametrize("par", sorted(COUNTS))
-def test_layouts_are_sorted(par):
-    found = layouts(par)
-    assert list(found) == sorted(found)
+    assert len(found) == size
+    # Strict ordering proves both sorting and uniqueness, without copying the
+    # whole space into a set and another sorted list on separate workers.
+    assert all(before < after for before, after in pairwise(found))
+    for layout in found:
+        assert len(layout) == 18
+        assert tuple(layout.count(value) for value in (3, 4, 5)) == counts
+        front, back = layout[:9], layout[9:]
+        assert all(
+            abs(front.count(value) - back.count(value)) <= 1 for value in (3, 4, 5)
+        )
+        assert all(a != b or a == 4 for a, b in pairwise(layout))
 
 
 def test_joining_nines_matches_filtering_every_permutation():
@@ -70,6 +72,17 @@ def test_consecutive_rule_spans_the_turn():
     layout = (4, 3, 4, 5, 4, 4, 5, 4, 3, 3, 4, 5, 4, 4, 5, 4, 3, 4)
     assert nines_balanced(layout)
     assert not satisfies(layout, COUNTS[72])
+
+
+def test_predicates_reject_wrong_counts_and_unbalanced_nines():
+    valid = (4, 3, 4, 5, 4, 4, 5, 4, 3, 4, 3, 4, 5, 4, 4, 5, 4, 3)
+    assert satisfies(valid, COUNTS[72])
+    wrong_counts = list(valid)
+    wrong_counts[1] = 4
+    assert not satisfies(wrong_counts, COUNTS[72])
+    unbalanced = list(valid)
+    unbalanced[1], unbalanced[13] = unbalanced[13], unbalanced[1]
+    assert not satisfies(unbalanced, COUNTS[72])
 
 
 def test_same_seed_draws_the_same_layout():

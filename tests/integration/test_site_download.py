@@ -24,23 +24,12 @@ JP_ROM_PATH = ROOT / "mario_open_jp.nes"
 TIMEOUT_MS = 60_000
 
 
-def _chromium_launches() -> bool:
-    try:
-        from playwright.sync_api import sync_playwright
-
-        with sync_playwright() as playwright:
-            playwright.chromium.launch().close()
-        return True
-    except Exception:
-        return False
-
-
 pytestmark = [
     pytest.mark.skipif(
         not US_ROM_PATH.exists() or not JP_ROM_PATH.exists(),
         reason="the vanilla ROMs are not present",
     ),
-    pytest.mark.skipif(not _chromium_launches(), reason="no Playwright Chromium"),
+    pytest.mark.usefixtures("chromium_available"),
 ]
 
 

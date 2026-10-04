@@ -10,9 +10,20 @@ from golf.formats.hole_data import HoleData
 from golf.randomizer.catalog import DEFAULT_COURSES, Catalog, HoleStore, RomSource
 
 
+def vanilla_entries():
+    """Catalog entries only: safe to enumerate before the ROM fixtures run."""
+    return [
+        entry
+        for entry in Catalog.load()
+        if isinstance(entry.source, RomSource) and not entry.withdrawn
+    ]
+
+
+VANILLA_IDS = tuple(str(entry.id) for entry in vanilla_entries())
+
+
 def vanilla_holes() -> Iterator[tuple[str, HoleData]]:
     """(id, hole) for every vanilla hole, in id order."""
     store = HoleStore(DEFAULT_COURSES)
-    for entry in Catalog.load():
-        if isinstance(entry.source, RomSource) and not entry.withdrawn:
-            yield str(entry.id), store.load(entry)
+    for entry in vanilla_entries():
+        yield str(entry.id), store.load(entry)
