@@ -8,6 +8,7 @@ from golf.core.mlb_labels import (
     Label,
     LabelIndex,
     LabelStore,
+    check_labels,
     find_conflicts,
     load_labels,
     plan_merge,
@@ -211,3 +212,40 @@ def test_edit_refuses_a_rename_to_a_name_in_use(tmp_path):
     result = run_labels(base_path, "edit", "ram", "0011", "--name", "ScrollX")
     assert result.returncode == 1
     assert [label.name for label in load_labels(base_path)] == ["ScrollX", "ScrollY"]
+
+
+def test_check_reports_overlapping_prg_ranges_but_not_places_inside_them():
+    table = prg(0x100, "Table", end=0x10F)
+    inner = prg(0x104, "PlaceInTable")
+    clash = prg(0x10F, "Clash", end=0x112)
+    buffer = ram(0x100, "Buffer", end=0x10F)
+    nested = ram(0x104, "BufferPart", end=0x107)
+    overlaps, duplicates = check_labels([table, inner, clash, buffer, nested])
+    assert overlaps == [(table, clash)]
+    assert duplicates == {}
+
+
+def test_check_reports_a_range_overlapped_past_a_shorter_neighbor():
+    outer = prg(0x100, "Outer", end=0x1FF)
+    short = prg(0x110, "Short", end=0x111)
+    late = prg(0x180, "Late", end=0x181)
+    overlaps, _ = check_labels([outer, short, late])
+    assert overlaps == [(outer, short), (outer, late)]
+
+
+def test_check_reports_repeated_names_and_ignores_empty_ones():
+    first, second = prg(0x10, "Same"), ram(0x20, "Same")
+    _, duplicates = check_labels([first, second, prg(0x30, ""), prg(0x40, "")])
+    assert duplicates == {"Same": [first, second]}
+
+
+def test_check_cli_exits_nonzero_on_a_problem(tmp_path):
+    path = tmp_path / "golf.mlb"
+    save_labels(path, [prg(0x10, "A", end=0x20), prg(0x18, "B", end=0x30)])
+    run = [sys.executable, "-m", "tools.research.labels", str(path), "check"]
+    result = subprocess.run(run, cwd=ROOT, capture_output=True, text=True)
+    assert result.returncode == 1
+    assert "overlap" in result.stdout
+    save_labels(path, [prg(0x10, "A", end=0x20), prg(0x21, "B", end=0x30)])
+    result = subprocess.run(run, cwd=ROOT, capture_output=True, text=True)
+    assert result.returncode == 0, result.stdout

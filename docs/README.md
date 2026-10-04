@@ -10,7 +10,6 @@ One line per document. Command-line tools are indexed in the top-level `README.m
 | [randomizer.md](randomizer.md) | Randomizer design: goals, logic, what gets randomized |
 | [randomizer_devplan.md](randomizer_devplan.md) | Randomizer site architecture, data model, routes and the ordered development plan |
 | [planning/download_settings.md](planning/download_settings.md) | Plan: saved download settings, the new SRAM option defaults and finish ABI 2 |
-| [planning/rom_coverage_handoff.md](planning/rom_coverage_handoff.md) | Hand-off: ROM byte coverage (complete but one byte), the tools and method, the traps found, and what is left to confirm in Mesen |
 | [deployment.md](deployment.md) | Running the randomizer site on its server: setup, releases, rollback and database restores |
 | [documentation.md](documentation.md) | Philosophy and practices followed for documentation for the development process |
 | [catalog.md](catalog.md) | The randomizer hole catalog: frozen index, curation, ids, versions and families |
@@ -23,6 +22,8 @@ One line per document. Command-line tools are indexed in the top-level `README.m
 
 | Doc | About |
 |-----|-------|
+| [rom_map.md](rom_map.md) | Where to look: each topic's bank, address and starting label, and its doc. Add a row whenever you had to search |
+| [rom_disassembly.md](rom_disassembly.md) | The label file's coverage and invariants, the method for measuring data, the traps found, and what is left to confirm in Mesen |
 | [../golf/core/compression.md](../golf/core/compression.md) | Course terrain/greens compression: RLE + dictionary, horizontal transitions, vertical fill |
 | [terrain_data_locations.md](terrain_data_locations.md) | Byte ranges of the three vanilla courses' compressed terrain |
 | [course_data.md](course_data.md) | The hole data model and JSON format the tools and editor share |

@@ -26,6 +26,12 @@ Always pass `--labels "NES Open Tournament Golf (USA).mlb"`, so output is
 annotated with everything the project has named so far. `--labels` is a
 top-level option and must come **before** the subcommand.
 
+**Start from `docs/rom_map.md`**, which maps a topic to the bank, address and
+label to read from. If you had to search to find where something lives, add a
+row there before you finish. Before labeling, read `docs/rom_disassembly.md`:
+the label file's invariants (check them with `golf-labels <label file> check` and
+`known-data`), the method for measuring a table, and the traps already found.
+
 ## Address grammar
 
 Shared by every subcommand:
@@ -332,9 +338,16 @@ Gathers the data the repository already knows how to find (logic in
 - **metasprites drawn directly**: split Lo/Hi pointer tables or immediates loaded into
   `PointerToSpriteData` (`$45/$46`) ahead of a renderer call, measured in that
   renderer's format - chunked for `RenderMetasprite`/`RenderMetaspriteClipped`, a count
-  and 3 bytes a sprite for `RenderMetaspriteWithAttr`. A Lo/Hi pair's entry count is the
-  distance between them.
+  and 3 bytes a sprite for `RenderMetaspriteWithAttr`, a count and 4 bytes a sprite for
+  bank 13's `RenderGreenViewMetasprite`. Renderers are registered in `RENDERERS` by
+  (bank, address), and a site that reaches one through a single further call is
+  followed. A Lo/Hi pair's entry count is the distance between them.
 - **palettes**: the inline word of every `Load32BytesToBuffer` call, 32 bytes each.
+- **copied blocks**: the inline source of every `CopyInlineMemoryBlock`, named by
+  destination (`NametableDescriptorTemplate...` for `$0410`-`$041F`,
+  `AttributeTableData...` for 64 bytes to `$0497`).
+- **clip windows**: the 5-byte record named by `SetObjectClipWindow`'s inline word.
+- **vectors**: every bank's last 6 bytes.
 - **nametable descriptors**: the inline word of every `WriteNametableTiles` (and Mode1 /
   Mode2) call, measured from its header - width x height tiles inline, one in repeat
   mode, or a pointer to source data labeled separately (`docs/menu_system.md`).

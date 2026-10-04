@@ -252,6 +252,39 @@ def find_conflicts(
     return overlapping, same_name
 
 
+def _is_range(label: Label) -> bool:
+    return label.end is not None and label.end != label.start
+
+
+def check_labels(
+    labels: Iterable[Label],
+) -> tuple[list[tuple[Label, Label]], dict[str, list[Label]]]:
+    """The label file's two invariants: PRG ranges that overlap, and repeated names.
+
+    Each PRG byte is one kind of data, so no two PRG range labels may share a
+    byte. A single-address label inside a range is allowed (it marks a place in
+    that data), and RAM ranges may nest (`SpritePalette0` inside `PaletteBuffer`).
+    """
+    labels = list(labels)
+    overlaps = []
+    ranges = sorted(
+        (lb for lb in labels if lb.type == "NesPrgRom" and _is_range(lb)),
+        key=lambda lb: lb.start,
+    )
+    reach: Label | None = None
+    for label in ranges:
+        if reach is not None and label.start <= (reach.end or reach.start):
+            overlaps.append((reach, label))
+        if reach is None or (label.end or 0) > (reach.end or 0):
+            reach = label
+    by_name: dict[str, list[Label]] = {}
+    for label in labels:
+        if label.name:
+            by_name.setdefault(label.name, []).append(label)
+    duplicates = {name: held for name, held in by_name.items() if len(held) > 1}
+    return overlaps, duplicates
+
+
 @dataclass
 class MergePlan:
     """The result of folding a sidecar into its base file, before anything is written.

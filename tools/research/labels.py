@@ -27,6 +27,11 @@ Merging a sidecar into the label file:
   or accept them with --allow-conflicts). --write copies both files to
   "<file>.bak", writes the merged label file and deletes the sidecar.
 
+Checking the label file:
+  `check` reports range labels that overlap each other and names held at two
+  addresses, across the merged view, and exits 1 if it finds either. Run it
+  after a batch of labeling.
+
   The label file describes the vanilla ROM only: never label code or RAM that
   exists only after a patch.
 
@@ -46,6 +51,7 @@ Examples:
     golf-labels notes.mlb add prg '$AD5D' --bank 2 CourseSelectHandler --target sidecar
     golf-labels notes.mlb merge
     golf-labels notes.mlb merge --verbose --write
+    golf-labels notes.mlb check
 """
 
 import argparse
@@ -57,6 +63,7 @@ from golf.core.mlb_labels import (
     TYPE_ALIASES,
     Label,
     LabelStore,
+    check_labels,
     find_conflicts,
     plan_merge,
 )
@@ -290,6 +297,19 @@ def cmd_merge(store: LabelStore, args) -> None:
     )
 
 
+def cmd_check(store: LabelStore, args) -> None:
+    overlaps, duplicates = check_labels(label for label, _ in store.iter_merged())
+    for first, second in overlaps:
+        print(
+            f"overlap: {_where(first)} {first.name}  and  {_where(second)} {second.name}"
+        )
+    for name, holders in duplicates.items():
+        print(f"duplicate name: {name}: " + ", ".join(_where(h) for h in holders))
+    if overlaps or duplicates:
+        sys.exit(1)
+    print("No overlapping ranges and no repeated names.")
+
+
 def main():
     parser = argparse.ArgumentParser(
         description="Add/edit/remove/list labels in a Mesen .mlb label file"
@@ -387,6 +407,10 @@ def main():
         "--verbose", action="store_true", help="Also list every new label"
     )
 
+    subparsers.add_parser(
+        "check", help="Report overlapping range labels and repeated names"
+    )
+
     args = parser.parse_args()
     store = LabelStore.load(args.mlb_file, args.sidecar)
 
@@ -396,6 +420,7 @@ def main():
         "edit": cmd_edit,
         "remove": cmd_remove,
         "merge": cmd_merge,
+        "check": cmd_check,
     }
     try:
         commands[args.command](store, args)
