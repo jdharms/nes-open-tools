@@ -32,6 +32,7 @@ from golf.randomizer.manifest import (
     LEGACY_FINISH_ABI_VERSION,
     LEGACY_SCHEMA,
     ClubRules,
+    DrawRule,
     Settings,
 )
 from golf.randomizer.transforms import apply_transforms
@@ -51,6 +52,8 @@ UNFINISHED_ORDER = [
     "course_mirrors",
     "course",
     "seeded_wind",
+    "wind_anchors",
+    "wind_fix",
     "music_import",
     "mercy_tap_in",
     "green_shortcut",
@@ -101,9 +104,12 @@ def curation() -> CurationSnapshot:
 
 @pytest.fixture(scope="module")
 def jp_manifest(catalog, curation, vanilla_jp_courses):
-    return generate(
-        catalog, curation, Settings(prng_seed="build-stages-jp", music="jp_france")
+    """Drawn uniformly, like `nes_manifest`, so the golden hashes below move with the
+    build and not with the default draw rule."""
+    settings = Settings(
+        prng_seed="build-stages-jp", music="jp_france", draw_rule=DrawRule()
     )
+    return generate(catalog, curation, settings)
 
 
 @pytest.fixture(scope="module")
@@ -113,6 +119,7 @@ def nes_manifest(catalog, curation):
         sources=frozenset({US_ROM}),
         music="nes_us",
         mercy_point=None,
+        draw_rule=DrawRule(),
     )
     return generate(catalog, curation, settings)
 
@@ -163,18 +170,18 @@ def test_the_unfinished_build_is_deterministic(
     assert build_unfinished(jp_manifest, catalog, store, vanilla).ips == unfinished.ips
 
 
-def test_build_version_five_golden_unfinished_ips_hashes(
+def test_build_version_six_golden_unfinished_ips_hashes(
     unfinished, jp_manifest, nes_manifest, catalog, store, vanilla
 ):
-    assert BUILD_VERSION == 5
+    assert BUILD_VERSION == 6
     assert any(str(slot.id) == "jp_france/18" for slot in jp_manifest.course.holes)
     nes = build_unfinished(nes_manifest, catalog, store, vanilla)
     assert {
         "jp_france_18": hashlib.sha256(unfinished.ips).hexdigest(),
         "nes_only": hashlib.sha256(nes.ips).hexdigest(),
     } == {
-        "jp_france_18": "332bf27addc6a3ffedabf489289b372e00f486f152945b106f4becdb154994ed",
-        "nes_only": "622bbb0fee56e3152225eaa4254ab22ff7b8c41d3164c661183b728168cc6889",
+        "jp_france_18": "f6c360309f74d98f0fd425ade445ddfb0db574b4df29066976da9df56ce488d7",
+        "nes_only": "1983d3ea895da794c81db316bb595068c88a08f9214779bef6836a1482e5e84d",
     }
 
 
@@ -284,6 +291,7 @@ def legacy(manifest):
         schema=LEGACY_SCHEMA,
         build_version=LEGACY_BUILD_VERSION,
         finish_abi_version=LEGACY_FINISH_ABI_VERSION,
+        settings=replace(manifest.settings, draw_rule=DrawRule()),
     )
 
 

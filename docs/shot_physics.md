@@ -134,7 +134,7 @@ negative, the height dips below zero, and the bounce leaves nothing.
   terms are not symmetric. Descending, the X-to-Y term doubles and the Y-to-X term roughly
   quadruples, and their signs run opposite ways.
 
-### Six wind directions are distorted
+### Eight wind directions are distorted
 
 `LE7C3` reads cos(a) as `TrigLookupTable[a + $40]`, but the table only has 128 entries (a
 half turn). `ApplyWindEffect` passes it `WindDirection & $7F`, so for directions whose low
@@ -150,8 +150,13 @@ every case. Y is right in sign but not in size:
 
 (Out of 255; positive is down the screen.) So a crosswind to the right also pushes the ball
 down the screen at 64% strength, and one to the left pushes it up. A wind at `$60` blows
-almost due right instead of diagonally. Wind anchors are multiples of `$10`, so 6 of the 16
+almost due right instead of diagonally. Wind anchors are multiples of `$10`, so 8 of the 16
 possible directions are affected.
+
+The `wind_fix` patch corrects the lookup, and every randomizer seed from unfinished build
+version 6 has it ([wind.md](wind.md), **The fix**). The Python model ports the vanilla
+lookup (`PhysicsTables.cos_unmasked`), so it gives the vanilla ROM's wind and is wrong
+about those eight directions on a patched ROM. With no wind the two agree.
 
 It matters for shots aimed up the screen. A high PW at medium speed goes 101 yards with no
 wind. With wind 9 it goes 87 yards in a pure crosswind to the right (`$40`), and 130 in one

@@ -74,6 +74,8 @@ from .sram_defaults import (
     magic_bytes,
     sram_defaults_patch,
 )
+from .wind_anchors import wind_anchors_patch
+from .wind_fix import WIND_FIX_PATCH
 from .wram_expansion import WRAM_EXPANSION_PATCH
 
 
@@ -172,6 +174,13 @@ class MercyTapInParams:
 @dataclass(frozen=True)
 class SeededWindParams:
     seed: str
+
+
+@dataclass(frozen=True)
+class WindAnchorsParams:
+    #: one `direction/speed` per hole, 18 of them: the direction two hex digits
+    #: ($00 up the screen, $40 right, $80 down, $C0 left), the speed 0-10, as `80/7`
+    anchors: list[str]
 
 
 @dataclass(frozen=True)
@@ -281,6 +290,21 @@ def _build_mercy(ctx: BuildContext, params: MercyTapInParams) -> ROMPatch:
         description=f"End a hole at stroke {params.mercy_point} with a tap-in",
         patches=mercy_tap_in_patches(params.mercy_point, params.mercy_result),
     )
+
+
+def _build_wind_anchors(ctx: BuildContext, params: WindAnchorsParams) -> ROMPatch:
+    anchors = []
+    for text in params.anchors:
+        direction, slash, speed = text.partition("/")
+        try:
+            if not slash:
+                raise ValueError(text)
+            anchors.append((int(direction, 16), int(speed)))
+        except ValueError:
+            raise ValueError(
+                f"a wind anchor is a hex direction and a speed, such as 80/7; got {text!r}"
+            ) from None
+    return wind_anchors_patch(anchors)
 
 
 def _report_seeded_wind(params: SeededWindParams, patch) -> list[str]:
@@ -462,6 +486,18 @@ PATCH_SPECS: dict[str, PatchSpec[Any, Any]] = {
             SeededWindParams,
             lambda ctx, params: seeded_wind_patch(params.seed),
             _report_seeded_wind,
+        ),
+        PatchSpec(
+            "wind_anchors",
+            "Set each hole's wind direction and speed (docs/wind_profiles.md)",
+            WindAnchorsParams,
+            _build_wind_anchors,
+        ),
+        PatchSpec(
+            "wind_fix",
+            "Make crosswinds push the way their arrow points (docs/wind.md)",
+            NoParams,
+            _fixed(WIND_FIX_PATCH),
         ),
         PatchSpec(
             "practice_swing",

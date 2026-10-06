@@ -5,8 +5,9 @@ Three parts:
 
 - The version fields: the manifest `schema`, generator, unfinished-build and finish-ABI
   versions, catalog version and the curation stamp that produced it.
-- `settings`: every input to generation, the PRNG seed included, so the same catalog,
-  curation and settings reproduce the manifest under one generator version.
+- `settings`: every input to generation, the PRNG seed and the draw rule included, so
+  the same catalog, curation and settings reproduce the manifest under one generator
+  version.
 - `course`: concrete values, and the only part the recipe reads after version checks.
   Hole ids, never filters; a music slug, never "random".
 
@@ -20,14 +21,21 @@ from dataclasses import dataclass
 from typing import TypeGuard
 
 from golf.core.patches.sram_defaults import BAG_SIZE, Club, magic_bytes, parse_club
+from golf.core.patches.wind_anchors import DIRECTIONS as WIND_DIRECTIONS
+from golf.core.patches.wind_anchors import SPEEDS as WIND_SPEEDS
+from golf.core.rng import predict_hole
 
 from .catalog import JP_ROM, US_ROM, Catalog, CatalogError, HoleId, RomSource
 from .layout import COUNTS
 from .music import RANDOM, TRACKS, track
 from .transforms import TransformError, parse_transform
+from .wind import DIRECTION_PROFILES, SPEED_PROFILES, VANILLA
 from .words import MagicWordsError, check_magic_words
 
-SCHEMA = 2
+SCHEMA = 3
+#: schemas this code still reads; their settings have no `draw_rule` or wind profiles,
+#: and their holes no wind anchors
+LEGACY_SCHEMAS = (1, 2)
 LEGACY_SCHEMA = 1
 LEGACY_BUILD_VERSION = 1
 LEGACY_FINISH_ABI_VERSION = 1
@@ -37,6 +45,10 @@ DEFAULT_PAR = 72
 DEFAULT_MERCY_POINT = 9
 MERCY_POINTS = range(1, 256)
 HOLE_PARS = (3, 4, 5)
+NINE = 9
+UNIFORM = "uniform"
+EXPERT_CAP = "expert_cap"
+DRAW_RULES = (UNIFORM, EXPERT_CAP)
 WIND_SEEDS = range(0x10000)
 
 
@@ -150,7 +162,54 @@ class ClubRules:
         )
 
 
-_SETTINGS_KEYS = (
+@dataclass(frozen=True)
+class DrawRule:
+    """How generation draws a course's holes from the pool.
+
+    - `uniform`: every family in the pool is as likely as any other.
+    - `expert_cap`: at most `per_nine` expert holes on each nine, the holes curation tags
+      `expert`. 0 leaves them out of the course.
+    """
+
+    rule: str = UNIFORM
+    #: the most expert holes on a nine under `expert_cap`; None under any other rule
+    per_nine: int | None = None
+
+    def __post_init__(self):
+        if self.rule not in DRAW_RULES:
+            raise ManifestError(
+                f"draw rule must be one of {list(DRAW_RULES)}, got {self.rule!r}"
+            )
+        if self.rule == EXPERT_CAP:
+            if not _is_int(self.per_nine) or not 0 <= self.per_nine <= NINE:
+                raise ManifestError(
+                    f"expert_cap per_nine must be 0-{NINE}, got {self.per_nine!r}"
+                )
+        elif self.per_nine is not None:
+            raise ManifestError(f"draw rule {self.rule!r} takes no per_nine")
+
+    @classmethod
+    def expert_cap(cls, per_nine: int) -> "DrawRule":
+        return cls(EXPERT_CAP, per_nine)
+
+    def to_json(self) -> dict:
+        if self.rule == EXPERT_CAP:
+            return {"rule": self.rule, "per_nine": self.per_nine}
+        return {"rule": self.rule}
+
+    @classmethod
+    def from_json(cls, data: object) -> "DrawRule":
+        rule = data.get("rule") if isinstance(data, dict) else None
+        keys = ("rule", "per_nine") if rule == EXPERT_CAP else ("rule",)
+        data = _fields(data, keys, "draw_rule")
+        return cls(data["rule"], data.get("per_nine"))
+
+
+DEFAULT_DRAW_RULE = DrawRule.expert_cap(1)
+
+_SLOT_KEYS = ("id", "par", "transforms", "wind_seed", "wind_direction", "wind_speed")
+_LEGACY_SLOT_KEYS = ("id", "par", "transforms", "wind_seed")
+_LEGACY_SETTINGS_KEYS = (
     "prng_seed",
     "par",
     "sources",
@@ -159,6 +218,23 @@ _SETTINGS_KEYS = (
     "music",
     "mercy_point",
     "clubs",
+)
+_SETTINGS_KEYS = (
+    "prng_seed",
+    "par",
+    "sources",
+    "exclude_tags",
+    "allow_family_repeats",
+    "draw_rule",
+    "wind_speed_profile",
+    "wind_direction_profile",
+    "music",
+    "mercy_point",
+    "clubs",
+)
+#: the settings a schema 1 or 2 manifest doesn't have
+_SCHEMA_3_SETTINGS = tuple(
+    key for key in _SETTINGS_KEYS if key not in _LEGACY_SETTINGS_KEYS
 )
 
 
@@ -171,6 +247,11 @@ class Settings:
     sources: frozenset[str] = frozenset(SOURCES)
     exclude_tags: frozenset[str] = frozenset()
     allow_family_repeats: bool = False
+    draw_rule: DrawRule = DEFAULT_DRAW_RULE
+    #: how the holes' wind speeds are chosen, one of `wind.SPEED_PROFILES`
+    wind_speed_profile: str = VANILLA
+    #: how the holes' wind directions are chosen, one of `wind.DIRECTION_PROFILES`
+    wind_direction_profile: str = VANILLA
     #: a music slug, or "random"
     music: str = RANDOM
     #: the stroke a hole ends on with a tap-in; None leaves the patch out
@@ -200,6 +281,18 @@ class Settings:
             )
         if not isinstance(self.allow_family_repeats, bool):
             raise ManifestError("allow_family_repeats must be true or false")
+        if not isinstance(self.draw_rule, DrawRule):
+            raise ManifestError(f"draw_rule must be a DrawRule, got {self.draw_rule!r}")
+        if self.wind_speed_profile not in SPEED_PROFILES:
+            raise ManifestError(
+                f"wind_speed_profile must be one of {', '.join(SPEED_PROFILES)}, "
+                f"got {self.wind_speed_profile!r}"
+            )
+        if self.wind_direction_profile not in DIRECTION_PROFILES:
+            raise ManifestError(
+                f"wind_direction_profile must be one of {', '.join(DIRECTION_PROFILES)}, "
+                f"got {self.wind_direction_profile!r}"
+            )
         if self.music != RANDOM and self.music not in TRACKS:
             raise ManifestError(
                 f"music must be {RANDOM!r} or one of {', '.join(TRACKS)}, got {self.music!r}"
@@ -215,20 +308,33 @@ class Settings:
             "sources": [source for source in SOURCES if source in self.sources],
             "exclude_tags": sorted(self.exclude_tags),
             "allow_family_repeats": self.allow_family_repeats,
+            "draw_rule": self.draw_rule.to_json(),
+            "wind_speed_profile": self.wind_speed_profile,
+            "wind_direction_profile": self.wind_direction_profile,
             "music": self.music,
             "mercy_point": self.mercy_point,
             "clubs": self.clubs.to_json(),
         }
 
     @classmethod
-    def from_json(cls, data: object) -> "Settings":
-        data = _fields(data, _SETTINGS_KEYS, "settings")
+    def from_json(cls, data: object, legacy: bool = False) -> "Settings":
+        """Settings from a manifest. `legacy` reads a schema 1 or 2 manifest's, which have
+        no `draw_rule` or wind profiles: every seed then was drawn uniformly, with the
+        wind its seeds dealt."""
+        data = _fields(
+            data, _LEGACY_SETTINGS_KEYS if legacy else _SETTINGS_KEYS, "settings"
+        )
         return cls(
             prng_seed=data["prng_seed"],
             par=data["par"],
             sources=frozenset(_strings(data["sources"], "sources")),
             exclude_tags=frozenset(_strings(data["exclude_tags"], "exclude_tags")),
             allow_family_repeats=data["allow_family_repeats"],
+            draw_rule=DrawRule() if legacy else DrawRule.from_json(data["draw_rule"]),
+            wind_speed_profile=VANILLA if legacy else data["wind_speed_profile"],
+            wind_direction_profile=VANILLA
+            if legacy
+            else data["wind_direction_profile"],
             music=data["music"],
             mercy_point=data["mercy_point"],
             clubs=ClubRules.from_json(data["clubs"]),
@@ -242,12 +348,18 @@ class Slot:
     `wind_seed` is the 16-bit state the ROM's own RNG starts the hole from
     (docs/seeded_wind.md), not a PRNG seed for generation. `transforms` names hole
     transforms (`golf/randomizer/transforms.py`), applied to the hole in order.
+
+    `wind_direction` and `wind_speed` are the hole's wind anchors (docs/wind.md). Left
+    as None, each becomes the anchor `wind_seed` deals, which is the vanilla wind and
+    what every hole of a schema 1 or 2 manifest has.
     """
 
     id: HoleId
     par: int
     wind_seed: int
     transforms: tuple[str, ...] = ()
+    wind_direction: int | None = None
+    wind_speed: int | None = None
 
     def __post_init__(self):
         if not isinstance(self.id, HoleId):
@@ -260,6 +372,23 @@ class Slot:
             raise ManifestError(
                 f"{self.id}: wind_seed must be 0-65535, got {self.wind_seed!r}"
             )
+        dealt = self.dealt_wind
+        if self.wind_direction is None:
+            object.__setattr__(self, "wind_direction", dealt[0])
+        if self.wind_speed is None:
+            object.__setattr__(self, "wind_speed", dealt[1])
+        if (
+            not _is_int(self.wind_direction)
+            or self.wind_direction not in WIND_DIRECTIONS
+        ):
+            raise ManifestError(
+                f"{self.id}: wind_direction must be a multiple of 16 from 0 to 240, "
+                f"got {self.wind_direction!r}"
+            )
+        if not _is_int(self.wind_speed) or self.wind_speed not in WIND_SPEEDS:
+            raise ManifestError(
+                f"{self.id}: wind_speed must be 0-10, got {self.wind_speed!r}"
+            )
         object.__setattr__(self, "transforms", tuple(self.transforms))
         for name in self.transforms:
             if not isinstance(name, str):
@@ -271,17 +400,33 @@ class Slot:
             except TransformError as problem:
                 raise ManifestError(f"{self.id}: {problem}") from None
 
+    @property
+    def dealt_wind(self) -> tuple[int, int]:
+        """The (direction, speed) anchors the hole's wind seed deals with no table."""
+        forecast = predict_hole(self.wind_seed, swings=0)
+        return forecast.direction_anchor, forecast.speed_anchor
+
+    @property
+    def wind(self) -> tuple[int, int]:
+        """The hole's (direction, speed) anchors."""
+        assert self.wind_direction is not None and self.wind_speed is not None
+        return self.wind_direction, self.wind_speed
+
     def to_json(self) -> dict:
         return {
             "id": str(self.id),
             "par": self.par,
             "transforms": list(self.transforms),
             "wind_seed": self.wind_seed,
+            "wind_direction": self.wind_direction,
+            "wind_speed": self.wind_speed,
         }
 
     @classmethod
-    def from_json(cls, data: object) -> "Slot":
-        data = _fields(data, ("id", "par", "transforms", "wind_seed"), "hole")
+    def from_json(cls, data: object, legacy: bool = False) -> "Slot":
+        """A hole from a manifest. `legacy` reads a schema 1 or 2 manifest's, which has
+        no wind anchors: its holes played the wind their seeds dealt."""
+        data = _fields(data, _LEGACY_SLOT_KEYS if legacy else _SLOT_KEYS, "hole")
         text = data["id"]
         try:
             hole_id = HoleId.parse(text)
@@ -296,7 +441,14 @@ class Slot:
             raise ManifestError(
                 f"{hole_id}: transforms must be a list, got {transforms!r}"
             )
-        return cls(hole_id, data["par"], data["wind_seed"], tuple(transforms))
+        return cls(
+            hole_id,
+            data["par"],
+            data["wind_seed"],
+            tuple(transforms),
+            None if legacy else data["wind_direction"],
+            None if legacy else data["wind_speed"],
+        )
 
 
 @dataclass(frozen=True)
@@ -362,7 +514,7 @@ class Course:
         }
 
     @classmethod
-    def from_json(cls, data: object) -> "Course":
+    def from_json(cls, data: object, legacy: bool = False) -> "Course":
         data = _fields(
             data,
             ("holes", "music", "mercy_point", "clubs", "magic_words", "sram_magic"),
@@ -375,7 +527,7 @@ class Course:
                 f"magic_words must be a list, got {data['magic_words']!r}"
             )
         return cls(
-            holes=tuple(Slot.from_json(slot) for slot in data["holes"]),
+            holes=tuple(Slot.from_json(slot, legacy) for slot in data["holes"]),
             music=data["music"],
             mercy_point=data["mercy_point"],
             clubs=ClubRules.from_json(data["clubs"]),
@@ -384,6 +536,7 @@ class Course:
         )
 
 
+_READABLE = ", ".join(map(str, (*LEGACY_SCHEMAS, SCHEMA)))
 _MANIFEST_KEYS_V1 = (
     "schema",
     "generator_version",
@@ -418,11 +571,28 @@ class Manifest:
     course: Course
 
     def __post_init__(self):
-        if self.schema not in (LEGACY_SCHEMA, SCHEMA):
+        if self.schema not in (*LEGACY_SCHEMAS, SCHEMA):
             raise ManifestError(
                 f"unsupported manifest schema {self.schema!r}; this code reads schemas "
-                f"{LEGACY_SCHEMA} and {SCHEMA}"
+                f"{_READABLE}"
             )
+        if self.schema in LEGACY_SCHEMAS:
+            if self.settings.draw_rule != DrawRule():
+                raise ManifestError(
+                    f"manifest schema {self.schema} has no draw_rule; its seeds were "
+                    f"drawn uniformly, got {self.settings.draw_rule.to_json()}"
+                )
+            profiles = (
+                self.settings.wind_speed_profile,
+                self.settings.wind_direction_profile,
+            )
+            if profiles != (VANILLA, VANILLA) or any(
+                slot.wind != slot.dealt_wind for slot in self.course.holes
+            ):
+                raise ManifestError(
+                    f"manifest schema {self.schema} has no wind profiles or anchors; its "
+                    f"holes play the wind their seeds deal"
+                )
         for name in (
             "generator_version",
             "build_version",
@@ -457,23 +627,30 @@ class Manifest:
             "schema": self.schema,
             "generator_version": self.generator_version,
         }
-        if self.schema >= SCHEMA:
+        if self.schema != LEGACY_SCHEMA:
             data["build_version"] = self.build_version
             data["finish_abi_version"] = self.finish_abi_version
+        settings = self.settings.to_json()
+        course = self.course.to_json()
+        if self.schema in LEGACY_SCHEMAS:
+            for key in _SCHEMA_3_SETTINGS:
+                del settings[key]
+            for hole in course["holes"]:
+                del hole["wind_direction"], hole["wind_speed"]
         return data | {
             "catalog_version": self.catalog_version,
             "curation_stamp": self.curation_stamp,
-            "settings": self.settings.to_json(),
-            "course": self.course.to_json(),
+            "settings": settings,
+            "course": course,
         }
 
     @classmethod
     def from_json(cls, data: object) -> "Manifest":
         schema = data.get("schema") if isinstance(data, dict) else None
-        if schema not in (LEGACY_SCHEMA, SCHEMA):
+        if schema not in (*LEGACY_SCHEMAS, SCHEMA):
             raise ManifestError(
                 f"unsupported manifest schema {schema!r}; this code reads schemas "
-                f"{LEGACY_SCHEMA} and {SCHEMA}"
+                f"{_READABLE}"
             )
         keys = _MANIFEST_KEYS_V1 if schema == LEGACY_SCHEMA else _MANIFEST_KEYS_V2
         data = _fields(data, keys, "manifest")
@@ -492,8 +669,10 @@ class Manifest:
             ),
             catalog_version=data["catalog_version"],
             curation_stamp=data["curation_stamp"],
-            settings=Settings.from_json(data["settings"]),
-            course=Course.from_json(data["course"]),
+            settings=Settings.from_json(
+                data["settings"], legacy=schema in LEGACY_SCHEMAS
+            ),
+            course=Course.from_json(data["course"], legacy=schema in LEGACY_SCHEMAS),
         )
 
 

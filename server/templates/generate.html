@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% import "_wind.html" as wind %}
 {% block title %}{{ t_plain("generate.page_title") }}{% endblock %}
 {% block content %}
   <hgroup>
@@ -55,6 +56,40 @@
       </label>
       <small>{{ t("generate.family_repeats.help") }}</small>
     </fieldset>
+
+    <label for="generate-draw-rule">{{ t("generate.draw_rule.label") }}</label>
+    <select id="generate-draw-rule"
+            name="draw_rule"
+            aria-describedby="generate-draw-rule-help">
+      {% for rule in options.draw_rules %}
+        <option value="{{ rule }}" {% if form.draw_rule == rule %}selected{% endif %}>
+          {% if rule == "experts_0" %}{{ t_plain("generate.draw_rule.experts_0") }}
+          {% elif rule == "experts_1" %}{{ t_plain("generate.draw_rule.experts_1") }}
+      {% else %}{{ t_plain("generate.draw_rule.uniform") }}{% endif %}
+        </option>
+      {% endfor %}
+    </select>
+    <small id="generate-draw-rule-help">{{ t("generate.draw_rule.help") }}</small>
+
+    <label for="generate-wind-speed">{{ t("generate.wind_speed.label") }}</label>
+    <select id="generate-wind-speed" name="wind_speed">
+      {% for profile in options.wind_speeds %}
+        <option value="{{ profile }}"
+                {% if form.wind_speed == profile %}selected{% endif %}>
+          {{ wind.speed_name(profile) }}
+        </option>
+      {% endfor %}
+    </select>
+
+    <label for="generate-wind-direction">{{ t("generate.wind_direction.label") }}</label>
+    <select id="generate-wind-direction" name="wind_direction">
+      {% for profile in options.wind_directions %}
+        <option value="{{ profile }}"
+                {% if form.wind_direction == profile %}selected{% endif %}>
+          {{ wind.direction_name(profile) }}
+        </option>
+      {% endfor %}
+    </select>
 
     <label for="generate-music">{{ t("generate.music.label") }}</label>
     <select id="generate-music" name="music">

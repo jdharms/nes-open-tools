@@ -48,6 +48,7 @@ class TestRegistry:
             "peach_dress": {"color": 0x16},
             "signpost_color": {"color": 0x12},
             "seeded_wind": {"seed": "x"},
+            "wind_anchors": {"anchors": " ".join(["80/7"] * 18)},
             "qr_credentials": {"credentials": str(credentials_file)},
             "music_import": {"dump": "data/music/music_jp_courses.json"},
         }

@@ -7,6 +7,7 @@ from fastapi.testclient import TestClient
 
 from golf.randomizer.catalog import Catalog, HoleStore
 from golf.randomizer.curation import CurationSnapshot
+from golf.randomizer.manifest import SCHEMA
 from server.app import create_app
 from server.config import Config
 from server.timings import Sample
@@ -200,7 +201,7 @@ def test_withdrawal_keeps_the_seed_and_manifest_but_refuses_downloads(fake_build
     assert 'id="download-form"' not in public.text
     assert "download.js" not in public.text
     assert manifest.status_code == 200
-    assert manifest.json()["schema"] == 2
+    assert manifest.json()["schema"] == SCHEMA
     assert refused.status_code == 410
     assert refused.json() == {"error": "seed_withdrawn", "values": {}}
     assert entries == 0
@@ -382,7 +383,8 @@ def test_a_voided_rounds_permalink_is_gone_and_comes_back_with_it(fake_builder):
     assert f'href="/h/{seed_id}"' in gone.text
     # the void note is the admin's alone, and no scores are shown
     assert "warm-up" not in gone.text
-    assert "90" not in gone.text[gone.text.index("<main") :]
+    # only the page's own content: the footer's release can hold any digits
+    assert "90" not in gone.text[gone.text.index("<main") : gone.text.index("</main>")]
     assert back.status_code == 200
     assert "round.heading" in back.text
 

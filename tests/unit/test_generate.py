@@ -16,17 +16,19 @@ from golf.randomizer.catalog import (
     HoleId,
     RomSource,
 )
-from golf.randomizer.curation import CurationSnapshot
+from golf.randomizer.curation import EXPERT_TAG, CurationSnapshot
 from golf.randomizer.generate import GENERATOR_VERSION, GenerationError, generate
 from golf.randomizer.layout import COUNTS, satisfies
 from golf.randomizer.manifest import (
     SCHEMA,
     ClubRules,
+    DrawRule,
     Manifest,
     Settings,
     required_roms,
 )
 from golf.randomizer.pool import build_pool
+from golf.randomizer.wind import BANDS, DIRECTION_PROFILES, SPEED_PROFILES
 
 
 @pytest.fixture(scope="module")
@@ -74,9 +76,9 @@ def test_draws_a_prng_seed_when_the_settings_have_none(real_catalog, real_curati
 
 def test_records_versions_and_round_trips(real_catalog, real_curation):
     manifest = generate(real_catalog, real_curation, Settings(prng_seed="abc"))
-    assert manifest.schema == SCHEMA == 2
+    assert manifest.schema == SCHEMA == 3
     assert manifest.generator_version == GENERATOR_VERSION
-    assert manifest.build_version == BUILD_VERSION == 5
+    assert manifest.build_version == BUILD_VERSION == 6
     assert manifest.finish_abi_version == FINISH_ABI_VERSION == 2
     assert manifest.catalog_version == real_catalog.version
     assert manifest.curation_stamp == real_curation.stamp
@@ -239,3 +241,229 @@ def test_reports_a_pool_the_family_rule_leaves_too_small():
 def test_reports_filters_that_empty_the_pool(real_catalog, real_curation):
     with pytest.raises(GenerationError, match="par 5: 0"):
         generate(minimal_catalog(par5=0), real_curation, Settings(prng_seed="abc"))
+
+
+# -- Draw rules -------------------------------------------------------------------------------
+
+
+def experts_by_nine(manifest: Manifest, curation: CurationSnapshot) -> tuple[int, int]:
+    expert = [
+        EXPERT_TAG in curation.for_hole(slot.id).tags for slot in manifest.course.holes
+    ]
+    return sum(expert[:9]), sum(expert[9:])
+
+
+def expert_catalog(experts: int = 6) -> tuple[Catalog, CurationSnapshot]:
+    """Enough ordinary holes for any layout, plus `experts` par 4 expert holes."""
+    extra = [entry(f"t/expert_{n}", 4, JP_ROM) for n in range(experts)]
+    catalog = minimal_catalog(par3=5, par4=12, par5=5, extra=extra)
+    curation = CurationSnapshot.from_json(
+        {str(item.id.lineage): {"tags": [EXPERT_TAG]} for item in extra}
+    )
+    return catalog, curation
+
+
+def test_the_real_curation_tags_expert_holes(real_catalog, real_curation):
+    pool = build_pool(real_catalog, real_curation, Settings())
+    assert len(pool.experts) == 21
+    assert all(hole_id.lineage.startswith("jp_") for hole_id in pool.experts)
+
+
+@pytest.mark.parametrize("per_nine", [0, 1, 2])
+def test_an_expert_cap_holds_on_each_nine_of_real_seeds(
+    real_catalog, real_curation, per_nine
+):
+    most = 0
+    for seed in range(60):
+        manifest = generate(
+            real_catalog,
+            real_curation,
+            Settings(prng_seed=str(seed), draw_rule=DrawRule.expert_cap(per_nine)),
+        )
+        nines = experts_by_nine(manifest, real_curation)
+        assert max(nines) <= per_nine, f"seed {seed}: {nines}"
+        assert satisfies(manifest.course.layout, COUNTS[72])
+        assert len({slot.id for slot in manifest.course.holes}) == 18
+        most = max(most, *nines)
+    assert most == per_nine, "the cap was never reached, so it was never tested"
+
+
+def test_a_uniform_draw_goes_over_the_cap_on_real_seeds(real_catalog, real_curation):
+    """What the cap is for: without it, real seeds put several expert holes on a nine."""
+    worst = max(
+        max(
+            experts_by_nine(
+                generate(
+                    real_catalog,
+                    real_curation,
+                    Settings(prng_seed=str(seed), draw_rule=DrawRule()),
+                ),
+                real_curation,
+            )
+        )
+        for seed in range(40)
+    )
+    assert worst > 1
+
+
+def test_a_capped_seed_never_repeats_a_family(real_catalog, real_curation):
+    label_of = {
+        lineage: label
+        for label, members in real_curation.families().items()
+        for lineage in members
+    }
+    for seed in range(40):
+        holes = generate(
+            real_catalog,
+            real_curation,
+            Settings(prng_seed=str(seed), draw_rule=DrawRule.expert_cap(1)),
+        ).course.holes
+        drawn = [
+            label_of[slot.id.lineage] for slot in holes if slot.id.lineage in label_of
+        ]
+        assert len(drawn) == len(set(drawn)), f"seed {seed} repeated a family: {drawn}"
+
+
+def test_a_capped_draw_is_the_same_for_the_same_seed():
+    catalog, curation = expert_catalog()
+    settings = Settings(prng_seed="abc", draw_rule=DrawRule.expert_cap(1))
+    assert generate(catalog, curation, settings) == generate(
+        catalog, curation, settings
+    )
+
+
+def test_expert_holes_land_on_every_slot_of_a_nine():
+    """Filling the slots in play order would gather a nine's expert holes at its start."""
+    catalog, curation = expert_catalog()
+    seen = set()
+    for seed in range(300):
+        manifest = generate(
+            catalog,
+            curation,
+            Settings(prng_seed=str(seed), draw_rule=DrawRule.expert_cap(1)),
+        )
+        seen |= {
+            number
+            for number, slot in enumerate(manifest.course.holes)
+            if EXPERT_TAG in curation.for_hole(slot.id).tags
+        }
+    par_fours = set()
+    for seed in range(300):
+        layout = generate(
+            catalog, curation, Settings(prng_seed=str(seed))
+        ).course.layout
+        par_fours |= {number for number, par in enumerate(layout) if par == 4}
+    assert seen == par_fours
+    assert {number % 9 for number in seen} == set(range(9))
+
+
+def test_a_cap_of_zero_leaves_a_mixed_family_its_other_member():
+    """An expert hole's twin can still be drawn from the family they share."""
+    twins = [entry("t/twin_expert", 4, JP_ROM), entry("t/twin_plain", 4)]
+    catalog = minimal_catalog(par4=9, extra=twins)
+    curation = CurationSnapshot.from_json(
+        {
+            "t/twin_expert": {"family": "twin", "tags": [EXPERT_TAG]},
+            "t/twin_plain": {"family": "twin"},
+        }
+    )
+    drawn = set()
+    for seed in range(30):
+        course = generate(
+            catalog,
+            curation,
+            Settings(prng_seed=str(seed), draw_rule=DrawRule.expert_cap(0)),
+        ).course
+        drawn |= {str(slot.id) for slot in course.holes}
+    assert "t/twin_plain" in drawn and "t/twin_expert" not in drawn
+
+
+def test_a_capped_draw_needs_a_course_without_expert_holes():
+    """Expert holes are extras: the pool must fill the layout without them at any cap."""
+    extra = [entry(f"t/expert_{n}", 4, JP_ROM) for n in range(6)]
+    catalog = minimal_catalog(par4=5, extra=extra)
+    curation = CurationSnapshot.from_json(
+        {str(item.id.lineage): {"tags": [EXPERT_TAG]} for item in extra}
+    )
+    with pytest.raises(GenerationError, match="without expert holes"):
+        generate(
+            catalog,
+            curation,
+            Settings(prng_seed="abc", draw_rule=DrawRule.expert_cap(9)),
+        )
+    assert generate(catalog, curation, Settings(prng_seed="abc", draw_rule=DrawRule()))
+
+
+# -- Wind profiles ----------------------------------------------------------------------------
+
+
+def test_vanilla_profiles_give_each_hole_the_wind_its_seed_deals(
+    real_catalog, real_curation
+):
+    course = generate(real_catalog, real_curation, Settings(prng_seed="abc")).course
+    assert all(slot.wind == slot.dealt_wind for slot in course.holes)
+
+
+def test_wind_profiles_set_the_anchors_and_nothing_else(real_catalog, real_curation):
+    plain = generate(real_catalog, real_curation, Settings(prng_seed="abc"))
+    windy = generate(
+        real_catalog,
+        real_curation,
+        Settings(
+            prng_seed="abc",
+            wind_speed_profile="back_nine_pressure",
+            wind_direction_profile="headwind_out",
+        ),
+    )
+    assert [slot.wind for slot in windy.course.holes] != [
+        slot.wind for slot in plain.course.holes
+    ]
+    for number, (slot, before) in enumerate(
+        zip(windy.course.holes, plain.course.holes, strict=True)
+    ):
+        assert (slot.id, slot.par, slot.wind_seed) == (
+            before.id,
+            before.par,
+            before.wind_seed,
+        )
+        direction, speed = slot.wind
+        assert speed in (BANDS["gentle"] if number < 9 else BANDS["strong"])
+        center = 0x80 if number < 9 else 0x00
+        assert ((direction - center) // 0x10 + 8) % 16 - 8 in range(-2, 3)
+    assert (windy.course.music, windy.course.magic_words) == (
+        plain.course.music,
+        plain.course.magic_words,
+    )
+    assert Manifest.from_json(json.loads(json.dumps(windy.to_json()))) == windy
+
+
+def test_the_two_wind_profiles_draw_from_their_own_streams(real_catalog, real_curation):
+    def holes(**profiles):
+        settings = Settings(prng_seed="abc", **profiles)
+        return generate(real_catalog, real_curation, settings).course.holes
+
+    both = holes(wind_speed_profile="strong", wind_direction_profile="prevailing")
+    speed_only = holes(wind_speed_profile="strong")
+    direction_only = holes(wind_direction_profile="prevailing")
+    assert [slot.wind_speed for slot in both] == [
+        slot.wind_speed for slot in speed_only
+    ]
+    assert [slot.wind_direction for slot in both] == [
+        slot.wind_direction for slot in direction_only
+    ]
+    # a vanilla part keeps the seed's own anchor beside a profiled one
+    assert all(slot.wind_direction == slot.dealt_wind[0] for slot in speed_only)
+    assert all(slot.wind_speed == slot.dealt_wind[1] for slot in direction_only)
+
+
+@pytest.mark.parametrize("speed", SPEED_PROFILES)
+@pytest.mark.parametrize("direction", DIRECTION_PROFILES)
+def test_every_pair_of_wind_profiles_generates(
+    real_catalog, real_curation, speed, direction
+):
+    settings = Settings(
+        prng_seed="abc", wind_speed_profile=speed, wind_direction_profile=direction
+    )
+    manifest = generate(real_catalog, real_curation, settings)
+    assert manifest.settings.wind_speed_profile == speed
+    assert manifest.settings.wind_direction_profile == direction

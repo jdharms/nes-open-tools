@@ -35,7 +35,7 @@ time touches it. So the build is split at the manifest boundary and no job queue
 needed:
 
 - **Unfinished.** Run once at generation time: the base patches, the course, seeded
-  wind, music, mercy tap-in, the green detail view and scorecard shortcuts, the magic
+  wind, each hole's wind anchors, the wind fix, music, mercy tap-in, the green detail view and scorecard shortcuts, the magic
   words on the menus and scorecard, signpost, the round stats the QR code sends (fairways
   hit and penalty strokes), and the scorecard QR image with its credential placeholders
   unfilled. The manifest also carries
@@ -276,7 +276,9 @@ says so, a ROM playtested. Items 1 to 6 build the library; 7 onward build the si
    a layout, chooses the music, derives the wind seeds and draws the magic words, each from
    its own stream of the PRNG seed. Schema 2 adds `build_version` and
    `finish_abi_version`; schema 1 is read as historical build version 1 and finish ABI 1
-   without being rewritten. See `docs/manifest.md`.
+   without being rewritten. Schema 3 adds the `draw_rule` setting, which picks the hole
+   draw, and the two wind profile settings with each hole's wind anchors; schemas 1 and
+   2 are read as uniform draws with the wind their seeds deal. See `docs/manifest.md`.
 4. **QR patch split.** Done: `scorecard_qr` (`golf/core/patches/scorecard_qr.py`) writes
    the image with its placeholders at the fill; `qr_credentials`
    (`golf/core/patches/qr_credentials.py`) is three byte patches that fill them, expecting

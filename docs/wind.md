@@ -2,7 +2,7 @@
 
 > **Note**: This document was written by Claude based on reverse-engineering requested by jdharms. Distributions were computed with the Python model in `golf/core/patches/seeded_wind.py`, not measured in play.
 
-How the vanilla game picks, varies and applies wind. The RNG itself, its call sites and the per-player wind slots are in `docs/seeded_wind.md`.
+How the vanilla game picks, varies and applies wind. The RNG itself, its call sites and the per-player wind slots are in `docs/seeded_wind.md`. How a randomizer seed chooses each hole's anchors is in `docs/wind_profiles.md`.
 
 ## Variables
 
@@ -166,7 +166,21 @@ The error is lopsided. `$40` and `$50` gain a large push toward the tee, costing
 
 The correct set is closed under the reversal at `$DA3F` (`EOR #$80`), so a hole whose anchor is correct stays correct on every swing.
 
+### The fix
+
+The `wind_fix` patch (`golf/core/patches/wind_fix.py`) wraps the lookup inside the table. For an index of `$00`-`$7F`, `(a + $40) mod $80` is `a EOR $40`, which is a byte shorter than the add:
+
+```
+$E7C3  18 69 40   CLC / ADC #$40    ->    49 40 EA   EOR #$40 / NOP
+```
+
+`LE7C6`, the `TAX / LDA TrigLookupTable,X / RTS` that follows, stays at `$E7C6`; `RotateVector16` calls it at `$E64B` and `$E659` with indexes it has already masked. With the patch every direction's actual bearing is its displayed bearing, at full strength.
+
+`LE7C3` has one other caller, `CalcLaunchVector` at bank 13 `$AEA2`, which passes the launch angle: `ClubLoftIndexTable[club]` plus or minus `ClubHiLoStepTable[club]`, `$00`-`$27` over the 16 clubs. Below `$40` the two forms read the same entry, so launches are unchanged.
+
+Every randomizer seed from unfinished build version 6 has the patch (`docs/manifest.md`, **Schema history**). `tests/integration/test_wind_fix_rom.py` runs `LE7C3` and `ApplyWindEffect` from the patched ROM under py65. The Python physics model ports the vanilla lookup and does not describe a patched ROM (`docs/shot_physics.md`).
+
 ## Not verified
 
-- None of the above has been checked in an emulator. The vector table and the direction of push follow from the code and the course data; one Mesen breakpoint on `$B59C` with a `$40` wind would confirm them.
+- The fix has been played once: on 2026-10-06 jdharms rolled a build 6 seed on a development site, and in training mode with the wind set to 9 left and 9 right (`$C0` and `$40`) the ball's drift looked correct. The other directions, and the vanilla behavior described above, have not been checked in an emulator. The vector table and the direction of push follow from the code and the course data; one Mesen breakpoint on `$B59C` with a `$40` wind would confirm them.
 - That the in-game wind arrow shows the nominal direction. The display code has not been read.

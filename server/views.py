@@ -17,8 +17,10 @@ from golf.randomizer.curation import CurationSnapshot
 from golf.randomizer.manifest import SOURCES, ClubRules, required_roms
 from golf.randomizer.music import TRACKS, Track
 from golf.randomizer.roms import VanillaRom, vanilla_rom
+from golf.randomizer.wind import DIRECTION_PROFILES, SPEED_PROFILES
 
 from .forms import (
+    DRAW_RULE_CHOICES,
     MUSIC_CHOICES,
     PARS,
     RULE_CLUBS,
@@ -62,6 +64,11 @@ class GenerateOptions:
     pars: tuple[int, ...]
     sources: tuple[VanillaRom, ...]
     music: tuple[MusicOption, ...]
+    #: the draw rule select's values, each labeled by its own strings key in generate.html
+    draw_rules: tuple[str, ...]
+    #: the wind selects' values, each named by `_wind.html`
+    wind_speeds: tuple[str, ...]
+    wind_directions: tuple[str, ...]
     club_labels: tuple[str, ...]
     clubs_max: int
 
@@ -77,6 +84,9 @@ def generate_options() -> GenerateOptions:
             for slug in MUSIC_CHOICES
             if slug in TRACKS
         ),
+        draw_rules=tuple(DRAW_RULE_CHOICES),
+        wind_speeds=SPEED_PROFILES,
+        wind_directions=DIRECTION_PROFILES,
         club_labels=tuple(club.label for club in RULE_CLUBS),
         clubs_max=BAG_SIZE,
     )
@@ -206,6 +216,12 @@ class SeedView:
     par_target: int
     sources: tuple[VanillaRom, ...]
     allow_family_repeats: bool
+    #: the draw rule's name, as `golf.randomizer.manifest.DRAW_RULES` has it
+    draw_rule: str
+    #: the most expert holes on a nine under the expert cap, None under any other rule
+    experts_per_nine: int | None
+    wind_speed_profile: str
+    wind_direction_profile: str
     mercy_point: int | None
     clubs_max: int
     banned: tuple[str, ...]
@@ -292,6 +308,10 @@ def seed_view(
             vanilla_rom(source) for source in SOURCES if source in settings.sources
         ),
         allow_family_repeats=settings.allow_family_repeats,
+        draw_rule=settings.draw_rule.rule,
+        experts_per_nine=settings.draw_rule.per_nine,
+        wind_speed_profile=settings.wind_speed_profile,
+        wind_direction_profile=settings.wind_direction_profile,
         mercy_point=course.mercy_point,
         clubs_max=course.clubs.max,
         banned=tuple(club.label for club in sorted(course.clubs.banned)),

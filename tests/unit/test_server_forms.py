@@ -7,11 +7,18 @@ from golf.core.patches.extended_sram_defaults import BallSpin, SwingSpeed
 from golf.core.patches.sram_defaults import VANILLA_CLUBS, VANILLA_NAME, Club
 from golf.randomizer.build import PlayerOptions
 from golf.randomizer.catalog import JP_ROM, US_ROM
-from golf.randomizer.manifest import DEFAULT_MERCY_POINT, ClubRules, Settings
+from golf.randomizer.manifest import (
+    DEFAULT_MERCY_POINT,
+    ClubRules,
+    DrawRule,
+    Settings,
+)
 from golf.randomizer.roms import vanilla_rom
+from golf.randomizer.wind import DIRECTION_PROFILES, SPEED_PROFILES
 from server.forms import (
     CLUBS_BANNED,
     CLUBS_OVER_MAX,
+    DRAW_RULE_CHOICES,
     INVALID,
     INVALID_NAME,
     MUSIC_CHOICES,
@@ -81,6 +88,9 @@ def test_every_field_reaches_the_settings():
         par="70",
         sources={US_ROM},
         allow_family_repeats=True,
+        draw_rule="experts_0",
+        wind_speed="storm_passing",
+        wind_direction="tailwind_out",
         music="jp_france",
         clubs_max="10",
         banned={"1W", "sw"},
@@ -90,6 +100,9 @@ def test_every_field_reaches_the_settings():
         par=70,
         sources=frozenset({US_ROM}),
         allow_family_repeats=True,
+        draw_rule=DrawRule.expert_cap(0),
+        wind_speed_profile="storm_passing",
+        wind_direction_profile="tailwind_out",
         music="jp_france",
         clubs=ClubRules(
             max=10,
@@ -104,10 +117,48 @@ def test_a_submission_round_trips_through_its_pairs():
         par="71",
         sources={JP_ROM},
         allow_family_repeats=True,
+        draw_rule="uniform",
+        wind_speed="gentle",
+        wind_direction="prevailing",
         banned={"2I"},
         required_bag={"1W"},
     )
     assert FormState.from_form(FormData([*submitted.to_pairs()])) == submitted
+
+
+def test_the_form_offers_three_draw_rules_and_starts_on_the_default():
+    assert {
+        "experts_0": DrawRule.expert_cap(0),
+        "experts_1": DrawRule.expert_cap(1),
+        "uniform": DrawRule(),
+    } == DRAW_RULE_CHOICES
+    assert DRAW_RULE_CHOICES[FormState.default().draw_rule] == Settings().draw_rule
+    for name, rule in DRAW_RULE_CHOICES.items():
+        assert submit(draw_rule=name).draw_rule == rule
+
+
+@pytest.mark.parametrize("value", ["", "experts_2", "expert_cap", "ceiling"])
+def test_a_draw_rule_the_form_does_not_offer_is_refused(value):
+    problem = refusal(draw_rule=value)
+    assert (problem.reason, problem.values) == (INVALID, {"field": "draw_rule"})
+
+
+def test_the_form_offers_every_wind_profile_and_starts_on_vanilla():
+    assert (FormState.default().wind_speed, FormState.default().wind_direction) == (
+        "vanilla",
+        "vanilla",
+    )
+    for profile in SPEED_PROFILES:
+        assert submit(wind_speed=profile).wind_speed_profile == profile
+    for profile in DIRECTION_PROFILES:
+        assert submit(wind_direction=profile).wind_direction_profile == profile
+
+
+@pytest.mark.parametrize("field", ["wind_speed", "wind_direction"])
+@pytest.mark.parametrize("value", ["", "hurricane", "VANILLA"])
+def test_a_wind_profile_the_form_does_not_offer_is_refused(field, value):
+    problem = refusal(**{field: value})
+    assert (problem.reason, problem.values) == (INVALID, {"field": field})
 
 
 def test_unknown_fields_and_blank_space_are_ignored():
@@ -115,6 +166,9 @@ def test_unknown_fields_and_blank_space_are_ignored():
         [
             ("par", " 72 "),
             ("sources", US_ROM),
+            ("draw_rule", " experts_1 "),
+            ("wind_speed", "vanilla"),
+            ("wind_direction", "vanilla"),
             ("music", "random"),
             ("clubs_max", "14"),
             ("prng_seed", "x"),

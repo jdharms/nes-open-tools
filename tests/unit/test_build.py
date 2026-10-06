@@ -47,6 +47,7 @@ from golf.randomizer.manifest import (
     LEGACY_FINISH_ABI_VERSION,
     LEGACY_SCHEMA,
     ClubRules,
+    DrawRule,
     Settings,
 )
 from golf.randomizer.music import TRACKS
@@ -63,6 +64,7 @@ def test_historical_build_versions_are_refused_before_building():
         schema=LEGACY_SCHEMA,
         build_version=LEGACY_BUILD_VERSION,
         finish_abi_version=LEGACY_FINISH_ABI_VERSION,
+        settings=replace(current.settings, draw_rule=DrawRule()),
     )
     with pytest.raises(BuildError, match="requires unfinished build version 1"):
         build_unfinished(legacy, Catalog.load(), HoleStore(), b"")

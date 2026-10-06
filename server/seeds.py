@@ -80,7 +80,7 @@ def manifest_text(manifest: Manifest) -> str:
 
 
 def hole_rows(seed_id: str, manifest: Manifest) -> list[tuple]:
-    """The seed's `seed_holes` rows: each slot with the pin and wind anchors its wind seed gives."""
+    """The seed's `seed_holes` rows: each slot with the pin its wind seed gives and its wind anchors."""
     rows = []
     for position, slot in enumerate(manifest.course.holes, start=1):
         forecast = predict_hole(slot.wind_seed, swings=0)
@@ -93,8 +93,8 @@ def hole_rows(seed_id: str, manifest: Manifest) -> list[tuple]:
                 slot.par,
                 slot.wind_seed,
                 forecast.pin_index,
-                forecast.direction_anchor,
-                forecast.speed_anchor,
+                slot.wind_direction,
+                slot.wind_speed,
             )
         )
     return rows

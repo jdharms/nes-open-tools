@@ -1,9 +1,5 @@
 Now:
 
-1. Layering ADR: Request → (resolve) → Settings → (generate) → Course → Unfinished ROM → Finished ROM
-2. Wind fix
-3. Draw rules as concrete settings: uniform, expert cap, per-nine ceiling, with difficulty scores in curation. These are useful through the form and CLI even without mystery requests.
-4. Wind Profiles as concrete settings.
 5. Resolve step and mystery generation, using CLI.
 6. Mystery
 
@@ -26,6 +22,7 @@ V4.0 - The Wind Update
 V5.0 - Randomization Updates
 V6.0 - Seed of the Day
 V7.0 - Graphics and artwork
+V8.0 - The Par 3 Update
 
 Ideas for Dale/Coach's dialogue:
 * Golf fun facts
@@ -33,7 +30,6 @@ Ideas for Dale/Coach's dialogue:
 * Vague, ominous koans: "You choose the club, the shot chooses you."
 * Wrong sport coach.  Gives advice for bowling, badminton, swimming, chess, starcraft (another flavor of bad coach)
 * 4th wall breaking coach (kind of like the triforce text)
-
 
 In-game/vanilla rom investigations:
 * Do bunker lips do anything?

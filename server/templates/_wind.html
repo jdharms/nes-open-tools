@@ -1,0 +1,24 @@
+{# The names of the wind profiles, shared by the generate form's selects and the seed
+   page's details. Values are named as golf/randomizer/wind.py's SPEED_PROFILES and
+   DIRECTION_PROFILES. #}
+
+{% macro speed_name(profile) -%}
+  {%- if profile == "gentle" -%}{{ t_plain("wind.speed.gentle") }}
+  {%- elif profile == "moderate" -%}{{ t_plain("wind.speed.moderate") }}
+  {%- elif profile == "strong" -%}{{ t_plain("wind.speed.strong") }}
+  {%- elif profile == "storm_rolling_in" -%}{{ t_plain("wind.speed.storm_rolling_in") }}
+  {%- elif profile == "dying_wind" -%}{{ t_plain("wind.speed.dying_wind") }}
+  {%- elif profile == "storm_passing" -%}{{ t_plain("wind.speed.storm_passing") }}
+  {%- elif profile == "back_nine_pressure" -%}{{ t_plain("wind.speed.back_nine_pressure") }}
+  {%- else -%}{{ t_plain("wind.speed.vanilla") }}
+  {%- endif -%}
+{%- endmacro %}
+
+{% macro direction_name(profile) -%}
+  {%- if profile == "prevailing" -%}{{ t_plain("wind.direction.prevailing") }}
+  {%- elif profile == "out_and_back" -%}{{ t_plain("wind.direction.out_and_back") }}
+  {%- elif profile == "headwind_out" -%}{{ t_plain("wind.direction.headwind_out") }}
+  {%- elif profile == "tailwind_out" -%}{{ t_plain("wind.direction.tailwind_out") }}
+  {%- else -%}{{ t_plain("wind.direction.vanilla") }}
+  {%- endif -%}
+{%- endmacro %}

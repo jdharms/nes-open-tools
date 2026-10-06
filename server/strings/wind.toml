@@ -1,0 +1,55 @@
+# Wind profile names (_wind.html), shown as the generate form's options and in the seed
+# page's details.
+# Format: see common.toml, and server/CLAUDE.md "Player-facing text".
+
+[wind.speed.vanilla]
+note = "plain: wind speed profile name, the default; each hole's wind speed as the unmodified game deals it"
+text = "Vanilla"
+
+[wind.speed.gentle]
+note = "plain: wind speed profile name; light wind on every hole"
+text = "Gentle"
+
+[wind.speed.moderate]
+note = "plain: wind speed profile name; medium wind on every hole"
+text = "Moderate"
+
+[wind.speed.strong]
+note = "plain: wind speed profile name; strong wind on every hole"
+text = "Strong"
+
+[wind.speed.storm_rolling_in]
+note = "plain: wind speed profile name; light for the first holes, building unevenly to strong by the last"
+text = "Storm rolling in"
+
+[wind.speed.dying_wind]
+note = "plain: wind speed profile name; strong for the first holes, settling unevenly to light by the last"
+text = "Storm falling off"
+
+[wind.speed.storm_passing]
+note = "plain: wind speed profile name; calm at the start and finish; builds to a peak somewhere mid-round (holes 7-12), then falls away"
+text = "Storm passing through"
+
+[wind.speed.back_nine_pressure]
+note = "plain: wind speed profile name; light on the front nine, strong on the back nine"
+text = "Back nine pressure"
+
+[wind.direction.vanilla]
+note = "plain: wind direction profile name, the default; any direction on any hole, as the unmodified game deals it"
+text = "Vanilla"
+
+[wind.direction.prevailing]
+note = "plain: wind direction profile name; blows roughly one way all round, the way random per seed"
+text = "Prevailing"
+
+[wind.direction.out_and_back]
+note = "plain: wind direction profile name; roughly one way on the front nine and the opposite way on the back, the way random per seed"
+text = "Out and back"
+
+[wind.direction.headwind_out]
+note = "plain: wind direction profile name; roughly a headwind on the front nine and a tailwind on the back"
+text = "Headwind out"
+
+[wind.direction.tailwind_out]
+note = "plain: wind direction profile name; roughly a tailwind on the front nine and a headwind on the back"
+text = "Tailwind out"

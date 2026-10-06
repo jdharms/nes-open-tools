@@ -2,7 +2,7 @@
 The two-stage build: a manifest into an unfinished ROM, and an unfinished ROM into a finished one.
 
 - **Unfinished**, once per seed: the base patches, the course with each slot's hole
-  transforms applied, seeded wind, the course theme,
+  transforms applied, seeded wind, each hole's wind anchors, the wind fix, the course theme,
   mercy tap-in, the green detail view and scorecard shortcuts, the round stats the QR code
   sends (fairways hit and penalty strokes), the scorecard QR image with
   its credential placeholders at the fill, the signpost banner, the magic words on the
@@ -38,6 +38,7 @@ from golf.core.patches import (
     QR_DISABLE_PATCH,
     ROUND_STATS_PATCH,
     SCORECARD_QR_PATCH,
+    WIND_FIX_PATCH,
     WRAM_EXPANSION_PATCH,
     CompositePatch,
     CoursePatch,
@@ -54,6 +55,7 @@ from golf.core.patches import (
     scorecard_course_name_patch,
     seeded_wind_patch,
     sram_defaults_patch,
+    wind_anchors_patch,
 )
 from golf.core.patches.extended_sram_defaults import (
     EXTENDED_SRAM_DEFAULTS_PATCH,
@@ -85,7 +87,7 @@ SIGNPOST_ART = (
 MAX_SEED_ID = (1 << (8 * payload.SEED_ID_LEN)) - 1
 MAX_PLAYER_ID = (1 << (8 * payload.PLAYER_ID_LEN)) - 1
 #: the unfinished-ROM recipe this release implements
-BUILD_VERSION = 5
+BUILD_VERSION = 6
 #: the interface current unfinished ROMs expose to the per-download finisher
 FINISH_ABI_VERSION = 2
 
@@ -240,6 +242,8 @@ def unfinished_steps(
         COURSE_MIRRORS_PATCH,
         CoursePatch(holes),
         seeded_wind_patch(seeds=[slot.wind_seed for slot in course.holes]),
+        wind_anchors_patch([slot.wind for slot in course.holes]),
+        WIND_FIX_PATCH,
         music_step(course.music),
     ]
     if course.mercy_point is not None:

@@ -9,13 +9,14 @@ gain a way to ask for them.
 Holes a curator put in one family form one `Family`; every other hole is a family of its
 own, and so is every hole when the settings allow family repeats. Generation draws a
 family per slot and then a member of it, so a hole with a twin is no likelier than a hole
-without one. See docs/manifest.md.
+without one. The pool also names its expert holes, the ones curation tags `expert`, for
+the draw rule that caps them. See docs/manifest.md.
 """
 
 from dataclasses import dataclass, field
 
-from .catalog import Catalog, CatalogEntry, RomSource
-from .curation import CurationSnapshot
+from .catalog import Catalog, CatalogEntry, HoleId, RomSource
+from .curation import EXPERT_TAG, CurationSnapshot
 from .manifest import Settings
 
 
@@ -39,6 +40,8 @@ class Pool:
     """Families sorted by key, members sorted by id, so seeded draws are reproducible."""
 
     families: tuple[Family, ...]
+    #: the pool's holes curation tags `expert`, which the expert-cap draw rule counts
+    experts: frozenset[HoleId] = frozenset()
 
     def families_with_par(self, par: int) -> int:
         return sum(par in family.pars for family in self.families)
@@ -53,6 +56,7 @@ def build_pool(
     catalog: Catalog, curation: CurationSnapshot, settings: Settings
 ) -> Pool:
     groups: dict[str, list[CatalogEntry]] = {}
+    experts = set()
     for lineage, entry in sorted(catalog.newest().items()):
         record = curation.for_hole(entry.id)
         if not record.drawable or source_rom(entry) not in settings.sources:
@@ -65,6 +69,9 @@ def build_pool(
             else record.family
         )
         groups.setdefault(key, []).append(entry)
+        if EXPERT_TAG in record.tags:
+            experts.add(entry.id)
     return Pool(
-        tuple(Family(key, tuple(members)) for key, members in sorted(groups.items()))
+        tuple(Family(key, tuple(members)) for key, members in sorted(groups.items())),
+        frozenset(experts),
     )

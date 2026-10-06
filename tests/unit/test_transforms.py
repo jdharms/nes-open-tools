@@ -90,5 +90,5 @@ def test_transform_output_is_frozen(vanilla_courses, vanilla_jp_courses, text):
         for hole_id, hole in holes
     )
     actual = hashlib.sha256("".join(lines).encode()).hexdigest()
-    assert BUILD_VERSION == 5
+    assert BUILD_VERSION == 6
     assert actual == GOLDEN[text]

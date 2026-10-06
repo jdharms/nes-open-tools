@@ -81,7 +81,7 @@ new version is published:
 
 | Field | Default | Meaning |
 |---|---|---|
-| `tags` | none | Labels pool filters match on |
+| `tags` | none | Labels pool filters match on, and `expert`, below |
 | `drawable` | true | False retires the lineage from new seeds |
 | `family` | none | Holes judged to be the same hole |
 | `display_name` | none | Name for the seed page |
@@ -89,6 +89,13 @@ new version is published:
 An uncurated lineage gets the defaults, so a new catalog entry is drawable with no tags.
 Unknown fields and versioned keys are load errors, and a test checks that every curated
 lineage exists in the index.
+
+**The `expert` tag** marks an expert hole, which the `expert_cap` draw rule limits on each
+nine ([manifest.md](manifest.md), **Draw rules**). It is on the 21 Mario Open holes that
+play worse against par than every NES Open hole ([hole_difficulty.md](hole_difficulty.md),
+**Expert holes**), a list jdharms's league-mates reviewed. The tag is the record: it was
+set from that list once, and a later re-solve that moves a hole across the line changes
+nothing until a person edits the tag. Like any tag it can also go in `exclude_tags`.
 
 **Families** are a person's judgment, never a computed one. Every lineage with the same
 label is in the same family, and a lineage is in at most one. Examples are a vanilla hole

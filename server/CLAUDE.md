@@ -252,7 +252,8 @@ strings catalog.
 - The catalog is the TOML files under `server/strings/`: `common.toml` for the elements on
   every page (`base.html`), and one file per template named for it - `home.toml`,
   `rom.toml`, `generate.toml`, `seed.toml`, `me.toml`, `not_found.toml`, `server_error.toml`, `sign_in_failed.toml`,
-  `round.toml`, `scan_rejected.toml`, `round_voided.toml`. Every file under the
+  `round.toml`, `scan_rejected.toml`, `round_voided.toml`, and `wind.toml` for the profile
+  names `_wind.html`'s macros give both the generate form and the seed page. Every file under the
   directory is loaded and merged, subdirectories included. Entries carry their full dotted
   key (`[home.about]`), so a file name is organization only and a key still greps to its
   entry. A top-level namespace lives in exactly one file, and a new template-backed page's
