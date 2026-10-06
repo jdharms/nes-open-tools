@@ -7,6 +7,7 @@ from pathlib import Path
 import pytest
 
 from golf.core import rom_utils
+from golf.core.jp_rom_utils import JP_ROM_SHA1
 from golf.core.patches import (
     PATCH_SPECS,
     CompositePatch,
@@ -180,6 +181,29 @@ class TestRecipe:
         assert (
             Recipe.from_dict({"steps": [], "base_sha1": None}, ROOT).base_sha1 is None
         )
+
+    def test_the_expected_base_is_the_rom_the_steps_are_written_for(self):
+        def recipe(*patches, **extra):
+            return Recipe.from_dict(
+                {"steps": [{"patch": patch} for patch in patches], **extra}, ROOT
+            )
+
+        assert recipe().expected_base_sha1() == rom_utils.US_ROM_SHA1
+        assert recipe("practice_swing").expected_base_sha1() == rom_utils.US_ROM_SHA1
+        assert recipe("mario_open_free_play").expected_base_sha1() == JP_ROM_SHA1
+        assert recipe("practice_swing", base_sha1="ab" * 20).expected_base_sha1() == (
+            "ab" * 20
+        )
+        assert (
+            recipe("mario_open_free_play", base_sha1=None).expected_base_sha1() is None
+        )
+
+    def test_steps_written_for_different_roms_are_rejected(self):
+        steps = [{"patch": "practice_swing"}, {"patch": "mario_open_free_play"}]
+        with pytest.raises(RecipeError, match="different base ROMs"):
+            Recipe.from_dict({"steps": steps}, ROOT).expected_base_sha1()
+        mixed = Recipe.from_dict({"steps": steps, "base_sha1": None}, ROOT)
+        assert mixed.expected_base_sha1() is None
 
     def test_unknown_keys_are_rejected(self):
         with pytest.raises(RecipeError, match="unknown recipe key"):

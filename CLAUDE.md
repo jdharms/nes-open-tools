@@ -19,8 +19,8 @@ A toolset for reverse engineering, editing and patching the NES Open Tournament 
 - **Docs**: `docs/README.md` indexes the design and reverse-engineering notes.
 - **The ROM**: `docs/rom_map.md` maps a topic to the bank, address and label to start
   from. Whenever you have to search the ROM to find where something lives, add a row
-  there before you finish. `docs/rom_disassembly.md` covers keeping the label file
-  complete and correct.
+  there before you finish (`docs/jp_rom_map.md` for the Mario Open ROM).
+  `docs/rom_disassembly.md` covers keeping the label file complete and correct.
 - **Decisions**: `docs/adr/` records why things are the way they are, what was turned
   down, and when to revisit. Check the index in `docs/adr/README.md` for your area before
   changing a design; `golf-adr` creates records (Claude drafts them as `proposed`, with

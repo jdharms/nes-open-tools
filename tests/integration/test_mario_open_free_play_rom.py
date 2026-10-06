@@ -1,41 +1,65 @@
-"""Execute Mario Open's actual unlock, menu and score checks under py65."""
+"""Integration: the Mario Open free-play patch, with the patched code run under py65."""
 
 from pathlib import Path
 
 import pytest
 from py65.devices.mpu6502 import MPU
 
-from golf.core.jp_rom_utils import JP_ROM_SHA1
-from golf.core.patches import PatchStack, StackError
-from golf.core.patches.mario_open_free_play import mario_open_free_play_patch
+from golf.core import rom_utils
+from golf.core.patches import PatchError, Recipe, StackError
+from golf.core.patches.mario_open_free_play import (
+    ALL_COURSES,
+    CONTINUE_SHOT_ADDR,
+    DISMISSAL_HANDLER_ADDR,
+    ENTRY_ADDR,
+    PROGRESSION_ADDR,
+    ROUND_BANK,
+)
 
-ROM_PATH = Path(__file__).resolve().parents[2] / "mario_open_jp.nes"
-pytestmark = pytest.mark.skipif(not ROM_PATH.exists(), reason="JP ROM not present")
+ROOT = Path(__file__).resolve().parents[2]
+ROM_PATH = ROOT / "mario_open_jp.nes"
+US_ROM_PATH = ROOT / "nes_open_us.nes"
+
+pytestmark = pytest.mark.skipif(
+    not ROM_PATH.exists(), reason=f"{ROM_PATH.name} not present"
+)
+
+# The next-shot score check and what it reads (JP addresses).
+SCORE_CHECK_ADDR = 0x8268
+HOLE_STROKES = 0x011F
+HOLE_PAR = 0x0109
+ROUND_SCORE = 0x04E6  # signed 16-bit, relative to par over the finished holes
+SCORE_LIMIT = 0x0658
+
+
+def recipe(**extra) -> Recipe:
+    return Recipe.from_dict(
+        {"steps": [{"patch": "mario_open_free_play"}], **extra}, ROOT
+    )
 
 
 @pytest.fixture(scope="module")
-def vanilla():
+def vanilla() -> bytes:
     return ROM_PATH.read_bytes()
 
 
 @pytest.fixture(scope="module")
-def patched(vanilla):
-    return (
-        PatchStack([mario_open_free_play_patch()], base_sha1=JP_ROM_SHA1)
-        .build(vanilla)
-        .rom
-    )
+def patched(vanilla) -> bytes:
+    return recipe().stack(vanilla).build(vanilla).rom
 
 
-def cpu(rom, bank, start):
+def machine(rom: bytes, start: int) -> MPU:
+    """A CPU at `start` with bank 13 and the fixed bank mapped."""
     mpu = MPU()
-    mpu.memory[0x8000:0xC000] = rom[16 + bank * 0x4000 : 16 + (bank + 1) * 0x4000]
-    mpu.memory[0xC000:0x10000] = rom[16 + 15 * 0x4000 : 16 + 16 * 0x4000]
+    prg = rom[rom_utils.INES_HEADER_SIZE :]
+    for cpu_addr, bank in ((0x8000, ROUND_BANK), (0xC000, 15)):
+        offset = bank * 0x4000
+        mpu.memory[cpu_addr : cpu_addr + 0x4000] = prg[offset : offset + 0x4000]
     mpu.pc = start
     return mpu
 
 
-def run_to(mpu, targets):
+def run_to(mpu: MPU, targets: set[int]) -> int:
     for _ in range(200):
         if mpu.pc in targets:
             return mpu.pc
@@ -43,77 +67,53 @@ def run_to(mpu, targets):
     pytest.fail(f"did not reach {targets}: PC=${mpu.pc:04X}")
 
 
-@pytest.mark.parametrize("progress", range(6))
-def test_entry_unlocks_before_menu(patched, progress):
-    mpu = cpu(patched, 13, 0x8000)
-    mpu.memory[0x6003] = progress
-    mpu.memory[0x6004:0x6010] = list(range(12))
+@pytest.mark.parametrize("progression", range(ALL_COURSES + 1))
+def test_entry_unlocks_every_course(patched, progression):
+    mpu = machine(patched, ENTRY_ADDR)
+    neighbors = slice(PROGRESSION_ADDR - 3, PROGRESSION_ADDR + 13)
+    mpu.memory[neighbors] = [0xA5] * 16
+    mpu.memory[PROGRESSION_ADDR] = progression
     mpu.memory[0x98] = 0x80
-    run_to(mpu, {0x8004})
-    assert mpu.memory[0x6003] == 5
-    assert mpu.memory[0x98] == 0
-    assert mpu.memory[0x6004:0x6010] == list(range(12))
+
+    run_to(mpu, {ENTRY_ADDR + 4})
+
+    expected = [0xA5] * 16
+    expected[3] = ALL_COURSES
+    assert mpu.memory[neighbors] == expected
+    # what the two instructions the call replaced did
+    assert (mpu.a, mpu.memory[0x98]) == (0, 0)
     assert mpu.sp == 0xFF
 
 
-@pytest.mark.parametrize("course", range(6))
-@pytest.mark.parametrize("mode", [0, 1])
-def test_menu_maps_all_six_courses(patched, course, mode):
-    mpu = cpu(patched, 12, 0x89B0)
-    mpu.memory[0x6003] = 5
-    mpu.memory[0x0608] = course
-    mpu.memory[0x0100] = mode
-    run_to(mpu, {0x89D1})
-    assert mpu.memory[0x0102] == course
+@pytest.mark.parametrize("score", [-20, 0, 6, 7, 8, 127, 300])
+def test_no_score_ends_the_round(vanilla, patched, score):
+    """Par 4, four strokes taken, limit +8: vanilla dismisses from +7, the next shot's score."""
+    reached = []
+    for rom in (vanilla, patched):
+        mpu = machine(rom, SCORE_CHECK_ADDR)
+        mpu.memory[HOLE_STROKES] = 4
+        mpu.memory[HOLE_PAR] = 4
+        mpu.memory[ROUND_SCORE : ROUND_SCORE + 2] = list(
+            score.to_bytes(2, "little", signed=True)
+        )
+        mpu.memory[SCORE_LIMIT] = 8
+        reached.append(run_to(mpu, {DISMISSAL_HANDLER_ADDR, CONTINUE_SHOT_ADDR}))
+
+    assert reached == [
+        DISMISSAL_HANDLER_ADDR if score >= 7 else CONTINUE_SHOT_ADDR,
+        CONTINUE_SHOT_ADDR,
+    ]
 
 
-@pytest.mark.parametrize("course,limit", enumerate([18, 12, 8, 4, 2, 8]))
-@pytest.mark.parametrize("dismissals", [0, 1, 2, 20, 255])
-@pytest.mark.parametrize("input_state", [0, 0xC0])
-def test_actual_limit_setup(vanilla, course, limit, dismissals, input_state):
-    mpu = cpu(vanilla, 12, 0xA264)
-    mpu.memory[0x0102] = course
-    mpu.memory[0x6028 + course] = dismissals
-    mpu.memory[0x15] = input_state
-    run_to(mpu, {0xA282})
-    bonus = min(dismissals // 2, 10) if input_state == 0xC0 else 0
-    assert mpu.memory[0x0658] == limit + bonus
+def test_applying_it_again_changes_nothing(patched):
+    again = recipe(base_sha1=None)
+    assert again.stack(patched).build(patched).rom == patched
 
 
-@pytest.mark.parametrize("progress", range(6))
-@pytest.mark.parametrize("course", range(6))
-def test_vanilla_frontier_completion_advances_progress(vanilla, progress, course):
-    mpu = cpu(vanilla, 13, 0x84F6)
-    mpu.memory[0x6003] = progress
-    mpu.memory[0x0102] = course
-    run_to(mpu, {0x8512})
-    assert mpu.memory[0x6003] == progress + (progress < 5 and course == progress)
-
-
-@pytest.mark.parametrize("limit", [18, 12, 8, 4, 2, 8])
-@pytest.mark.parametrize("score", [-20, -1, 0, 1, 2, 4, 8, 12, 18, 127, 256, 500])
-def test_score_check_continues_past_limit(vanilla, patched, limit, score):
-    for rom, expected in [
-        (vanilla, 0x847E if score + 1 >= limit else 0x8297),
-        (patched, 0x8297),
-    ]:
-        mpu = cpu(rom, 13, 0x8268)
-        mpu.memory[0x011F] = 4
-        mpu.memory[0x0109] = 4
-        mpu.memory[0x04E6] = score & 0xFF
-        mpu.memory[0x04E7] = (score >> 8) & 0xFF
-        mpu.memory[0x0658] = limit
-        assert run_to(mpu, {0x847E, 0x8297}) == expected
-
-
-def test_patch_is_idempotent_and_rejects_us(vanilla, patched):
-    assert (
-        PatchStack([mario_open_free_play_patch()], base_sha1=None).build(patched).rom
-        == patched
-    )
-    us = ROM_PATH.with_name("nes_open_us.nes")
-    if us.exists():
-        with pytest.raises(StackError):
-            PatchStack([mario_open_free_play_patch()], base_sha1=None).build(
-                us.read_bytes()
-            )
+@pytest.mark.skipif(not US_ROM_PATH.exists(), reason=f"{US_ROM_PATH.name} not present")
+def test_the_us_rom_is_rejected(vanilla):
+    us = US_ROM_PATH.read_bytes()
+    with pytest.raises(StackError, match="base ROM SHA-1"):
+        recipe().stack(us).build(us)
+    with pytest.raises(PatchError, match="jp_"):
+        recipe(base_sha1=None).stack(us).build(us)

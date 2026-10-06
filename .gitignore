@@ -40,6 +40,10 @@ wheels/
 # Caches built from a ROM (the difficulty solver's landing table)
 /.cache/
 
+# Built IPS patches; the test fixtures are the ones kept
+*.ips
+!/tests/fixtures/**/*.ips
+
 # Developer scratch space
 scratch/
 .scratch/

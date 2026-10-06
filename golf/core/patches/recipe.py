@@ -13,7 +13,8 @@ Recipes: a PatchStack written down as JSON.
 `patch` names a patch type in the registry (`registry.PATCH_SPECS`); the other
 keys are its parameters, checked against its parameter dataclass. Paths are
 relative to the recipe file. `base_sha1` is optional: omitted means the vanilla
-US ROM, null means any base.
+ROM the steps' patch types are written for (the US ROM for nearly all of them),
+null means any base.
 
 `parse_step_arg` reads the same steps from `golf-patch -p ID:key=value,...`.
 See docs/patch_stack.md.
@@ -275,10 +276,33 @@ class Recipe:
             built.append(BuiltStep(spec, step.params, patch))
         return built
 
+    def expected_base_sha1(self) -> str | None:
+        """
+        The hash the base ROM must have, or None for any base.
+
+        A recipe that leaves `base_sha1` at its default builds on the vanilla ROM
+        its steps are written for. Steps written for different ROMs are an error
+        unless the recipe takes any base.
+        """
+        if self.base_sha1 is None:
+            return None
+        targets: dict[str, str] = {}
+        for step in self.steps:
+            targets.setdefault(get_spec(step.patch).base_sha1, step.patch)
+        if len(targets) > 1:
+            raise RecipeError(
+                "steps are written for different base ROMs: "
+                + ", ".join(f"{patch} ({sha1})" for sha1, patch in targets.items())
+            )
+        if targets and self.base_sha1 == rom_utils.US_ROM_SHA1:
+            return next(iter(targets))
+        return self.base_sha1
+
     def stack(self, base: bytes) -> PatchStack:
         """The PatchStack of this recipe's patches."""
         return PatchStack(
-            [b.patch for b in self.build_steps(base)], base_sha1=self.base_sha1
+            [b.patch for b in self.build_steps(base)],
+            base_sha1=self.expected_base_sha1(),
         )
 
 

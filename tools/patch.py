@@ -72,7 +72,7 @@ def main() -> int:
     parser.add_argument(
         "--any-base",
         action="store_true",
-        help="build on a base other than the vanilla US ROM",
+        help="build on a base other than the vanilla ROM the steps are written for",
     )
     parser.add_argument(
         "--save-recipe",
@@ -108,7 +108,7 @@ def main() -> int:
         base = Path(args.rom).read_bytes()
         built = recipe.build_steps(base)
         result = PatchStack(
-            [step.patch for step in built], base_sha1=recipe.base_sha1
+            [step.patch for step in built], base_sha1=recipe.expected_base_sha1()
         ).build(base)
     except (RecipeError, PatchError, OSError) as error:
         print(f"Error: {error}", file=sys.stderr)

@@ -7,6 +7,9 @@ and the label to start reading from, and the doc that explains it, if there is o
 is a starting point, not a description; the label file's comments and the docs carry the
 detail.
 
+Mario Open Golf (the JP ROM) has its own index, [jp_rom_map.md](jp_rom_map.md): its
+addresses differ from the ones here, and the label file does not cover it.
+
 **Keep it growing.** Whenever you have to search to find where something lives (a
 routine, a table, a RAM variable), add a row here before you finish, even if you also
 wrote a doc. A row is cheap; the search it saves is not.
@@ -161,25 +164,7 @@ Byte-level layout of the course data banks: the `nes-open-golf-rom-layout` skill
 | SRAM init and magic | 9 | `$ACBC` `InitializeSram` (via `$D932` `CallInitializeSram`); `SramMagic` "5S" at `$6001` | |
 | Saved state | SRAM | `PlayerName` (`$6004`), `TotalMoney` (`$600E`), `CurrentWager` (`$6014`), `Player1ClubBag` (`$6027`) | `prize_money.md` |
 
-## Mario Open Golf (JP)
-
-These addresses belong to the JP ROM and have no corresponding US labels.
-See [Mario Open free play](mario_open_free_play.md) for evidence and validation.
-
-| Topic | Bank | Start here |
-|---|---|---|
-| Save initialization | 4 | $B705 validity checks; $B71E clears SRAM, including progression at $6003 |
-| Course progression | 13 | $84FE-$850F advances SRAM $6003 after completing the frontier course |
-| Available course menu | 12 | $80EC menu variant; $89B0 course selection and extra-course mapping |
-| Score limits | 12 | $A264 setup; $A28F-$A294 six course thresholds; RAM $0658 |
-| Poor-score dismissal | 13 | $8268-$8294 next-shot score check; $847E dismissal handler; SRAM $6028-$602D counters |
-| Running score | 13 | $8DFC-$8E0E computes score relative to par at RAM $04E6-$04E7 |
-| Remix generation | 15 | $DA22 builds extra course; $DA2C reads SRAM progression |
-| Green slope vectors and tables | 15 | $F229 loader; $F281 cup-view doubling; $F290/$F2C0 codes, $F2F0/$F2F7 magnitudes; `jp_putting_physics.md` |
-| Putting launch and power | 13 | $AD73 launch; $B95D/$B962 putter power; $ABAF/$ABB2 meter rates; `jp_putting_physics.md` |
-| Green rolling physics | 13 | $B256 slope/friction; $B75E cross-axis scaling; $AFF2/$B828 cup-view timing/movement; `jp_putting_physics.md` |
-
-## Commonly read US RAM
+## Commonly read RAM
 
 | Variable | Address |
 |---|---|

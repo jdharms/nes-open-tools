@@ -37,7 +37,8 @@ Python, or from a [recipe](#recipes) with [`golf-patch`](#golf-patch).
 
 - **The base ROM.** By default the base must hash to `rom_utils.US_ROM_SHA1`, the vanilla US
   ROM file including its iNES header. `PatchStack(steps, base_sha1=None)` builds on any
-  base, such as a ROM that already carries some of the patches.
+  base, such as a ROM that already carries some of the patches. A recipe passes the hash
+  of the ROM its patch types are written for; see [Recipes](#recipes).
 - **Requirements.** Before a step is applied, every patch in its `requires` must already be
   applied, by an earlier step or in the base. The error says whether a missing requirement
   is `not in the stack` or `listed after it`. The stack never adds or reorders steps.
@@ -168,7 +169,11 @@ A recipe is a stack written as JSON (`golf/core/patches/recipe.py`):
   written as one whitespace-separated string (`"clubs": "1W 3W PW"`), which is how `-p`
   passes one.
 - Paths are relative to the recipe file.
-- `base_sha1` is optional. Omitted means the vanilla US ROM; `null` means any base.
+- `base_sha1` is optional. Omitted means the vanilla ROM the steps are written for;
+  `null` means any base. Each patch type is written for one vanilla ROM (`PatchSpec.base_sha1`):
+  the US ROM, except `mario_open_free_play`, which is written for Mario Open Golf
+  (`jp_rom_utils.JP_ROM_SHA1`). Steps written for different ROMs are an error unless the
+  base is `null`.
 - Patch types take concrete values and draw nothing at random, so a recipe and a base ROM
   always build the same ROM.
 - `qr_credentials` reads its credentials from a separate file written by
@@ -176,6 +181,7 @@ A recipe is a stack written as JSON (`golf/core/patches/recipe.py`):
 
 In Python: `Recipe.load(path)`, `Recipe.from_dict(data, base_dir)`, `recipe.stack(base)`,
 `recipe.build_steps(base)` (each patch with its parameters and report),
+`recipe.expected_base_sha1()` (the base hash the stack will check),
 `recipe.to_dict(base_dir)` and `recipe.save(path)`.
 
 ## golf-patch
@@ -194,8 +200,8 @@ golf-patch --list
   an IPS patch from the base to the build; `--validate-only` builds in memory and writes
   nothing.
 - `--save-recipe PATH` writes the combined steps as a recipe.
-- `--any-base` builds on a base other than the vanilla US ROM, such as the output of
-  `golf-write`.
+- `--any-base` builds on a base other than the vanilla ROM the steps are written for, such
+  as the output of `golf-write`.
 - `-v` adds each patch type's report: bank usage and scorecard totals for `course`, the per-hole pin and wind
   forecast for `seeded_wind`, track and space usage for `music_import`, new tiles and
   import notes for `signpost_random_banner`, the image location for `scorecard_qr`, the
@@ -210,7 +216,6 @@ three requirements and the `course` step.
 
 | Patch | Parameters | Requires |
 |---|---|---|
-| `mario_open_free_play` | none; JP ROM only, all courses and no score dismissal (`docs/mario_open_free_play.md`); CLI needs `--any-base` | |
 | `wram_expansion` | | |
 | `multi_bank_lookup` | | |
 | `course_mirrors` | | |
@@ -233,6 +238,7 @@ three requirements and the `course` step.
 | `extended_sram_defaults` | none; installs the SRAM defaults routine and table at vanilla values in PLAYER STATS' code space | `menu_trim` |
 | `peach_dress` | `color` (one of the curated NES colors in `DRESS_COLOR_FAMILIES`, `golf/core/patches/peach_dress.py`); recolors Peach's dress in the putting view | |
 | `putting_practice` | (experimental) | |
+| `mario_open_free_play` | none; all six courses and no score limit (`docs/mario_open_free_play.md`) | |
 
 `course_theme` and `music_import` with a `track` both rewrite `CourseBgmTable` at `$DA14`,
 so a stack holds one or the other: `course_theme` for a theme already in the ROM,

@@ -7,6 +7,9 @@ patch from them, and an optional report for `golf-patch --verbose`. Parameters
 are concrete values: no factory draws anything at random, so a recipe and a
 base ROM always build the same ROM.
 
+A patch type is written for one vanilla ROM, the US ROM unless its spec names
+another in `base_sha1`. A recipe's steps must all be written for the same one.
+
 A new patch is reachable from recipes and `golf-patch` once it has an entry in
 `PATCH_SPECS`. See docs/patch_stack.md.
 """
@@ -17,6 +20,8 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
+from golf.core import rom_utils
+from golf.core.jp_rom_utils import JP_ROM_SHA1
 from golf.core.rng import predict_hole
 from golf.core.rom_reader import RomReader
 from golf.formats.hole_data import HoleData
@@ -92,13 +97,15 @@ def _no_report(params: object, patch: ROMPatch) -> list[str]:
 
 @dataclass(frozen=True)
 class PatchSpec[P, R: ROMPatch]:
-    """One patch type: its id, parameters, factory and report."""
+    """One patch type: its id, parameters, factory, report and base ROM."""
 
     id: str
     summary: str
     params: type[P]
     build: Callable[[BuildContext, P], R]
     report: Callable[[P, R], list[str]] = _no_report
+    #: SHA-1 of the vanilla ROM this patch type is written for
+    base_sha1: str = rom_utils.US_ROM_SHA1
 
 
 # --- Parameters ---------------------------------------------------------------
@@ -394,12 +401,6 @@ PATCH_SPECS: dict[str, PatchSpec[Any, Any]] = {
             _fixed(WRAM_EXPANSION_PATCH),
         ),
         PatchSpec(
-            "mario_open_free_play",
-            "Mario Open (JP): all courses and no score dismissal (docs/mario_open_free_play.md)",
-            NoParams,
-            lambda ctx, params: mario_open_free_play_patch(),
-        ),
-        PatchSpec(
             "multi_bank_lookup",
             "Look up each hole's terrain bank per hole (docs/multi_bank_terrain.md)",
             NoParams,
@@ -549,6 +550,13 @@ PATCH_SPECS: dict[str, PatchSpec[Any, Any]] = {
                 "Start every hole with the ball on the putting surface",
                 putting_practice_patches(),
             ),
+        ),
+        PatchSpec(
+            "mario_open_free_play",
+            "Mario Open (JP): all courses and no score dismissal (docs/mario_open_free_play.md)",
+            NoParams,
+            lambda ctx, params: mario_open_free_play_patch(),
+            base_sha1=JP_ROM_SHA1,
         ),
     ]
 }

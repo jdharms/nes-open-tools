@@ -1,135 +1,109 @@
-# Mario Open versus NES Open: putting and green slopes
+# Putting in Mario Open against NES Open
 
-The rumor is partly true: **Mario Open doubles the slope vector in the cup
-close-up, whereas NES Open does not.** The slope tile tables themselves,
-putter power tables, and three putting meter rates are identical. The ordinary
-green rolling calculation is also the same after accounting for relocated
-code and RAM.
+> Note: Written by Codex and Claude
 
-This comparison uses the original US and JP ROMs identified by
-`golf/core/rom_utils.py` and `golf/core/jp_rom_utils.py`, not the experimental
-[green slope patch](green_slope_physics.md) or the free-play output ROM.
-Evidence is targeted `golf-rom-peek` disassembly plus execution of both ROMs'
-actual routines under py65. No graphical emulator playthrough was performed.
+Does Mario Open Golf (JP) putt differently from NES Open (US)? In one respect: **in the
+cup close-up, Mario Open doubles the green's slope vector, and NES Open does not.** The
+slope tables, the putter's power tables, the swing meter rates and the green rolling code
+are otherwise the same in both ROMs, at different addresses.
 
-## Identical tile values
+The US side is described in [green_slope_physics.md](green_slope_physics.md) and
+[shot_physics.md](shot_physics.md). JP addresses are indexed in
+[jp_rom_map.md](jp_rom_map.md).
 
-| Data | US fixed-bank address | JP fixed-bank address | Length |
+## What is the same
+
+Tables, byte for byte:
+
+| Data | US | JP | Length |
 |---|---|---|---|
-| X slope codes | $F359 | $F290 | 48 bytes |
-| Y slope codes | $F389 | $F2C0 | 48 bytes |
-| Magnitude fractional bytes | $F3B9 | $F2F0 | 7 bytes |
-| Magnitude integer bytes | $F3C0 | $F2F7 | 7 bytes |
+| Slope X codes | fixed `$F359` | fixed `$F290` | 48 |
+| Slope Y codes | fixed `$F389` | fixed `$F2C0` | 48 |
+| Slope magnitude low bytes | fixed `$F3B9` | fixed `$F2F0` | 7 |
+| Slope magnitude high bytes | fixed `$F3C0` | fixed `$F2F7` | 7 |
+| Putter power on the green (`$5D`, `$73`, `$A0`) | bank 13 `$B8DC` | bank 13 `$B95D` | 3 |
+| Putter power off the green (`$40`, `$60`, `$80`) | bank 13 `$B8E1` | bank 13 `$B962` | 3 |
+| Swing-speed power factors (`$D7`, `$E3`, `$EE`) | bank 13 `$B8EC` | bank 13 `$B96D` | 3 |
+| Timing power curve | bank 13 `$B909` | bank 13 `$B98A` | 57 |
+| Swing meter rates (`$0100`, `$0150`, `$01A0`; halved for putting) | bank 13 `$AB46`, `$AB49` | bank 13 `$ABAF`, `$ABB2` | 6 |
 
-All 110 bytes compare exactly. The seven unsigned magnitudes, combining the
-integer and fractional bytes, are:
+The seven slope magnitudes are:
 
-| Class | Integer | Fraction | Combined value |
-|---|---|---|---|
-| Zero | $00 | $00 | $0000 |
-| Gentle cardinal | $28 | $40 | $2840 |
-| Gentle diagonal component | $28 | $A0 | $28A0 |
-| Moderate cardinal | $50 | $80 | $5080 |
-| Moderate diagonal component | $51 | $4A | $514A |
-| Steep cardinal | $78 | $C0 | $78C0 |
-| Steep diagonal component | $79 | $F4 | $79F4 |
+| Class | Value |
+|---|---|
+| Flat | `$0000` |
+| Gentle, cardinal | `$2840` |
+| Gentle, diagonal component | `$28A0` |
+| Moderate, cardinal | `$5080` |
+| Moderate, diagonal component | `$514A` |
+| Steep, cardinal | `$78C0` |
+| Steep, diagonal component | `$79F4` |
 
-The per-tile codes supply component magnitude and direction. Both releases
-recognize the same dark slope tiles $30-$47 and light slope tiles $88-$9F.
-Both use the same speed-dependent green slope calculation and cross-axis
-scaling (dark versus light), followed by the same green friction calculation.
-The routines are bank 13 $B1D5-$B270 in US and $B256-$B2F1 in JP; cross-axis
-scaling is $B6DD versus $B75E.
+Code, with the same results for the same inputs:
 
-## The extra JP calculation
+| Routine | US | JP |
+|---|---|---|
+| Slope vector loader, writing `$EA`-`$EF` | fixed `$F300` | fixed `$F229` |
+| Putt launch | bank 13 `$AD0A` | bank 13 `$AD73` |
+| Green slope and friction | bank 13 `$B1D5`-`$B270` | bank 13 `$B256`-`$B2F1` |
+| Cross-axis scaling (dark against light slope tiles) | bank 13 `$B6DD` | bank 13 `$B75E` |
+| Cup-view position update, at a quarter of the velocity | bank 13 `$AF75` | bank 13 `$AFF2` |
+| Cup-view physics, every fourth frame | bank 13 `$B7A7` | bank 13 `$B828` |
 
-The vector loader is fixed-bank $F300 in US and $F229 in JP. Both write the
-six-byte slope vector at $EA-$EF. The US loader returns at $F358. The JP
-loader instead ends with:
+Both games read the dark slope tiles `$30`-`$47` and the light ones `$88`-`$9F`. The
+zero-page variables this code uses sit one byte lower in JP: the view mode is `$97` where
+US has `$98`.
+
+## The JP doubling
+
+The US loader returns at `$F358`. The JP loader has one more block before its return:
 
 ```asm
 ; JP $F281-$F28F
-bit $97           ; JP ViewMode (US uses $98)
-bvc done          ; bit 6 clear: no doubling
-bpl done          ; bit 7 clear: no doubling
+bit $97           ; view mode
+bvc done          ; bit 6 clear
+bpl done          ; bit 7 clear
 asl $EA
-rol $EB           ; double unsigned X magnitude; sign in $EC stays unchanged
+rol $EB           ; X magnitude doubled; its sign in $EC is untouched
 asl $ED
-rol $EE           ; double unsigned Y magnitude; sign in $EF stays unchanged
+rol $EE           ; Y magnitude doubled; its sign in $EF is untouched
 done:
 rts
 ```
 
-Both bits set is the cup close-up ($C0). Ordinary green view is $40, the
-behind-the-golfer view is $80, and overhead is $00, so those views do not take
-the JP doubling path. Other values with both upper bits set would also take
-it; this is a bit test, not an equality comparison with $C0.
+It doubles both magnitudes when bits 6 and 7 of the view mode are both set, which is the
+cup close-up (`$C0`). The green view (`$40`), the view behind the golfer (`$80`) and the
+overhead view (`$00`) are left alone.
 
-This is live gameplay code: JP's green terrain classification calls the
-loader at fixed-bank $EDAE after locating the tile in the green buffer.
-It is not just a table used to draw the slope arrows.
+This is the vector the ball physics uses, not only the one the slope arrows are drawn
+from: the JP green terrain classification calls the loader at `$EDAE`.
 
-The rest of the green calculation scales the vector by velocity and truncates
-integer products. Consequently "twice the vector" does not guarantee exactly
-twice every final velocity adjustment. It also affects the drag term reused
-by the slope calculation; it is not simply an extra sideways force.
+Doubling the vector does not exactly double its effect on the ball. The rolling code
+scales the vector by the ball's velocity and truncates, and the same vector feeds the drag
+term. One green update on the gentle dark tile `$31`, for a ball moving straight along Y at
+`$004000`:
 
-One executed example, with gentle dark tile $31 and an already rolling putt,
-starting at X velocity 0 and Y velocity $004000:
-
-| Release/view | Vector X magnitude | X velocity after green update | Y velocity after green update |
+| ROM and view | X magnitude | X velocity after | Y velocity after |
 |---|---|---|---|
-| US, ordinary or cup view | $2840 | 50 | 16271 |
-| JP, ordinary view | $2840 | 50 | 16271 |
-| JP, cup view | $5080 | 100 | 16221 |
+| US, any view | `$2840` | 50 | 16271 |
+| JP, green view | `$2840` | 50 | 16271 |
+| JP, cup close-up | `$5080` | 100 | 16221 |
 
-These are the game's fixed-point register values for a single green update,
-not pixels of travel or an entire putt's final position.
+The cup close-up already runs slower in both games (the last two rows of the code table),
+so the doubling acts on a ball moving at a quarter of its speed with physics on every
+fourth frame.
 
-Both games slow motion near the cup: the position update uses one quarter of
-putting velocity, and the remaining grounded-putt physics runs every fourth
-frame. This code is US $AF75 and $B7A7, versus JP $AFF2 and $B828. The extra
-JP slope scaling therefore exists within an already different time/position
-scale near the cup. A plausible purpose is to strengthen break during that
-close-up, but developer intent is not established by the code.
+Returning at JP `$F281` instead of running the block would make the JP loader match the US
+one.
 
-## Putter power and timing
+## Not verified
 
-| Data | US bank 13 | JP bank 13 | Values |
-|---|---|---|---|
-| Putter power, on green | $B8DC | $B95D | $5D, $73, $A0 |
-| Putter power, off green | $B8E1 | $B962 | $40, $60, $80 |
-| Swing-speed power factors | $B8EC | $B96D | $D7, $E3, $EE |
-| Timing power curve | $B909 | $B98A | All 57 bytes identical |
-| Meter rates, low/high | $AB46/$AB49 | $ABAF/$ABB2 | $0100, $0150, $01A0; halved for putting |
+The comparison was made by comparing the tables above and by running each ROM's loader,
+launch and rolling routines under py65 with matched inputs: the loader for every tile byte
+in the four view modes, the launch over three swing speeds, eight power stops and eight
+aim directions, and the rolling update on every slope tile. Nothing was run in an
+emulator.
 
-The launch routines are US $AD0A and JP $AD73. Tests execute both with matched
-putter inputs, supplying the same green lie in place of the terrain probe,
-and compare the launch's velocity and roll-budget bytes. All tested speeds,
-power stops, and aim directions agree. This separates launch physics from
-course layouts and the later cup-view difference.
-
-## Verification and scope
-
-`tests/integration/test_jp_putting_comparison_rom.py` retains the evidence:
-
-- Byte equality for the slope tables, club/power/timing table block, meter
-  rates, and the 128-entry trigonometry table.
-- Both vector loaders executed for every possible tile byte in each of the
-  four principal view modes: identical normal vectors, doubled JP cup vectors.
-- 192 matched putter launches covering three speeds, eight power stops, and
-  eight aim directions.
-- Actual green rolling updates on all 48 slope tiles plus a flat tile, with
-  four velocity pairs, including negative and low-speed components.
-- The numerical cup-view example above.
-
-This is not a complete comparison of cup collision, rim-in, lip-out, graphical
-projection, or default player settings. It establishes an actual slope-response
-difference without attributing every possible difference in putting feel to it.
-The existing Python physics model uses US addresses and behavior; passing it
-the JP ROM does not provide a valid JP simulation merely because these tables
-match. A JP model would need the address map and this extra view-dependent step.
-
-To make JP's vector loader behave like US, returning at JP $F281 would skip
-its extra block. That is a concrete candidate for a future patch, not a patch
-implemented or playtested by this investigation.
+Not compared: cup collision, rim-ins and lip-outs, how the cup view is drawn, and the
+default player settings. The Python physics model (`golf/physics/`) uses US addresses and
+has no cup-view doubling, so it does not model JP putting.

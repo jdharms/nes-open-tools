@@ -1,114 +1,128 @@
-# Mario Open Golf: course unlocks and score dismissal
+# Mario Open Golf: course unlocks, the score limit, and the free-play patch
 
-Investigation of `mario_open_jp.nes`, whole-file SHA-1
-`5464fcad88c4734567ab76d44beae903d932d236`. Addresses here are JP addresses,
-not the addresses in the US label file. Bank 15 is fixed; other banks use
-$8000-$BFFF. Findings come from targeted `golf-rom-peek` reads and execution
-of the affected ROM code under py65, not a full graphical emulator playthrough.
+> Note: Written by Codex & Claude
+
+Mario Open Golf starts with one course and unlocks the rest one round at a time, and it
+ends a round early when the player's score gets too far over par. This document describes
+both mechanisms and the `mario_open_free_play` patch, which opens every course and removes
+the score limit.
+
+Everything here is about `mario_open_jp.nes` (SHA-1 `5464fcad88c4734567ab76d44beae903d932d236`,
+`jp_rom_utils.JP_ROM_SHA1`), and every address is a JP address;
+[jp_rom_map.md](jp_rom_map.md) indexes them. Bank 15 is the fixed bank.
 
 ## Course progression
 
-SRAM $6003 is a progression level, initially zero. The save initializer in
-bank 4 at $B71E clears $6003 onward. Save validity checks at $B705 require
-"5S" at both $6001-$6002 and $6E0B-$6E0C.
+SRAM `$6003` is the progression level, 0 on a new save (the initializer at bank 4 `$B71E`
+clears SRAM from `$6003` on).
 
-Bank 13 $84FE-$850F advances progression after completing the frontier course
-in single-player stroke play: $0100 OR $0101 must be zero, progression must
-be below 5, and the course index at $0102 must equal progression. Then it
-increments $6003 and selects the course-unlocked message. It does not require
-an additional final-score comparison here: surviving the round is the gate.
-
-| Progression | Regular courses available |
+| Progression | Courses available |
 |---|---|
 | 0 | Japan |
 | 1 | Japan, Australia |
 | 2 | Japan, Australia, France |
 | 3 | Japan, Australia, France, Hawaii |
 | 4 | Japan, Australia, France, Hawaii, UK |
-| 5 | All five, plus the extra/remix course |
+| 5 | All five, and the extra (remix) course |
 
-Bank 12 $80EC-$810E chooses the course-menu variant from progression and game
-mode. $89B0-$89CE translates the last extra-course menu entry to course index
-5; its position changes with progression and mode. For example, stroke play
-at level 4 already has a final extra entry, whereas level 0 only has Japan.
-Level 5 gives all six entries in either mode. The remix builder at fixed-bank
-$DA22 reads progression at $DA2C; setting the actual SRAM byte, rather than
-merely expanding the menu, also gives it the final progression level.
+Bank 13 `$84FE`-`$850F` raises it by one at the end of a round when all of these hold:
 
-## Running-score dismissal
+- single-player stroke play (`$0100` and `$0101` both zero);
+- progression is below 5;
+- the course just played (`$0102`) is the newest one available, its index equal to the
+  progression level.
 
-Bank 12 $A264-$A28E loads the limit into RAM $0658 from the six-byte table at
-$A28F-$A294:
+No score is compared there. Finishing the round is the condition, and the score limit
+below is what stops a round from finishing.
 
-| Course index | Course | Normal limit |
+Bank 12 `$80EC`-`$810E` picks the course menu variant from progression and game mode, and
+`$89B0`-`$89CE` turns the chosen menu entry into a course index, mapping the last entry
+to the extra course (index 5) where the menu has one. At progression 5 the menu has all
+six entries in both modes. The extra course's builder (`$DA22`, fixed bank) also reads
+progression, at `$DA2C`.
+
+## The score limit
+
+Bank 12 `$A264`-`$A28E` loads the limit into RAM `$0658` from
+the table at `$A28F`-`$A294`:
+
+| Course index | Course | Limit |
 |---|---|---|
 | 0 | Japan | +18 |
 | 1 | Australia | +12 |
 | 2 | France | +8 |
 | 3 | Hawaii | +4 |
 | 4 | UK | +2 |
-| 5 | Extra/remix | +8 |
+| 5 | Extra | +8 |
 
-When input byte $15 equals $C0, the setup code adds
-`min(dismissals[course] // 2, 10)` to the normal limit. The six dismissal counters
-are at SRAM $6028-$602D. This investigation has not verified the physical
-button timing needed to activate that input condition.
+Each course counts its dismissals in SRAM `$6028`-`$602D`. When zero-page `$15` is `$C0`
+when that code runs, the limit is raised by half the course's count, by at most 10.
 
-Bank 13 $8268-$8294 checks the score before allowing the next shot. It skips
-the check when $0101 or $04F6 is nonzero; the surrounding $823B-$8240 dispatch
-also bypasses this path for game modes at least 4. For the checked player:
+Bank 13 `$8268`-`$8294` checks the score before each shot. The check is skipped when
+`$0101` or `$04F6` is nonzero, and for game modes 4 and up (the dispatch at
+`$823B`-`$8240`). It works from:
 
-- $011F is strokes already taken on the current hole; $0109 is its par.
-- $04E6-$04E7 is the signed 16-bit score relative to par on completed holes.
-  The update is at bank 13 $8DFC-$8E0E.
-- It first calculates `strokes + 1 - par`. A borrow skips dismissal while
-  the next stroke is still below the current hole's par.
-- Otherwise it adds that value to the completed-hole score. Negative totals
-  continue. A nonnegative total at least $0658 jumps to $847E.
+- `$011F`, the strokes taken so far on this hole, and `$0109`, its par;
+- `$04E6`-`$04E7`, the signed 16-bit score relative to par over the finished holes
+  (updated at `$8DFC`-`$8E0E`).
 
-Consequently the UK limit is +2, but a player already at +1 cannot take a
-next stroke that would reach +2. This is a shot-time check, not just a check
-of the scorecard at the end of each hole. The current-hole borrow exemption
-also means it is not an unconditional check of the displayed running score.
+It computes `strokes + 1 - par`, the hole's score if the coming shot were the last. While
+that is negative the round continues. Otherwise it is added to the finished-hole score,
+and a total at or over the limit jumps to the dismissal handler at `$847E`; anything less
+continues at `$8297`.
 
-The dismissal handler $847E clears round-resume state, increments the course's
-counter (saturating at 255), selects message 3, shows the result and returns
-to the menu. `find-refs` finds its direct incoming jump at $8294; disassembly
-from $8268 confirms that instruction boundary. The tests execute both sides
-of the score comparison, including negative and multi-byte positive scores.
+So the limit applies to the shot about to be taken, not to the scorecard: on the UK
+course (+2), a player at +1 through the finished holes is dismissed on reaching par
+strokes on a hole, before the stroke that would make bogey.
 
-## Patch
+The handler at `$847E` clears the saved round, increments the course's dismissal count
+(stopping at 255), shows message 3 and returns to the menu.
 
-The registered `mario_open_free_play` patch applies three changes together:
+## The patch
 
-| Bank:address | Change |
-|---|---|
-| 13:$8000 | Replace `LDA #0 / STA $98` with a call to $847E and a NOP |
-| 13:$847E | Replace the first ten bytes of the disabled dismissal handler with `LDA #5 / STA $6003 / LDA #0 / STA $98 / RTS` |
-| 13:$8294 | Replace `JMP $847E` with `JMP $8297`, continuing shot setup |
+`mario_open_free_play` (`golf/core/patches/mario_open_free_play.py`) makes three changes
+in bank 13, applied together or not at all:
 
-Reset initializes SRAM at $CD68, selects bank 13 at $CD6B, and jumps to $8000
-at $CD70. The hook therefore runs after save validation and before the first
-menu. It runs again on returns to that menu. Existing saves get progression 5
-as well; clearing the save is followed by unlocking again on entry. The new
-routine reuses the obsolete dismissal entry, without adding code in presumed
-unused padding. These changes are coupled: installing only the hook would
-turn dismissal into a call to code that ends in RTS, despite being entered
-by JMP. The composite validates every splice before writing any of them.
+| Address | Vanilla | Patched |
+|---|---|---|
+| `$8294` | `JMP $847E` (dismiss) | `JMP $8297` (continue the shot) |
+| `$847E` | the first ten bytes of the dismissal handler | `LDA #5 / STA $6003 / LDA #0 / STA $98 / RTS` |
+| `$8000` | `LDA #0 / STA $98` | `JSR $847E / NOP` |
+
+The first removes the jump to the dismissal handler, the only reference to it found
+(see below). With nothing left to reach the handler, the second writes the unlock
+routine over its start, and the third calls
+that routine from the top of bank 13, which the reset code enters at `$8000` (fixed bank
+`$CD70`) after the save has been validated or initialized. The routine ends with the two
+instructions the call replaced.
+
+Progression is written to SRAM, so the course menu and the extra course's builder both
+see level 5, on an existing save as well as a new one.
 
 ```bash
-uv run golf-patch mario_open_jp.nes --any-base -p mario_open_free_play \
+uv run golf-patch mario_open_jp.nes -p mario_open_free_play \
   -o mario_open_free_play.nes --ips mario_open_free_play.ips
 ```
 
-`--any-base` is needed because the CLI defaults to validating the US ROM hash.
-The patch checks original bytes at all three sites and rejects the US ROM.
-Use the JP hash above to identify the researched base; matching splice bytes
-alone do not establish compatibility with other releases or existing hacks.
+The patch type is registered for the JP ROM, so `golf-patch` checks the base against the
+JP hash rather than the US one (`docs/patch_stack.md`).
 
-`tests/integration/test_mario_open_free_play_rom.py` executes the entry hook,
-all six course selections in both mode branches, and vanilla versus patched
-score decisions under py65. A graphical emulator check of a fresh save,
-existing save, remix round, and poor-score round remains useful validation
-of the complete user experience and any indirect references static tools
-cannot identify. No Mesen breakpoint sweep was performed.
+`tests/integration/test_mario_open_free_play_rom.py` runs the patched entry and the score
+check, vanilla and patched, under py65.
+
+## Not verified
+
+The findings above come from disassembly and from running the routines under py65.
+Nothing here has been run in an emulator. In particular:
+
+- **Other ways into the handler.** The jump at `$8294` is the only reference to `$847E`
+  that `golf-rom-peek find-refs` finds, and no `7E 84` pointer appears elsewhere in bank 13
+  or the fixed bank. An indirect jump, or a branch into the handler past its first ten
+  bytes, would not show up that way.
+- **Re-entry.** Bank 13 has four `JMP $8000` (`$8046`, `$84C4`, `$858F`, `$89ED`), which
+  would run the unlock again on each return to the menu, including after the save is
+  cleared. Which of them run, and when, has not been traced.
+- **The raised limit.** What the player does to make `$15` equal `$C0` when the limit is
+  loaded.
+- **A full round** on a new save, an existing save, the extra course, and with a score
+  past the limit.

@@ -24,8 +24,7 @@ One line per document. Command-line tools are indexed in the top-level `README.m
 | Doc | About |
 |-----|-------|
 | [rom_map.md](rom_map.md) | Where to look: each topic's bank, address and starting label, and its doc. Add a row whenever you had to search |
-| [mario_open_free_play.md](mario_open_free_play.md) | Mario Open (JP) course progression, running-score dismissal, and the free-play patch |
-| [jp_putting_physics.md](jp_putting_physics.md) | US/JP putting comparison: identical slope tables and putter power, extra JP cup-view slope scaling |
+| [jp_rom_map.md](jp_rom_map.md) | Where to look in Mario Open Golf (the JP ROM): the same index, for its own addresses |
 | [rom_disassembly.md](rom_disassembly.md) | The label file's coverage and invariants, the method for measuring data, the traps found, and what is left to confirm in Mesen |
 | [../golf/core/compression.md](../golf/core/compression.md) | Course terrain/greens compression: RLE + dictionary, horizontal transitions, vertical fill |
 | [terrain_data_locations.md](terrain_data_locations.md) | Byte ranges of the three vanilla courses' compressed terrain |
@@ -45,6 +44,7 @@ One line per document. Command-line tools are indexed in the top-level `README.m
 | [opponent_shots.md](opponent_shots.md) | How CPU opponents play: recorded shot lists replayed per hole, chosen by level and chance |
 | [wind.md](wind.md) | Wind anchors, per-swing speed, flight physics and the crosswind bug |
 | [shot_physics.md](shot_physics.md) | Ball physics from swing to rest: launch, wind, lift, curve, bounce and roll, and the Python model of it |
+| [jp_putting_physics.md](jp_putting_physics.md) | Putting in Mario Open against NES Open: the same tables and rolling code, plus a doubled slope in the JP cup close-up |
 | [hole_difficulty.md](hole_difficulty.md) | Rating holes by expected strokes from the tee, solved over that model: how it was built, and every NES Open and Mario Open hole against par |
 
 ## Patches
@@ -59,6 +59,7 @@ One line per document. Command-line tools are indexed in the top-level `README.m
 | [green_shortcut.md](green_shortcut.md) | B then Select opens the green detail view, B then Start the scorecard |
 | [putting_practice.md](putting_practice.md) | Starting every hole as a putt (design note, not shipped) |
 | [green_slope_physics.md](green_slope_physics.md) | Experimental: green slopes as constant acceleration rather than speed-scaled |
+| [mario_open_free_play.md](mario_open_free_play.md) | Mario Open (JP): course unlocks, the score limit that ends a round, and the patch removing both |
 | [prehole_signpost.md](prehole_signpost.md) | The pre-hole signpost card, and replacing its banner art |
 | [scorecard_qr.md](scorecard_qr.md) | End-of-round QR code submission, and its 6502 port |
 | [scorecard_qr_mask_sweep.md](scorecard_qr_mask_sweep.md) | Results of the QR mask/capture-condition validation sweep |
