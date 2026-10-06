@@ -23,10 +23,26 @@ downloaded historical code for both slots, and checks the stored scores and
 absence of version 2 stats. It also checks guest downloads disable the QR splice.
 Tests require neither dumped course files nor the historical checkout.
 
-## Reproducing the fixture
+## When a build version needs a fixture
 
-Preserve this fixture when changing the current builder. A new historical build
-should get a separate fixture rather than replacing these bytes.
+This fixture covers what the site still does with a stored seed after its
+buildchain is gone: finishing its unfinished IPS, and accepting the scans its ROM
+emits. A build version needs a frozen fixture of its own only when the next one
+changes something on that path, so that current-build tests stop covering it:
+
+- the finish ABI,
+- the QR payload protocol its ROM emits, or
+- anything else the finisher or the scan route reads from a stored artifact.
+
+Build 4 has one because build 5 moved the scorecard QR to protocol version 2
+while keeping finish ABI 2. A build version bump that leaves all of these alone,
+such as build 6's `wind_fix`, needs no fixture for the build before it: stored
+seeds from that build finish and submit exactly as current ones do.
+
+Preserve this fixture when changing the current builder. A fixture for another
+build is added beside it, never in place of these bytes.
+
+## Reproducing the fixture
 
 With the vanilla US ROM and rehydrated NES Open courses available in the current
 workspace, export the source commit to a temporary directory and run the

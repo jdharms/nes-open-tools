@@ -163,9 +163,9 @@ A seed could shape its wind instead of taking the vanilla distribution:
 - **Gustiness**: anchor 10 (moderate with gusts), 8 (strong with lulls) and 9 (unsettled) are vanilla's own variable winds. The seed also fixes the jitter sequence, so seeds can be picked for steady or jumpy early swings.
 - **Par-aware**: tailwinds on par 5s to make them reachable, or headwinds for a harder round.
 - **Changing weather**: speed rising over the round, or direction turning a step every hole or two.
-- **Crosswind day**: only possible honestly on correct directions, or with the crosswind bug fixed.
+- **Crosswind day**: needs `wind_fix`, since `$40` and `$C0` are among the directions the crosswind bug distorts.
 
-A profile that avoids the crosswind bug without patching it restricts anchors to `$00`-`$30` and `$80`-`$B0`. That loses winds toward the upper left and lower right, and hides the bug rather than fixing it. Whether to fix, avoid or leave the bug is undecided.
+Randomizer seeds carry `wind_fix` (`docs/wind.md`, **The fix**), so a profile there can use all 16 directions. On a ROM without it, a profile that avoids the crosswind bug restricts anchors to `$00`-`$30` and `$80`-`$B0`, which loses winds toward the upper left and lower right.
 
 ### Option A: choose seeds
 
@@ -193,7 +193,7 @@ The site does not display wind yet. A display rule for each hole's wind:
 
 - **Speed**: the anchor's most common speed, which is the anchor for 0-9 and 5 for anchor 10. For every anchor exactly half the hole's swings play at that speed.
 - **Variability**: a marker (a class or data attribute) on anchors 8, 9 and 10, the rows the wrap spreads out. Every other anchor stays within -1 to +2 of the speed shown.
-- **Direction**: the direction the game displays, not the corrected physical one, so the page agrees with the in-game arrow. If the crosswind bug is left in, the broken directions are the place for a marker, not a corrected arrow.
+- **Direction**: the direction the game displays, not the corrected physical one, so the page agrees with the in-game arrow. With `wind_fix` the two are the same. A seed built without it (unfinished build version 5 or earlier) has the crosswind bug, and its broken directions are the place for a marker, not a corrected arrow.
 - **Anchor 0**: shown as calm with no arrow, since half its swings are calm and one in eight blows the other way.
 - **Storage**: `seed_holes` keeps the raw anchors, and the display values are derived at render time, so stats queries see the real values and the rule can change without a migration.
 

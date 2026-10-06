@@ -22,7 +22,7 @@ physics is worse than no map.
 The game's physics is integer arithmetic on multi-byte registers. Much of what it does
 comes from byte-level detail, not from any physical law. Examples: a term taken from a
 velocity's middle byte, an 8-bit add whose carry is lost, a cos lookup that reads past the
-end of its table for six wind directions. py65 is already a dependency and runs bank 13's
+end of its table for eight wind directions. py65 is already a dependency and runs bank 13's
 shot loop in about 0.2 s per shot.
 
 ## Decision

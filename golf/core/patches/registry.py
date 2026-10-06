@@ -74,6 +74,7 @@ from .sram_defaults import (
     magic_bytes,
     sram_defaults_patch,
 )
+from .wind_fix import WIND_FIX_PATCH
 from .wram_expansion import WRAM_EXPANSION_PATCH
 
 
@@ -462,6 +463,12 @@ PATCH_SPECS: dict[str, PatchSpec[Any, Any]] = {
             SeededWindParams,
             lambda ctx, params: seeded_wind_patch(params.seed),
             _report_seeded_wind,
+        ),
+        PatchSpec(
+            "wind_fix",
+            "Make crosswinds push the way their arrow points (docs/wind.md)",
+            NoParams,
+            _fixed(WIND_FIX_PATCH),
         ),
         PatchSpec(
             "practice_swing",

@@ -93,6 +93,7 @@ from .signpost_color import (
 from .signpost_random_banner import random_banner_patches
 from .sram_defaults import Club, sram_defaults_patch, sram_defaults_patches
 from .stack import PatchStack, StackBuild, StackError
+from .wind_fix import WIND_FIX_PATCH
 from .wram_expansion import WRAM_EXPANSION_PATCH
 
 __all__ = [
@@ -111,6 +112,7 @@ __all__ = [
     "parse_step_arg",
     "ScorecardQrPatch",
     "ROUND_STATS_PATCH",
+    "WIND_FIX_PATCH",
     "SCORECARD_QR_PATCH",
     "QR_DISABLE_PATCH",
     "scorecard_course_name_patch",

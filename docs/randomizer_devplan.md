@@ -35,7 +35,7 @@ time touches it. So the build is split at the manifest boundary and no job queue
 needed:
 
 - **Unfinished.** Run once at generation time: the base patches, the course, seeded
-  wind, music, mercy tap-in, the green detail view and scorecard shortcuts, the magic
+  wind, the wind fix, music, mercy tap-in, the green detail view and scorecard shortcuts, the magic
   words on the menus and scorecard, signpost, the round stats the QR code sends (fairways
   hit and penalty strokes), and the scorecard QR image with its credential placeholders
   unfilled. The manifest also carries
