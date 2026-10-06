@@ -13,11 +13,31 @@ in this package.
 
 ## App
 
-- `server/app.py` has `create_app(config)`, a factory. Routes are defined inside it, except
-  the admin pages' (see "Admin" below), and
-  shared objects live on `app.state`: `config`, `strings` and `rate_limiter`, and `db`,
-  `builder` and `timings` once the lifespan has started. Nothing is module-level state, so each test
+- `server/app.py` has `create_app(config)`, a factory: the lifespan, the middleware, the
+  templates, the static mounts and the error pages. Shared objects live on `app.state`:
+  `config`, `strings`, `pages`, `discord` and `rate_limiter`, and `db`, `builder` and
+  `timings` once the lifespan has started. Nothing is module-level state, so each test
   builds its own app.
+- The routes are in `server/routes/`, one module per part of the URL space, each with a
+  function that takes the app's `templates` and builds the `APIRouter` `create_app`
+  includes:
+  - `server/routes/site.py` (`site_router`): `/`, `/rom`, `/rangefinder`, the Markdown
+    pages under `/pages/` and `/healthz`
+  - `server/routes/seed_pages.py` (`seed_router`): `/generate` and `/h/<id>`, with its
+    manifest and its IPS download
+  - `server/routes/round_pages.py` (`round_router`): `/s/<scan>` and `/r/<id>`
+  - `server/routes/account.py` (`account_router`): `/me` and `/auth/`
+  - `server/routes/admin_pages.py` (`admin_router`): `/admin/` (see "Admin" below)
+  - `server/routes/common.py`: what more than one of them needs - `outcome`, `not_found`,
+    `json_refusal` and the download cookie
+
+  A route reads shared objects from `request.app.state`, never from a closure over
+  `create_app`'s arguments; only `templates` is passed in. The modules ending `_pages` are
+  named apart from the table modules they call (`server/seeds.py`, `server/rounds.py`,
+  `server/admin.py`). A new route goes in the module for its path, and a new part of the
+  URL space is a new module and one more `include_router` in `create_app`. A module that
+  logs does so under its own name, so a test capturing a route's log names
+  `server.routes.<module>`.
 - `server/builder.py`'s `SeedBuilder` is the only thing a route calls to generate, build or
   finish. It holds the catalog and curation the seed page also reads. The lifespan calls
   its `warm`, which reads the server's ROM and builds what every seed shares (each par's
@@ -37,7 +57,8 @@ in this package.
   processor in `create_app`. The session cookie holds only `users.id`, plus the OAuth
   state and return path while a Discord sign-in is under way. `app.state.discord` is the
   client, or None when Discord is not configured.
-- The other cookie is `golf_download` (`DOWNLOAD_COOKIE`): a player's `SavedSettings`,
+- The other cookie is `golf_download` (`DOWNLOAD_COOKIE` in `server/routes/common.py`,
+  which reads, sets and expires it): a player's `SavedSettings`,
   compact JSON in base64url, which every successful download sets through `to_save` for a
   year, signed in or not. It is HttpOnly and SameSite=lax, Secure on an HTTPS base URL
   like the session cookie, and untrusted: `SavedSettings.from_cookie` reads anything that
@@ -60,7 +81,8 @@ in this package.
   times the whole server. It mints the request id, puts a `Sample` on
   `request.state.sample` and hands it to `app.state.timings` when the response is done.
   A route that can see a phase from the inside times it with `sample.phase("name")` and
-  names what the request came to with the local `outcome(request, reason)`; the reason is
+  names what the request came to with `outcome(request, reason)` from
+  `server/routes/common.py`; the reason is
   the same short string the refusal already uses. `SeedBuilder.build` takes the sample so
   the wait for the build semaphore is timed apart from the build.
 - The footer on every page shows the site's release, which `create_app` reads once from
@@ -123,7 +145,7 @@ in this package.
 ## Admin
 
 - The `/admin` pages admit the signed-in users `Config.admin_users` (`GOLF_ADMIN_USERS`)
-  lists. `server/admin_routes.py`'s `admin_router(templates)` builds their `APIRouter`, which
+  lists. `server/routes/admin_pages.py`'s `admin_router(templates)` builds their `APIRouter`, which
   `create_app` includes, and every route sits behind `require_admin`, a 404 for anyone else.
   No page links to them.
 - `server/admin.py` holds the admin pages' reads and view dataclasses, with no web types.
@@ -268,7 +290,8 @@ strings catalog.
   Empty text renders as a marked placeholder showing the key, with the note on hover.
 - A script gets its entries as JSON: the route passes `strings.for_script(prefix)` and the
   template embeds it in a `<script type="application/json">` element. Each page script's
-  prefix is a constant in `server/app.py` (`ROM_SCRIPT_STRINGS`, `DOWNLOAD_SCRIPT_STRINGS`),
+  prefix is a constant beside its route (`ROM_SCRIPT_STRINGS` in `server/routes/site.py`,
+  `DOWNLOAD_SCRIPT_STRINGS` in `server/routes/seed_pages.py`),
   and a new script is added to the strings test's list of scripts. The script's `t()`,
   from `makeT` with the element's id, reads it, and calls it with literal keys so the tests
   can find them. Script strings may hold inline HTML like any other: `t()` escapes the values it inserts and

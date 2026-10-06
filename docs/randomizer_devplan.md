@@ -298,8 +298,8 @@ says so, a ROM playtested. Items 1 to 6 build the library; 7 onward build the si
    `golf-qr-credentials` file, and `show` prints a manifest's course. See
    `docs/manifest.md`; `tests/unit/test_randomize_cli.py` and
    `tests/integration/test_randomize_cli_rom.py` check it against the library.
-7. **Site skeleton.** Done: `server/`. `create_app` in `server/app.py` with the home page,
-   the ROM setup page and `/healthz`; Jinja2 templates on vendored Pico CSS; `Config`
+7. **Site skeleton.** Done: `server/`. `create_app` in `server/app.py`, and the home page,
+   the ROM setup page and `/healthz` in `server/routes/site.py`; Jinja2 templates on vendored Pico CSS; `Config`
    from `GOLF_` environment variables; `Database` in `server/db.py`, one locked sqlite3
    connection in WAL mode, migrated by `PRAGMA user_version` from the ordered scripts in
    `server/migrations.py`; migration 1 is the frozen version 1.0 baseline. The vanilla ROMs
@@ -380,7 +380,7 @@ says so, a ROM playtested. Items 1 to 6 build the library; 7 onward build the si
     round through to a recorded scan.
 13. **Admin.** Done: the 1.0 schema includes the flag note and the voided rounds table.
     `Config.admin_users` (`GOLF_ADMIN_USERS`) replaces
-    the token. `server/admin.py` holds the admin pages' queries and `server/admin_routes.py`
+    the token. `server/admin.py` holds the admin pages' queries and `server/routes/admin_pages.py`
     their router, behind `require_admin`; the templates in `server/templates/admin/` write
     their own English. `server/rounds.py` holds `flag_round`, `unflag_round`, `void_round` and
     `restore_round`, and `server/submissions.py` refuses a voided payload as unrecognized

@@ -1,0 +1,254 @@
+"""Generating a seed and what a seed serves: `/generate` and `/h/<id>`, with its manifest
+and its IPS download."""
+
+import logging
+
+from fastapi import APIRouter, Request
+from fastapi.responses import HTMLResponse, RedirectResponse, Response
+from fastapi.templating import Jinja2Templates
+from starlette.concurrency import run_in_threadpool
+
+from golf.randomizer.build import credentials_for
+from golf.randomizer.generate import GenerationError
+from golf.randomizer.manifest import required_roms
+
+from ..auth import current_user
+from ..builder import BuilderUnavailableError, SeedBuilder
+from ..db import Database
+from ..download_settings import save_settings
+from ..entries import load_entry, upsert_entry
+from ..forms import (
+    DownloadState,
+    FormError,
+    FormState,
+    SavedSettings,
+    check_rom_hashes,
+    player_options_from_state,
+    settings_from_state,
+    to_save,
+)
+from ..ratelimit import client_key
+from ..rounds import rounds_for_seed
+from ..seeds import insert_seed, load_seed, load_unfinished_ips
+from ..strings import Strings
+from ..timings import OK, Sample
+from ..views import download_stem, generate_options, seed_view
+from .common import (
+    json_refusal,
+    not_found,
+    outcome,
+    saved_settings,
+    set_download_cookie,
+)
+
+#: the catalog prefix whose strings the seed page embeds for download.js
+DOWNLOAD_SCRIPT_STRINGS = "seed.download.status"
+
+#: generate.html shows one notice per value: a FormError reason, or one of these
+RATE_LIMITED = "rate_limited"
+UNAVAILABLE = "unavailable"
+POOL_TOO_SMALL = "pool"
+#: a seed kept as a permalink but no longer distributed
+SEED_WITHDRAWN = "seed_withdrawn"
+
+log = logging.getLogger(__name__)
+
+
+def starting_settings(request: Request, seed_id: str) -> SavedSettings:
+    """What a seed's download form starts from: this seed's entry over saved settings.
+
+    The entry gives only name and clubs; the rest comes from the saved settings.
+    """
+    saved = saved_settings(request)
+    user = current_user(request)
+    if user is not None:
+        entry = load_entry(request.app.state.db, seed_id, user.id)
+        if entry is not None:
+            saved = saved.with_entry(entry.player_name, entry.clubs)
+    return saved
+
+
+def seed_router(templates: Jinja2Templates) -> APIRouter:
+    router = APIRouter()
+
+    def generate_page(
+        request: Request,
+        state: FormState,
+        error: str | None = None,
+        error_values: dict | None = None,
+        status_code: int = 200,
+    ):
+        return templates.TemplateResponse(
+            request,
+            "generate.html",
+            {
+                "page": "generate",
+                "options": generate_options(),
+                "form": state,
+                "error": error,
+                "error_values": error_values or {},
+            },
+            status_code=status_code,
+        )
+
+    @router.get("/generate", response_class=HTMLResponse)
+    def generate_form(request: Request):
+        return generate_page(request, FormState.default())
+
+    @router.post("/generate", response_class=HTMLResponse)
+    async def generate_seed(request: Request):
+        state = FormState.from_form(await request.form())
+        try:
+            settings = settings_from_state(state)
+        except FormError as problem:
+            outcome(request, problem.reason)
+            return generate_page(
+                request, state, problem.reason, problem.values, status_code=400
+            )
+
+        user = current_user(request)
+        user_id = user.id if user is not None else None
+        # Only a submission that would make the server work spends a token.
+        if not request.app.state.rate_limiter.allow(client_key(request, user_id)):
+            outcome(request, RATE_LIMITED)
+            return generate_page(request, state, RATE_LIMITED, status_code=429)
+
+        seed_builder: SeedBuilder = request.app.state.builder
+        db: Database = request.app.state.db
+
+        sample: Sample = request.state.sample
+
+        def create() -> str:
+            with sample.phase("generate"):
+                manifest = seed_builder.generate(settings)
+            unfinished_ips = seed_builder.build(manifest, sample)
+            with sample.phase("insert"):
+                return insert_seed(db, manifest, unfinished_ips, creator_id=user_id)
+
+        try:
+            seed_id = await run_in_threadpool(create)
+        except GenerationError as problem:
+            log.warning(
+                "generation found no pool: %s", problem, extra={"settings": settings}
+            )
+            outcome(request, POOL_TOO_SMALL)
+            return generate_page(request, state, POOL_TOO_SMALL, status_code=400)
+        except BuilderUnavailableError as problem:
+            log.error("cannot generate: %s", problem)
+            outcome(request, UNAVAILABLE)
+            return generate_page(request, state, UNAVAILABLE, status_code=503)
+        outcome(request, OK)
+        return RedirectResponse(f"/h/{seed_id}", status_code=303)
+
+    # Registered before the seed page, whose {seed_id} would otherwise match "<id>.json".
+    @router.get("/h/{seed_id}.json")
+    def seed_manifest(request: Request, seed_id: str):
+        row = load_seed(request.app.state.db, seed_id)
+        if row is None:
+            raise not_found()
+        return Response(row.manifest_json, media_type="application/json")
+
+    @router.get("/h/{seed_id}", response_class=HTMLResponse)
+    def seed_page(request: Request, seed_id: str):
+        row = load_seed(request.app.state.db, seed_id)
+        if row is None:
+            raise not_found()
+        seed_builder: SeedBuilder = request.app.state.builder
+        strings: Strings = request.app.state.strings
+        view = seed_view(
+            row,
+            seed_builder.catalog,
+            seed_builder.curation,
+            starting_settings(request, seed_id),
+        )
+        rounds = rounds_for_seed(request.app.state.db, seed_id)
+        user = current_user(request)
+        return templates.TemplateResponse(
+            request,
+            "seed.html",
+            {
+                "page": "seed",
+                "seed": view,
+                "rounds": rounds,
+                # scores stay collapsed, so as not to spoil the seed, until the viewer
+                # has recorded a round of their own on it
+                "rounds_open": user is not None
+                and any(r.user_id == user.id for r in rounds),
+                "download_strings": strings.for_script(DOWNLOAD_SCRIPT_STRINGS),
+            },
+        )
+
+    @router.post("/h/{seed_id}/patch.ips")
+    async def seed_patch(request: Request, seed_id: str):
+        row = load_seed(request.app.state.db, seed_id)
+        if row is None:
+            raise not_found()
+        if row.withdrawn:
+            outcome(request, SEED_WITHDRAWN)
+            return json_refusal(410, SEED_WITHDRAWN)
+        seed_builder: SeedBuilder = request.app.state.builder
+        sample: Sample = request.state.sample
+        manifest = row.manifest
+        state = DownloadState.from_form(await request.form())
+        try:
+            check_rom_hashes(state, required_roms(manifest, seed_builder.catalog))
+        except FormError as problem:
+            outcome(request, problem.reason)
+            return json_refusal(403, problem.reason, problem.values)
+        try:
+            options = player_options_from_state(
+                state, manifest.course.clubs, manifest.finish_abi_version
+            )
+        except FormError as problem:
+            outcome(request, problem.reason)
+            return json_refusal(400, problem.reason, problem.values)
+
+        db: Database = request.app.state.db
+        unfinished_ips = load_unfinished_ips(db, seed_id)
+        if unfinished_ips is None:  # pragma: no cover - seeds are never deleted
+            raise not_found()
+        # Signed in, the download enters the player in the seed and finishes with their
+        # credentials; signed out, it finishes a guest ROM and records nothing.
+        user = current_user(request)
+        credentials = None
+        if user is not None:
+            with sample.phase("entry"):
+                entry = upsert_entry(db, row.id, user.id, options)
+            credentials = credentials_for(row.qr_seed_id, user.player_id, entry.keys)
+        try:
+            with sample.phase("finish"):
+                patch = await run_in_threadpool(
+                    seed_builder.finish, manifest, unfinished_ips, options, credentials
+                )
+        except BuilderUnavailableError as problem:
+            log.error("cannot finish a download: %s", problem)
+            outcome(request, UNAVAILABLE)
+            return json_refusal(503, UNAVAILABLE)
+        # A withdrawal while the threadpool was finishing withholds the result. A signed-in
+        # request may already have created its entry, but no ROM leaves the server.
+        current = load_seed(db, seed_id)
+        if current is None:  # pragma: no cover - seeds are never deleted
+            raise not_found()
+        if current.withdrawn:
+            outcome(request, SEED_WITHDRAWN)
+            return json_refusal(410, SEED_WITHDRAWN)
+        outcome(request, OK)
+        response = Response(
+            patch,
+            media_type="application/octet-stream",
+            headers={
+                "Content-Disposition": f'attachment; filename="{download_stem(row)}.ips"'
+            },
+        )
+        saved = to_save(
+            options,
+            manifest.course.clubs,
+            manifest.finish_abi_version,
+            saved_settings(request),
+        )
+        if user is not None:
+            save_settings(db, user.id, saved)
+        set_download_cookie(request, response, saved)
+        return response
+
+    return router

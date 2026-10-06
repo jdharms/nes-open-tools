@@ -24,7 +24,7 @@ from golf.randomizer.manifest import (
 )
 from golf.randomizer.roms import VANILLA_ROMS, vanilla_rom
 from golf.randomizer.wind import DIRECTION_PROFILES, SPEED_PROFILES
-from server.app import DOWNLOAD_COOKIE, SESSION_COOKIE, create_app
+from server.app import SESSION_COOKIE, create_app
 from server.auth import DiscordClient, DiscordError, DiscordIdentity
 from server.builder import SeedBuilder
 from server.config import Config, ConfigError
@@ -33,6 +33,7 @@ from server.forms import FormState, SavedSettings
 from server.migrations import MIGRATIONS
 from server.pages import PageCatalog
 from server.ratelimit import RateLimiter
+from server.routes.common import DOWNLOAD_COOKIE
 from server.strings import Entry, Strings
 from tests.app_state import app_state
 
@@ -1743,7 +1744,7 @@ def test_a_missing_server_rom_is_logged_when_generating(
     missing = SeedBuilder(catalog, curation, HoleStore(), tmp_path / "missing.nes")
     with (
         app_client(strings=UNWRITTEN, builder=missing) as test_client,
-        caplog.at_level(logging.ERROR, logger="server.app"),
+        caplog.at_level(logging.ERROR, logger="server.routes.seed_pages"),
     ):
         post_generate(test_client)
     assert "missing.nes" in caplog.text
@@ -1759,7 +1760,7 @@ def test_a_missing_server_rom_is_logged_when_a_download_finishes(
     builder = NoRom(catalog, curation, HoleStore(), tmp_path / "missing.nes")
     with app_client(strings=UNWRITTEN, builder=builder) as test_client:
         seed_id = generate_seed(test_client)
-        with caplog.at_level(logging.ERROR, logger="server.app"):
+        with caplog.at_level(logging.ERROR, logger="server.routes.seed_pages"):
             post_download(test_client, seed_id)
     assert "missing.nes" in caplog.text
 
@@ -1771,7 +1772,7 @@ def test_a_pool_that_cannot_fill_is_logged_with_its_settings(
     builder = PoolTooSmall(catalog, curation, HoleStore(), tmp_path / "x.nes")
     with (
         app_client(strings=UNWRITTEN, builder=builder) as test_client,
-        caplog.at_level(logging.WARNING, logger="server.app"),
+        caplog.at_level(logging.WARNING, logger="server.routes.seed_pages"),
     ):
         post_generate(test_client)
     (found,) = [r for r in caplog.records if "no pool" in r.getMessage()]
@@ -1789,7 +1790,7 @@ def test_discord_failing_is_logged(fake_builder, caplog):
         )
     ) as test_client:
         state = start_discord_sign_in(test_client)
-        with caplog.at_level(logging.WARNING, logger="server.app"):
+        with caplog.at_level(logging.WARNING, logger="server.routes.account"):
             test_client.get("/auth/callback", params={"code": "abc", "state": state})
     assert "Discord sign-in failed" in caplog.text
 

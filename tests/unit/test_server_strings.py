@@ -7,11 +7,8 @@ from pathlib import Path
 import pytest
 from markupsafe import Markup, escape
 
-from server.app import (
-    DOWNLOAD_SCRIPT_STRINGS,
-    RANGEFINDER_SCRIPT_STRINGS,
-    ROM_SCRIPT_STRINGS,
-)
+from server.routes.seed_pages import DOWNLOAD_SCRIPT_STRINGS
+from server.routes.site import RANGEFINDER_SCRIPT_STRINGS, ROM_SCRIPT_STRINGS
 from server.strings import CATALOG_DIR, Entry, Strings, StringsError
 
 SERVER = Path(__file__).resolve().parents[2] / "server"
