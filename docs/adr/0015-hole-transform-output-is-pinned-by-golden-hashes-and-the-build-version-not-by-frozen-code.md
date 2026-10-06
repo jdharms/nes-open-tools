@@ -1,6 +1,6 @@
 +++
-status = "proposed"
-date = 2026-10-03
+status = "accepted"
+date = 2026-10-06
 area = "randomizer"
 permanent = false
 revisit_when = "the site rebuilds a stored seed from its manifest instead of serving its stored unfinished IPS, or one release must build more than one unfinished build version"
