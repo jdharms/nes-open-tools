@@ -249,7 +249,7 @@ in this package.
   `BuilderUnavailableError`, WARNING for a `GenerationError` or a `DiscordError`. A
   `FormError` is not logged - a user's mistake is counted through the sample's outcome.
 - Keys, secrets and session contents never reach a record.
-  `tests/unit/test_server_app.py` checks that a rejected scan logs its cause and not the
+  `tests/unit/server_app/test_rounds.py` checks that a rejected scan logs its cause and not the
   entry's MAC keys.
 
 ## Player-facing text
@@ -333,19 +333,39 @@ Playwright browser.
 
 ## Tests
 
-`tests/unit/test_server_*.py`. Build the app with `create_app(Config(database=":memory:"))`
-and use `TestClient` as a context manager so the lifespan opens and migrates the
-database. Database tests use `Database(":memory:")` directly.
+`tests/unit/test_server_*.py`, one file per module, and `tests/unit/server_app/` for the
+tests that drive the whole app through a `TestClient`. Build the app with
+`create_app(Config(database=":memory:"))` and use `TestClient` as a context manager so the
+lifespan opens and migrates the database. Database tests use `Database(":memory:")`
+directly.
+
+`tests/unit/server_app/` follows `server/routes/`:
+
+- `test_app.py`: the factory - startup, what every page shares, the error pages, how
+  strings render
+- `test_site.py`: `server/routes/site.py`
+- `test_generate.py`, `test_seed_page.py` and `test_download.py`:
+  `server/routes/seed_pages.py`, by route
+- `test_saved_settings.py`: the download cookie and the account's copy, across the seed
+  page, the download and `/me`
+- `test_rounds.py`: `server/routes/round_pages.py`
+- `test_account.py`: `server/routes/account.py`
+- `conftest.py`: the fixtures they share (`client`, `unwritten_client`, `fake_builder`)
+- `helpers.py`: what more than one of them needs, and `tests/unit/test_server_admin.py`
+  too - `FakeBuilder`, `UNWRITTEN`, `app_client`, `dev_client`, `generate_seed`,
+  `post_download`, `entered_seed`, `scan_path`. A helper only one file uses stays in that
+  file.
 
 Posting to `/generate` builds a ROM, so unit tests pass `builder=` a `SeedBuilder` subclass
-whose `build` returns a fixed blob, and `rate_limiter=` a small `RateLimiter` to test
-refusals (`tests/unit/test_server_app.py`). `tests/integration/test_server_generate_rom.py`
+whose `build` returns a fixed blob (`FakeBuilder` in `tests/unit/server_app/helpers.py`),
+and `rate_limiter=` a small `RateLimiter` to test refusals
+(`tests/unit/server_app/test_generate.py`). `tests/integration/test_server_generate_rom.py`
 runs the real builder. Posting to `/h/<id>/patch.ips` finishes a ROM, so the same
 subclass overrides `finish`, recording the credentials it was given; `tests/integration/test_server_download_rom.py` and
 `tests/integration/test_site_download.py` run the real one, the second in a browser.
 
 A scan's path is built from `RoundPayload` and the entry's stored keys (`scan_path` in
-`tests/unit/test_server_app.py`); `tests/integration/test_server_submission_rom.py` builds
+`tests/unit/server_app/helpers.py`); `tests/integration/test_server_submission_rom.py` builds
 it instead by running a downloaded ROM's QR routine in the simulator. `/s/` answers a 303,
 and `TestClient` follows redirects unless a test passes `follow_redirects=False`, so a test
 that cares about the redirect itself says so.
@@ -353,7 +373,7 @@ that cares about the redirect itself says so.
 Sign-in tests build the app with `Config(dev_login=True)` and sign in with
 `/auth/login?as=<name>`, or with Discord credentials and `discord=` a `DiscordClient`
 subclass whose `identify` returns a fixed identity (`FakeDiscord` in
-`tests/unit/test_server_app.py`). `tests/unit/test_server_auth.py` runs the real client
+`tests/unit/server_app/test_account.py`). `tests/unit/test_server_auth.py` runs the real client
 against `httpx2.MockTransport`.
 
 `create_app` takes `timings=` a `TimingSink`; one built with `flush_seconds=None` is

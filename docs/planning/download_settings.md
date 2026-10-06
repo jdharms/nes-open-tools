@@ -304,7 +304,7 @@ a ROM the user playtests.
    adjusted-bag marker and the open flag. Add `seed.download.*` keys with notes and empty
    text, and any `site.css` rules. Capture the seed page with `golf-site-screenshot
    --generate --expand` and check it at both widths and in both themes. Tests: form
-   parsing and refusals for the new fields in `tests/unit/test_server_app.py`, and the
+   parsing and refusals for the new fields in `tests/unit/server_app/test_download.py`, and the
    strings test.
 5. **Cookie.** The seed page reads `golf_download` and prefills from it, below an entry for
    this seed. A successful download sets it from `to_save`. Tests: a download sets the
@@ -316,7 +316,7 @@ a ROM the user playtests.
    `server/download_settings.py`, the precedence above for signed-in players, the upsert
    on download, and the `/me` section with `POST /me/download-settings` and
    `POST /me/download-settings/forget`. Tests in
-   `tests/unit/test_server_app.py` and a database test for the module. Update the
+   `tests/unit/server_app/test_saved_settings.py` and a database test for the module. Update the
    devplan's data model table and routes table, and `server/CLAUDE.md`'s Database section
    with the module's ownership. Draft an ADR for storing saved settings in the cookie and
    on the account, recording that entries were considered and rejected as a source.

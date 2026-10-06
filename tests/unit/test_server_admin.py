@@ -12,7 +12,7 @@ from server.app import create_app
 from server.config import Config
 from server.timings import Sample
 from tests.app_state import app_state
-from tests.unit.test_server_app import (
+from tests.unit.server_app.helpers import (
     IPS,
     UNWRITTEN,
     FakeBuilder,

@@ -306,7 +306,7 @@ says so, a ROM playtested. Items 1 to 6 build the library; 7 onward build the si
    and their SHA-1s are `golf/randomizer/roms.py`; `server/static/rom.js` hashes a chosen
    file with SubtleCrypto, retrying a mismatch with the vanilla iNES header in place or
    prepended, and stores verified bytes in IndexedDB. `golf-site` launches
-   it. `tests/unit/test_server_app.py`, `test_server_db.py` and `test_server_config.py`
+   it. `tests/unit/server_app/`, `tests/unit/test_server_db.py` and `test_server_config.py`
    run against an in-memory database. See `server/CLAUDE.md`.
 8. **Generate and seed page.** Done: `/generate`, `/h/<id>` and `/h/<id>.json`.
    `server/forms.py` turns the form into `Settings`, refusing with a reason the page shows;
@@ -315,7 +315,7 @@ says so, a ROM playtested. Items 1 to 6 build the library; 7 onward build the si
    id and writes the seed and its 18 `seed_holes` rows, with the pin and wind anchors from
    `predict_hole`; `server/ratelimit.py` is the token bucket; `server/views.py` shapes the
    form's choices and the seed page from the manifest and catalog. A missing page renders
-   `not_found.html`. `tests/unit/test_server_app.py`, `test_server_forms.py`,
+   `not_found.html`. `tests/unit/server_app/test_generate.py`, `tests/unit/test_server_forms.py`,
    `test_server_seeds.py`, `test_server_ratelimit.py` and `test_server_builder.py` run
    without a ROM; `tests/integration/test_server_generate_rom.py` checks the stored IPS
    against `build_unfinished`.
@@ -329,7 +329,7 @@ says so, a ROM playtested. Items 1 to 6 build the library; 7 onward build the si
    `server/static/download.js` gates the form on the store, fetches the IPS, applies it to
    the stored US ROM and saves it as `notgr_par<par>_<id>.nes`, a name that marks a
    randomizer ROM, tells seeds apart by par and leads back to the seed page (`download_stem`
-   in `server/views.py`). `tests/unit/test_server_app.py` and `test_server_forms.py` run
+   in `server/views.py`). `tests/unit/server_app/test_download.py` and `tests/unit/test_server_forms.py` run
    without a ROM; `tests/integration/test_server_download_rom.py` checks the served IPS
    against `finish`, and `tests/integration/test_site_download.py` downloads in headless
    Chromium and compares the saved ROM with the library's. The site can now run a league
@@ -343,7 +343,7 @@ says so, a ROM playtested. Items 1 to 6 build the library; 7 onward build the si
     sign-in, or the player's name and sign-out. `POST /generate` records the creator and
     rate-limits per user. `golf-site-screenshot --login` captures pages signed in.
     `tests/unit/test_server_users.py` and `test_server_auth.py` (the client against a mock
-    transport), and the sign-in tests in `test_server_app.py`, run without Discord.
+    transport), and `tests/unit/server_app/test_account.py`, run without Discord.
 11. **Entries.** Done: the 1.0 schema includes `entries`; `server/entries.py` is its only writer,
     with `upsert_entry` creating a player's entry for a seed with two drawn keys or updating
     its name and clubs, and `entries_for_user` listing them. A signed-in download upserts the
@@ -352,7 +352,7 @@ says so, a ROM playtested. Items 1 to 6 build the library; 7 onward build the si
     guest ROM and records nothing. The seed page tells a signed-out player the download is
     a guest ROM and links to sign-in. `/me` lists the player's entries, and the signed-in
     name in the header links to it. `tests/unit/test_server_entries.py` and the entry tests
-    in `test_server_app.py` and `test_server_db.py` run without a ROM;
+    in `tests/unit/server_app/test_download.py` and `test_server_db.py` run without a ROM;
     `tests/integration/test_server_download_rom.py` checks a signed-in download against
     `finish` with the entry's credentials.
 12. **Submissions.** Done: the 1.0 schema includes `rounds` and `round_holes`, which
@@ -374,7 +374,7 @@ says so, a ROM playtested. Items 1 to 6 build the library; 7 onward build the si
     each linking to its permalink, and `/me` lists the player's rounds. Once an entry has a round, `upsert_entry` leaves it
     alone: a later download still finishes with the choices it posts and the entry's keys.
     `tests/unit/test_server_submissions.py`, `tests/unit/test_server_rounds.py` and the
-    submission tests in `test_server_app.py` and `test_server_db.py` run without a ROM;
+    tests in `tests/unit/server_app/test_rounds.py` and `test_server_db.py` run without a ROM;
     `tests/integration/test_server_submission_rom.py` downloads a signed-in ROM, builds both
     players' URLs by running its QR routine in the simulator, and records them. Playtest a
     round through to a recorded scan.
