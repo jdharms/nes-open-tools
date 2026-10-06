@@ -9,7 +9,7 @@ from golf.core.patches.sram_defaults import Club
 from golf.randomizer.catalog import US_ROM, Catalog
 from golf.randomizer.curation import CurationSnapshot
 from golf.randomizer.generate import generate
-from golf.randomizer.manifest import ClubRules, Manifest, Settings
+from golf.randomizer.manifest import ClubRules, DrawRule, Manifest, Settings
 
 ROOT = Path(__file__).resolve().parents[2]
 
@@ -59,6 +59,8 @@ def test_every_generate_flag_lands_in_the_settings(tmp_path):
         "--exclude-tags",
         "long,scenic",
         "--allow-family-repeats",
+        "--experts-per-nine",
+        "2",
         "--music",
         "nes_uk",
         "--mercy-point",
@@ -78,6 +80,7 @@ def test_every_generate_flag_lands_in_the_settings(tmp_path):
         sources=frozenset({US_ROM}),
         exclude_tags=frozenset({"long", "scenic"}),
         allow_family_repeats=True,
+        draw_rule=DrawRule.expert_cap(2),
         music="nes_uk",
         mercy_point=None,
         clubs=ClubRules(
@@ -87,6 +90,24 @@ def test_every_generate_flag_lands_in_the_settings(tmp_path):
         ),
     )
     assert load(path).course.par == 70
+
+
+def test_the_draw_rule_flags_choose_the_rule(tmp_path):
+    path = tmp_path / "seed.json"
+    for args, rule, shown in [
+        ([], DrawRule.expert_cap(1), "draw rule: at most 1 expert hole on each nine"),
+        (["--draw-rule", "expert_cap"], DrawRule.expert_cap(1), "at most 1"),
+        (
+            ["--experts-per-nine", "0"],
+            DrawRule.expert_cap(0),
+            "draw rule: no expert holes",
+        ),
+        (["--draw-rule", "uniform"], DrawRule(), "draw rule: uniform"),
+    ]:
+        completed = run("generate", "--seed", "rule", "-o", path, *args)
+        assert completed.returncode == 0, completed.stderr
+        assert load(path).settings.draw_rule == rule, args
+        assert shown in completed.stdout
 
 
 def test_show_prints_the_course(tmp_path):
@@ -108,6 +129,7 @@ def test_show_reads_schema_one_but_build_refuses_its_historical_buildchain(tmp_p
     current["schema"] = 1
     del current["build_version"]
     del current["finish_abi_version"]
+    del current["settings"]["draw_rule"]
     path = tmp_path / "schema-one.json"
     path.write_text(json.dumps(current))
 
@@ -128,6 +150,8 @@ def test_generate_refuses_settings_the_model_refuses(tmp_path):
         (["--banned", "PT"], "putter cannot be banned"),
         (["--clubs-max", "2", "--required-bag", "1W,3W"], "over the max"),
         (["--banned", "5W"], "unknown club"),
+        (["--experts-per-nine", "10"], "per_nine must be 0-9"),
+        (["--draw-rule", "uniform", "--experts-per-nine", "1"], "does not apply"),
     ]:
         completed = run("generate", "-o", path, *args)
         assert completed.returncode == 1, args

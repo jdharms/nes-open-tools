@@ -16,12 +16,13 @@ from golf.randomizer.catalog import (
     HoleId,
     RomSource,
 )
-from golf.randomizer.curation import CurationSnapshot
+from golf.randomizer.curation import EXPERT_TAG, CurationSnapshot
 from golf.randomizer.generate import GENERATOR_VERSION, GenerationError, generate
 from golf.randomizer.layout import COUNTS, satisfies
 from golf.randomizer.manifest import (
     SCHEMA,
     ClubRules,
+    DrawRule,
     Manifest,
     Settings,
     required_roms,
@@ -74,7 +75,7 @@ def test_draws_a_prng_seed_when_the_settings_have_none(real_catalog, real_curati
 
 def test_records_versions_and_round_trips(real_catalog, real_curation):
     manifest = generate(real_catalog, real_curation, Settings(prng_seed="abc"))
-    assert manifest.schema == SCHEMA == 2
+    assert manifest.schema == SCHEMA == 3
     assert manifest.generator_version == GENERATOR_VERSION
     assert manifest.build_version == BUILD_VERSION == 6
     assert manifest.finish_abi_version == FINISH_ABI_VERSION == 2
@@ -239,3 +240,154 @@ def test_reports_a_pool_the_family_rule_leaves_too_small():
 def test_reports_filters_that_empty_the_pool(real_catalog, real_curation):
     with pytest.raises(GenerationError, match="par 5: 0"):
         generate(minimal_catalog(par5=0), real_curation, Settings(prng_seed="abc"))
+
+
+# -- Draw rules -------------------------------------------------------------------------------
+
+
+def experts_by_nine(manifest: Manifest, curation: CurationSnapshot) -> tuple[int, int]:
+    expert = [
+        EXPERT_TAG in curation.for_hole(slot.id).tags for slot in manifest.course.holes
+    ]
+    return sum(expert[:9]), sum(expert[9:])
+
+
+def expert_catalog(experts: int = 6) -> tuple[Catalog, CurationSnapshot]:
+    """Enough ordinary holes for any layout, plus `experts` par 4 expert holes."""
+    extra = [entry(f"t/expert_{n}", 4, JP_ROM) for n in range(experts)]
+    catalog = minimal_catalog(par3=5, par4=12, par5=5, extra=extra)
+    curation = CurationSnapshot.from_json(
+        {str(item.id.lineage): {"tags": [EXPERT_TAG]} for item in extra}
+    )
+    return catalog, curation
+
+
+def test_the_real_curation_tags_expert_holes(real_catalog, real_curation):
+    pool = build_pool(real_catalog, real_curation, Settings())
+    assert len(pool.experts) == 21
+    assert all(hole_id.lineage.startswith("jp_") for hole_id in pool.experts)
+
+
+@pytest.mark.parametrize("per_nine", [0, 1, 2])
+def test_an_expert_cap_holds_on_each_nine_of_real_seeds(
+    real_catalog, real_curation, per_nine
+):
+    most = 0
+    for seed in range(60):
+        manifest = generate(
+            real_catalog,
+            real_curation,
+            Settings(prng_seed=str(seed), draw_rule=DrawRule.expert_cap(per_nine)),
+        )
+        nines = experts_by_nine(manifest, real_curation)
+        assert max(nines) <= per_nine, f"seed {seed}: {nines}"
+        assert satisfies(manifest.course.layout, COUNTS[72])
+        assert len({slot.id for slot in manifest.course.holes}) == 18
+        most = max(most, *nines)
+    assert most == per_nine, "the cap was never reached, so it was never tested"
+
+
+def test_a_uniform_draw_goes_over_the_cap_on_real_seeds(real_catalog, real_curation):
+    """What the cap is for: without it, real seeds put several expert holes on a nine."""
+    worst = max(
+        max(
+            experts_by_nine(
+                generate(
+                    real_catalog,
+                    real_curation,
+                    Settings(prng_seed=str(seed), draw_rule=DrawRule()),
+                ),
+                real_curation,
+            )
+        )
+        for seed in range(40)
+    )
+    assert worst > 1
+
+
+def test_a_capped_seed_never_repeats_a_family(real_catalog, real_curation):
+    label_of = {
+        lineage: label
+        for label, members in real_curation.families().items()
+        for lineage in members
+    }
+    for seed in range(40):
+        holes = generate(
+            real_catalog,
+            real_curation,
+            Settings(prng_seed=str(seed), draw_rule=DrawRule.expert_cap(1)),
+        ).course.holes
+        drawn = [
+            label_of[slot.id.lineage] for slot in holes if slot.id.lineage in label_of
+        ]
+        assert len(drawn) == len(set(drawn)), f"seed {seed} repeated a family: {drawn}"
+
+
+def test_a_capped_draw_is_the_same_for_the_same_seed():
+    catalog, curation = expert_catalog()
+    settings = Settings(prng_seed="abc", draw_rule=DrawRule.expert_cap(1))
+    assert generate(catalog, curation, settings) == generate(
+        catalog, curation, settings
+    )
+
+
+def test_expert_holes_land_on_every_slot_of_a_nine():
+    """Filling the slots in play order would gather a nine's expert holes at its start."""
+    catalog, curation = expert_catalog()
+    seen = set()
+    for seed in range(300):
+        manifest = generate(
+            catalog,
+            curation,
+            Settings(prng_seed=str(seed), draw_rule=DrawRule.expert_cap(1)),
+        )
+        seen |= {
+            number
+            for number, slot in enumerate(manifest.course.holes)
+            if EXPERT_TAG in curation.for_hole(slot.id).tags
+        }
+    par_fours = set()
+    for seed in range(300):
+        layout = generate(
+            catalog, curation, Settings(prng_seed=str(seed))
+        ).course.layout
+        par_fours |= {number for number, par in enumerate(layout) if par == 4}
+    assert seen == par_fours
+    assert {number % 9 for number in seen} == set(range(9))
+
+
+def test_a_cap_of_zero_leaves_a_mixed_family_its_other_member():
+    """An expert hole's twin can still be drawn from the family they share."""
+    twins = [entry("t/twin_expert", 4, JP_ROM), entry("t/twin_plain", 4)]
+    catalog = minimal_catalog(par4=9, extra=twins)
+    curation = CurationSnapshot.from_json(
+        {
+            "t/twin_expert": {"family": "twin", "tags": [EXPERT_TAG]},
+            "t/twin_plain": {"family": "twin"},
+        }
+    )
+    drawn = set()
+    for seed in range(30):
+        course = generate(
+            catalog,
+            curation,
+            Settings(prng_seed=str(seed), draw_rule=DrawRule.expert_cap(0)),
+        ).course
+        drawn |= {str(slot.id) for slot in course.holes}
+    assert "t/twin_plain" in drawn and "t/twin_expert" not in drawn
+
+
+def test_a_capped_draw_needs_a_course_without_expert_holes():
+    """Expert holes are extras: the pool must fill the layout without them at any cap."""
+    extra = [entry(f"t/expert_{n}", 4, JP_ROM) for n in range(6)]
+    catalog = minimal_catalog(par4=5, extra=extra)
+    curation = CurationSnapshot.from_json(
+        {str(item.id.lineage): {"tags": [EXPERT_TAG]} for item in extra}
+    )
+    with pytest.raises(GenerationError, match="without expert holes"):
+        generate(
+            catalog,
+            curation,
+            Settings(prng_seed="abc", draw_rule=DrawRule.expert_cap(9)),
+        )
+    assert generate(catalog, curation, Settings(prng_seed="abc", draw_rule=DrawRule()))

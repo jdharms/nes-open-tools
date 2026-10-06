@@ -19,6 +19,7 @@ from golf.randomizer.manifest import (
     LEGACY_BUILD_VERSION,
     LEGACY_FINISH_ABI_VERSION,
     LEGACY_SCHEMA,
+    DrawRule,
     Manifest,
 )
 from golf.randomizer.roms import VANILLA_ROMS, vanilla_rom
@@ -395,7 +396,12 @@ def test_the_generate_form_offers_every_setting_with_its_default(client):
         assert re.search(rf'name="sources"\s+value="{rom.id}"\s+checked', page)
     assert 'name="allow_family_repeats"' in page
     assert re.search(r'<option value="random"\s+selected', page)
-    assert page.count("<option ") == 9
+    assert page.count("<option ") == 12
+    assert re.findall(r'<option value="(\w+)"\s*(selected)?', page)[:3] == [
+        ("experts_0", ""),
+        ("experts_1", "selected"),
+        ("uniform", ""),
+    ]
     assert re.search(r'name="clubs_max"[^>]*value="14"', page)
     assert page.count('name="banned"') == 15
     assert page.count('name="required_bag"') == 15
@@ -463,6 +469,46 @@ def test_the_seed_page_starts_its_hole_table_and_details_collapsed(unwritten_cli
     assert "seed.holes.heading" in summaries[0]
     assert "seed.details.heading" in summaries[1]
     assert "<details open" not in page
+
+
+@pytest.mark.parametrize(
+    ("choice", "rule", "per_nine", "key"),
+    [
+        ("experts_1", "expert_cap", "1", "seed.details.draw_rule_expert_cap"),
+        ("experts_0", "expert_cap", "0", "seed.details.draw_rule_no_experts"),
+        ("uniform", "uniform", None, "seed.details.draw_rule_uniform"),
+    ],
+)
+def test_the_seed_page_shows_the_draw_rule_it_was_generated_under(
+    unwritten_client, choice, rule, per_nine, key
+):
+    form = FormState.default()
+    form.draw_rule = choice
+    seed_id = generate_seed(unwritten_client, form)
+    page = unwritten_client.get(f"/h/{seed_id}").text
+    cell = re.search(r"<td data-draw-rule=[^>]*>(.*?)</td>", page, re.S)
+    assert cell is not None
+    assert f'data-draw-rule="{rule}"' in cell.group(0)
+    if per_nine is None:
+        assert "data-experts-per-nine" not in cell.group(0)
+    else:
+        assert f'data-experts-per-nine="{per_nine}"' in cell.group(0)
+    assert key in cell.group(1)
+    stored = unwritten_client.get(f"/h/{seed_id}.json").json()["settings"]["draw_rule"]
+    assert stored["rule"] == rule
+    assert stored.get("per_nine") == (None if per_nine is None else int(per_nine))
+
+
+def test_a_seed_stored_before_draw_rules_shows_a_uniform_draw(
+    catalog, curation, tmp_path
+):
+    builder = LegacyBuilder(catalog, curation, HoleStore(), tmp_path / "unused.nes")
+    with app_client(strings=UNWRITTEN, builder=builder) as test_client:
+        seed_id = generate_seed(test_client)
+        page = test_client.get(f"/h/{seed_id}").text
+        settings = test_client.get(f"/h/{seed_id}.json").json()["settings"]
+    assert 'data-draw-rule="uniform"' in page
+    assert "draw_rule" not in settings
 
 
 def test_the_manifest_json_is_the_stored_manifest(client, fake_builder):
@@ -1732,6 +1778,7 @@ class LegacyBuilder(FakeBuilder):
             schema=LEGACY_SCHEMA,
             build_version=LEGACY_BUILD_VERSION,
             finish_abi_version=LEGACY_FINISH_ABI_VERSION,
+            settings=replace(manifest.settings, draw_rule=DrawRule()),
         )
 
 

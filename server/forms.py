@@ -15,7 +15,8 @@ seed's club rules and finish ABI, and `to_save` applies the saving rule to a dow
 `docs/planning/download_settings.md`.
 
 The mercy point and excluded tags are not on the form: a seed from the site takes their
-`Settings` defaults.
+`Settings` defaults. The draw rule is one select over `DRAW_RULE_CHOICES`, three of the
+rules `Settings` can hold.
 """
 
 import base64
@@ -36,7 +37,13 @@ from golf.core.patches.sram_defaults import (
 )
 from golf.randomizer.build import FINISH_ABI_VERSION, BuildError, PlayerOptions
 from golf.randomizer.layout import COUNTS
-from golf.randomizer.manifest import SOURCES, ClubRules, ManifestError, Settings
+from golf.randomizer.manifest import (
+    SOURCES,
+    ClubRules,
+    DrawRule,
+    ManifestError,
+    Settings,
+)
 from golf.randomizer.music import RANDOM, TRACKS
 from golf.randomizer.roms import vanilla_rom
 
@@ -45,6 +52,12 @@ PARS = tuple(sorted(COUNTS, reverse=True))
 #: every club a rule can name: the putter is always allowed and never listed
 RULE_CLUBS = tuple(club for club in Club if club != Club.PT)
 MUSIC_CHOICES = (RANDOM, *TRACKS)
+#: the draw rules the form offers, by the value its select sends, in the order it lists them
+DRAW_RULE_CHOICES = {
+    "experts_0": DrawRule.expert_cap(0),
+    "experts_1": DrawRule.expert_cap(1),
+    "uniform": DrawRule(),
+}
 
 #: FormError reasons, each shown by its own strings key in generate.html
 NO_SOURCES = "no_sources"
@@ -76,6 +89,8 @@ class FormState:
     allow_family_repeats: bool
     music: str
     clubs_max: str
+    #: a key of `DRAW_RULE_CHOICES`
+    draw_rule: str = ""
     banned: set[str] = field(default_factory=set)
     required_bag: set[str] = field(default_factory=set)
 
@@ -88,6 +103,11 @@ class FormState:
             allow_family_repeats=settings.allow_family_repeats,
             music=settings.music,
             clubs_max=str(settings.clubs.max),
+            draw_rule=next(
+                name
+                for name, rule in DRAW_RULE_CHOICES.items()
+                if rule == settings.draw_rule
+            ),
         )
 
     @classmethod
@@ -107,6 +127,7 @@ class FormState:
             allow_family_repeats=bool(text("allow_family_repeats")),
             music=text("music"),
             clubs_max=text("clubs_max"),
+            draw_rule=text("draw_rule"),
             banned=chosen("banned"),
             required_bag=chosen("required_bag"),
         )
@@ -125,7 +146,11 @@ class FormState:
         pairs += [("sources", source) for source in SOURCES if source in self.sources]
         if self.allow_family_repeats:
             pairs.append(("allow_family_repeats", "on"))
-        pairs += [("music", self.music), ("clubs_max", self.clubs_max)]
+        pairs += [
+            ("draw_rule", self.draw_rule),
+            ("music", self.music),
+            ("clubs_max", self.clubs_max),
+        ]
         pairs += [
             ("banned", club.label) for club in RULE_CLUBS if club.label in self.banned
         ]
@@ -159,6 +184,8 @@ def settings_from_state(state: FormState) -> Settings:
         raise FormError(NO_SOURCES)
     if not state.sources <= set(SOURCES):
         raise FormError(INVALID, field="sources")
+    if state.draw_rule not in DRAW_RULE_CHOICES:
+        raise FormError(INVALID, field="draw_rule")
     if state.music not in MUSIC_CHOICES:
         raise FormError(INVALID, field="music")
     if state.clubs_max not in {str(count) for count in range(1, BAG_SIZE + 1)}:
@@ -179,6 +206,7 @@ def settings_from_state(state: FormState) -> Settings:
             par=int(state.par),
             sources=frozenset(state.sources),
             allow_family_repeats=state.allow_family_repeats,
+            draw_rule=DRAW_RULE_CHOICES[state.draw_rule],
             music=state.music,
             clubs=ClubRules(
                 max=clubs_max, banned=banned, required_bag=required or None

@@ -365,6 +365,22 @@ text = "Yes"
 note = "settings value; off"
 text = "No"
 
+[seed.details.draw_rule]
+note = "settings row label; the rule the course's holes were drawn under, about expert holes (the hardest Mario Open holes)"
+text = "Expert Hole Cap"
+
+[seed.details.draw_rule_uniform]
+note = "draw rule row value; no limit on expert holes"
+text = "No Limit"
+
+[seed.details.draw_rule_no_experts]
+note = "draw rule row value; expert holes left out of the course"
+text = "Zero"
+
+[seed.details.draw_rule_expert_cap]
+note = "draw rule row value; at most {count} expert holes on each nine, {count} 1 or more"
+text = "At most {count} per nine"
+
 [seed.details.mercy_point]
 note = "settings row label; the stroke a hole ends on with an automatic tap-in"
 text = "Mercy rule \"tap in\" after stroke..."

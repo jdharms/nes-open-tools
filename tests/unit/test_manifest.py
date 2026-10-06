@@ -16,12 +16,15 @@ from golf.randomizer.catalog import (
     RomSource,
 )
 from golf.randomizer.manifest import (
+    DEFAULT_DRAW_RULE,
     LEGACY_BUILD_VERSION,
     LEGACY_FINISH_ABI_VERSION,
     LEGACY_SCHEMA,
+    LEGACY_SCHEMAS,
     SCHEMA,
     ClubRules,
     Course,
+    DrawRule,
     Manifest,
     ManifestError,
     Settings,
@@ -238,20 +241,25 @@ def test_rejects_missing_and_unknown_fields():
         Manifest.from_json(data)
 
 
+UNIFORM_SETTINGS = Settings(prng_seed="abc", draw_rule=DrawRule())
+
+
 def test_schema_one_loads_with_its_implicit_versions_and_keeps_its_shape():
     data = manifest().to_json()
     data["schema"] = LEGACY_SCHEMA
     del data["build_version"]
     del data["finish_abi_version"]
+    del data["settings"]["draw_rule"]
     loaded = Manifest.from_json(data)
     assert loaded.build_version == LEGACY_BUILD_VERSION
     assert loaded.finish_abi_version == LEGACY_FINISH_ABI_VERSION
+    assert loaded.settings.draw_rule == DrawRule()
     assert loaded.to_json() == data
 
 
 def test_schema_one_cannot_claim_another_build_version():
     with pytest.raises(ManifestError, match="implies build_version 1"):
-        manifest(schema=LEGACY_SCHEMA, build_version=2)
+        manifest(schema=LEGACY_SCHEMA, build_version=2, settings=UNIFORM_SETTINGS)
 
 
 def test_schema_one_cannot_claim_another_finish_abi():
@@ -260,7 +268,80 @@ def test_schema_one_cannot_claim_another_finish_abi():
             schema=LEGACY_SCHEMA,
             build_version=LEGACY_BUILD_VERSION,
             finish_abi_version=2,
+            settings=UNIFORM_SETTINGS,
         )
+
+
+def test_schema_two_loads_as_a_uniform_draw_and_keeps_its_shape():
+    data = manifest().to_json()
+    data["schema"] = 2
+    del data["settings"]["draw_rule"]
+    loaded = Manifest.from_json(data)
+    assert loaded.settings.draw_rule == DrawRule()
+    assert loaded.to_json() == data
+
+
+@pytest.mark.parametrize("schema", LEGACY_SCHEMAS)
+def test_a_legacy_schema_refuses_a_draw_rule(schema):
+    data = manifest().to_json()
+    data["schema"] = schema
+    if schema == LEGACY_SCHEMA:
+        del data["build_version"]
+        del data["finish_abi_version"]
+    with pytest.raises(ManifestError, match="unknown \\['draw_rule'\\]"):
+        Manifest.from_json(data)
+    with pytest.raises(ManifestError, match="drawn uniformly"):
+        manifest(
+            schema=schema,
+            build_version=LEGACY_BUILD_VERSION,
+            finish_abi_version=LEGACY_FINISH_ABI_VERSION,
+        )
+
+
+def test_the_current_schema_requires_a_draw_rule():
+    data = manifest().to_json()
+    del data["settings"]["draw_rule"]
+    with pytest.raises(ManifestError, match="missing fields \\['draw_rule'\\]"):
+        Manifest.from_json(data)
+
+
+def test_the_default_draw_rule_caps_expert_holes_at_one_a_nine():
+    assert Settings().draw_rule == DEFAULT_DRAW_RULE == DrawRule.expert_cap(1)
+    assert Settings().to_json()["draw_rule"] == {"rule": "expert_cap", "per_nine": 1}
+
+
+@pytest.mark.parametrize(
+    "rule", [DrawRule(), DrawRule.expert_cap(0), DrawRule.expert_cap(9)]
+)
+def test_a_draw_rule_round_trips(rule):
+    assert DrawRule.from_json(json.loads(json.dumps(rule.to_json()))) == rule
+    assert round_trip(manifest(settings=Settings(prng_seed="abc", draw_rule=rule)))
+
+
+@pytest.mark.parametrize(
+    "data",
+    [
+        None,
+        "uniform",
+        {},
+        {"rule": "ceiling"},
+        {"rule": "uniform", "per_nine": 1},
+        {"rule": "expert_cap"},
+        {"rule": "expert_cap", "per_nine": -1},
+        {"rule": "expert_cap", "per_nine": 10},
+        {"rule": "expert_cap", "per_nine": True},
+        {"rule": "expert_cap", "per_nine": "1"},
+        {"rule": "expert_cap", "per_nine": 1, "extra": 0},
+    ],
+)
+def test_a_malformed_draw_rule_is_refused(data):
+    with pytest.raises(ManifestError):
+        DrawRule.from_json(data)
+
+
+def test_settings_refuse_a_draw_rule_that_is_not_one():
+    with pytest.raises(ManifestError, match="draw_rule"):
+        Settings(draw_rule="uniform")  # type: ignore[arg-type]
 
 
 @pytest.mark.parametrize("value", [None, 0, -1, True, "2"])
@@ -294,8 +375,8 @@ def test_schema_two_requires_the_finish_abi_version_field():
 
 
 def test_rejects_other_schemas_before_reading_fields():
-    data = manifest().to_json() | {"schema": 3, "something_new": 1}
-    with pytest.raises(ManifestError, match="schema 3"):
+    data = manifest().to_json() | {"schema": SCHEMA + 1, "something_new": 1}
+    with pytest.raises(ManifestError, match=f"schema {SCHEMA + 1}"):
         Manifest.from_json(data)
 
 

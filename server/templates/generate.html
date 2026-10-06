@@ -56,6 +56,20 @@
       <small>{{ t("generate.family_repeats.help") }}</small>
     </fieldset>
 
+    <label for="generate-draw-rule">{{ t("generate.draw_rule.label") }}</label>
+    <select id="generate-draw-rule"
+            name="draw_rule"
+            aria-describedby="generate-draw-rule-help">
+      {% for rule in options.draw_rules %}
+        <option value="{{ rule }}" {% if form.draw_rule == rule %}selected{% endif %}>
+          {% if rule == "experts_0" %}{{ t_plain("generate.draw_rule.experts_0") }}
+          {% elif rule == "experts_1" %}{{ t_plain("generate.draw_rule.experts_1") }}
+      {% else %}{{ t_plain("generate.draw_rule.uniform") }}{% endif %}
+        </option>
+      {% endfor %}
+    </select>
+    <small id="generate-draw-rule-help">{{ t("generate.draw_rule.help") }}</small>
+
     <label for="generate-music">{{ t("generate.music.label") }}</label>
     <select id="generate-music" name="music">
       <option value="random"

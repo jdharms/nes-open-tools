@@ -33,6 +33,29 @@ text = "Allow multiple holes in the same family"
 note = "small line under the switch; off by default; what a repeat looks like"
 text = "Some Mario Open courses are the same or similar to NES Open courses. You probably want to keep this turned off."
 
+[generate.draw_rule.label]
+note = "label over the draw rule select; how many expert holes (the hardest Mario Open holes) a course may have"
+text = "Expert Holes Limit"
+
+[generate.draw_rule.experts_0]
+note = "plain: draw rule option; no expert holes on the course"
+text = "Zero (None allowed)"
+
+[generate.draw_rule.experts_1]
+note = "plain: draw rule option, the default; at most one expert hole on each nine"
+text = "One per Nine"
+
+[generate.draw_rule.uniform]
+note = "plain: draw rule option; no limit, every hole equally likely, expert holes included"
+text = "Two per Nine"
+
+[generate.draw_rule.help]
+note = "small line under the draw rule select; what an expert hole is: a Mario Open hole that plays harder than every NES Open hole"
+text = """
+An "Expert Hole" is any hole from Mario Open that's been determined to play harder relative to par
+than any hole from NES Open.  There are around 20 such holes.
+"""
+
 [generate.music.label]
 note = "label over the course music select"
 text = "Course Music"

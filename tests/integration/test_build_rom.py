@@ -32,6 +32,7 @@ from golf.randomizer.manifest import (
     LEGACY_FINISH_ABI_VERSION,
     LEGACY_SCHEMA,
     ClubRules,
+    DrawRule,
     Settings,
 )
 from golf.randomizer.transforms import apply_transforms
@@ -102,9 +103,12 @@ def curation() -> CurationSnapshot:
 
 @pytest.fixture(scope="module")
 def jp_manifest(catalog, curation, vanilla_jp_courses):
-    return generate(
-        catalog, curation, Settings(prng_seed="build-stages-jp", music="jp_france")
+    """Drawn uniformly, like `nes_manifest`, so the golden hashes below move with the
+    build and not with the default draw rule."""
+    settings = Settings(
+        prng_seed="build-stages-jp", music="jp_france", draw_rule=DrawRule()
     )
+    return generate(catalog, curation, settings)
 
 
 @pytest.fixture(scope="module")
@@ -114,6 +118,7 @@ def nes_manifest(catalog, curation):
         sources=frozenset({US_ROM}),
         music="nes_us",
         mercy_point=None,
+        draw_rule=DrawRule(),
     )
     return generate(catalog, curation, settings)
 
@@ -285,6 +290,7 @@ def legacy(manifest):
         schema=LEGACY_SCHEMA,
         build_version=LEGACY_BUILD_VERSION,
         finish_abi_version=LEGACY_FINISH_ABI_VERSION,
+        settings=replace(manifest.settings, draw_rule=DrawRule()),
     )
 
 

@@ -276,7 +276,8 @@ says so, a ROM playtested. Items 1 to 6 build the library; 7 onward build the si
    a layout, chooses the music, derives the wind seeds and draws the magic words, each from
    its own stream of the PRNG seed. Schema 2 adds `build_version` and
    `finish_abi_version`; schema 1 is read as historical build version 1 and finish ABI 1
-   without being rewritten. See `docs/manifest.md`.
+   without being rewritten. Schema 3 adds the `draw_rule` setting, which picks the hole
+   draw; schemas 1 and 2 are read as uniform draws. See `docs/manifest.md`.
 4. **QR patch split.** Done: `scorecard_qr` (`golf/core/patches/scorecard_qr.py`) writes
    the image with its placeholders at the fill; `qr_credentials`
    (`golf/core/patches/qr_credentials.py`) is three byte patches that fill them, expecting
