@@ -1,11 +1,13 @@
 """Unit tests for the manifest model and its JSON form."""
 
 import json
+from dataclasses import replace
 from typing import Any
 
 import pytest
 
 from golf.core.patches.sram_defaults import Club
+from golf.core.rng import predict_hole
 from golf.randomizer.build import BUILD_VERSION, FINISH_ABI_VERSION
 from golf.randomizer.catalog import (
     JP_ROM,
@@ -31,6 +33,7 @@ from golf.randomizer.manifest import (
     Slot,
     required_roms,
 )
+from tests.legacy_manifest import as_schema
 
 PARS = (4, 5, 4, 3, 4, 3, 4, 5, 4, 4, 4, 3, 5, 4, 5, 3, 4, 4)
 
@@ -113,6 +116,8 @@ def test_json_shape():
         "par": 4,
         "transforms": [],
         "wind_seed": 1,
+        "wind_direction": 0xF0,
+        "wind_speed": 3,
     }
     assert data["settings"]["clubs"] == {"max": 14, "banned": [], "required_bag": None}
     assert data["settings"]["sources"] == [US_ROM, JP_ROM]
@@ -223,11 +228,65 @@ def test_rejects_bad_slots():
     with pytest.raises(ManifestError, match="unknown transform 'mirror'"):
         Slot(HoleId("nes_us/01"), 4, 0, ("mirror",))
     with pytest.raises(ManifestError, match="transform must be a string"):
-        Slot.from_json({"id": "nes_us/01", "par": 4, "transforms": [1], "wind_seed": 0})
+        Slot.from_json(
+            {"id": "nes_us/01", "par": 4, "transforms": [1], "wind_seed": 0},
+            legacy=True,
+        )
     with pytest.raises(ManifestError, match="not canonical"):
         Slot.from_json(
-            {"id": "nes_us/01@1", "par": 4, "transforms": [], "wind_seed": 0}
+            {"id": "nes_us/01@1", "par": 4, "transforms": [], "wind_seed": 0},
+            legacy=True,
         )
+
+
+def test_a_slot_takes_the_wind_its_seed_deals_unless_given_anchors():
+    forecast = predict_hole(0x1234, swings=0)
+    dealt = (forecast.direction_anchor, forecast.speed_anchor)
+    assert Slot(HoleId("nes_us/01"), 4, 0x1234).wind == dealt
+    given = Slot(HoleId("nes_us/01"), 4, 0x1234, wind_direction=0x80, wind_speed=10)
+    assert given.wind == (0x80, 10) and given.dealt_wind == dealt
+    assert Slot.from_json(given.to_json()) == given
+
+
+@pytest.mark.parametrize(
+    "anchors",
+    [
+        {"wind_direction": 0x08},
+        {"wind_direction": 0x100},
+        {"wind_direction": -16},
+        {"wind_direction": "80"},
+        {"wind_direction": True},
+        {"wind_speed": 11},
+        {"wind_speed": -1},
+        {"wind_speed": 2.0},
+    ],
+)
+def test_a_slot_refuses_anchors_the_rom_table_cannot_hold(anchors):
+    with pytest.raises(ManifestError, match="wind_"):
+        Slot(HoleId("nes_us/01"), 4, 0, **anchors)
+
+
+@pytest.mark.parametrize("field", ["wind_direction", "wind_speed"])
+def test_the_current_schema_requires_each_holes_anchors(field):
+    data = manifest().to_json()
+    del data["course"]["holes"][3][field]
+    with pytest.raises(ManifestError, match=f"missing fields \\['{field}'\\]"):
+        Manifest.from_json(data)
+
+
+@pytest.mark.parametrize("field", ["wind_speed_profile", "wind_direction_profile"])
+def test_settings_refuse_an_unknown_wind_profile(field):
+    with pytest.raises(ManifestError, match=field):
+        replace(Settings(), **{field: "hurricane"})
+    data = manifest().to_json()
+    del data["settings"][field]
+    with pytest.raises(ManifestError, match=f"missing fields \\['{field}'\\]"):
+        Manifest.from_json(data)
+
+
+def test_the_default_wind_profiles_are_vanilla():
+    settings = Settings()
+    assert settings.wind_speed_profile == settings.wind_direction_profile == "vanilla"
 
 
 def test_rejects_missing_and_unknown_fields():
@@ -245,11 +304,7 @@ UNIFORM_SETTINGS = Settings(prng_seed="abc", draw_rule=DrawRule())
 
 
 def test_schema_one_loads_with_its_implicit_versions_and_keeps_its_shape():
-    data = manifest().to_json()
-    data["schema"] = LEGACY_SCHEMA
-    del data["build_version"]
-    del data["finish_abi_version"]
-    del data["settings"]["draw_rule"]
+    data = as_schema(manifest(settings=UNIFORM_SETTINGS).to_json(), LEGACY_SCHEMA)
     loaded = Manifest.from_json(data)
     assert loaded.build_version == LEGACY_BUILD_VERSION
     assert loaded.finish_abi_version == LEGACY_FINISH_ABI_VERSION
@@ -273,21 +328,55 @@ def test_schema_one_cannot_claim_another_finish_abi():
 
 
 def test_schema_two_loads_as_a_uniform_draw_and_keeps_its_shape():
-    data = manifest().to_json()
-    data["schema"] = 2
-    del data["settings"]["draw_rule"]
+    data = as_schema(manifest(settings=UNIFORM_SETTINGS).to_json(), 2)
     loaded = Manifest.from_json(data)
     assert loaded.settings.draw_rule == DrawRule()
     assert loaded.to_json() == data
 
 
 @pytest.mark.parametrize("schema", LEGACY_SCHEMAS)
+def test_a_legacy_schema_loads_with_the_wind_its_seeds_deal(schema):
+    data = as_schema(manifest(settings=UNIFORM_SETTINGS).to_json(), schema)
+    assert "wind_direction" not in data["course"]["holes"][0]
+    loaded = Manifest.from_json(data)
+    assert loaded.settings.wind_speed_profile == "vanilla"
+    assert loaded.settings.wind_direction_profile == "vanilla"
+    for slot in loaded.course.holes:
+        forecast = predict_hole(slot.wind_seed, swings=0)
+        assert slot.wind == (forecast.direction_anchor, forecast.speed_anchor)
+    assert loaded.to_json() == data
+
+
+@pytest.mark.parametrize("schema", LEGACY_SCHEMAS)
+def test_a_legacy_schema_refuses_wind_profiles_and_anchors(schema):
+    legacy = dict(
+        schema=schema,
+        build_version=LEGACY_BUILD_VERSION,
+        finish_abi_version=LEGACY_FINISH_ABI_VERSION,
+    )
+    with pytest.raises(ManifestError, match="no wind profiles or anchors"):
+        manifest(
+            **legacy, settings=replace(UNIFORM_SETTINGS, wind_speed_profile="strong")
+        )
+    holes = slots()
+    dealt_direction, _ = holes[0].dealt_wind
+    moved = replace(holes[0], wind_direction=dealt_direction ^ 0x80)
+    with pytest.raises(ManifestError, match="no wind profiles or anchors"):
+        manifest(
+            **legacy,
+            settings=UNIFORM_SETTINGS,
+            course=course(holes=(moved, *holes[1:])),
+        )
+    data = as_schema(manifest(settings=UNIFORM_SETTINGS).to_json(), schema)
+    data["course"]["holes"][0]["wind_speed"] = 3
+    with pytest.raises(ManifestError, match="unknown \\['wind_speed'\\]"):
+        Manifest.from_json(data)
+
+
+@pytest.mark.parametrize("schema", LEGACY_SCHEMAS)
 def test_a_legacy_schema_refuses_a_draw_rule(schema):
-    data = manifest().to_json()
-    data["schema"] = schema
-    if schema == LEGACY_SCHEMA:
-        del data["build_version"]
-        del data["finish_abi_version"]
+    data = as_schema(manifest(settings=UNIFORM_SETTINGS).to_json(), schema)
+    data["settings"]["draw_rule"] = {"rule": "uniform"}
     with pytest.raises(ManifestError, match="unknown \\['draw_rule'\\]"):
         Manifest.from_json(data)
     with pytest.raises(ManifestError, match="drawn uniformly"):

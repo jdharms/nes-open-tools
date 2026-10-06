@@ -2,7 +2,7 @@
 
 > **Note**: This document was written by Claude based on reverse-engineering requested by jdharms. Distributions were computed with the Python model in `golf/core/patches/seeded_wind.py`, not measured in play.
 
-How the vanilla game picks, varies and applies wind. The RNG itself, its call sites and the per-player wind slots are in `docs/seeded_wind.md`.
+How the vanilla game picks, varies and applies wind. The RNG itself, its call sites and the per-player wind slots are in `docs/seeded_wind.md`. How a randomizer seed chooses each hole's anchors is in `docs/wind_profiles.md`.
 
 ## Variables
 

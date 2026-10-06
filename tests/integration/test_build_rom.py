@@ -52,6 +52,7 @@ UNFINISHED_ORDER = [
     "course_mirrors",
     "course",
     "seeded_wind",
+    "wind_anchors",
     "wind_fix",
     "music_import",
     "mercy_tap_in",
@@ -179,8 +180,8 @@ def test_build_version_six_golden_unfinished_ips_hashes(
         "jp_france_18": hashlib.sha256(unfinished.ips).hexdigest(),
         "nes_only": hashlib.sha256(nes.ips).hexdigest(),
     } == {
-        "jp_france_18": "82538bebbf6d785548fecec816c3108ce3bed9da9124dcc7f457633b178b6516",
-        "nes_only": "5058ec55ebeee362255f25361c5be0489d2f077cc5e2cde7e4d8b03471af86c6",
+        "jp_france_18": "f6c360309f74d98f0fd425ade445ddfb0db574b4df29066976da9df56ce488d7",
+        "nes_only": "1983d3ea895da794c81db316bb595068c88a08f9214779bef6836a1482e5e84d",
     }
 
 

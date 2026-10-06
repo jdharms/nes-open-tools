@@ -19,9 +19,10 @@ against the holes it drew, because Mario Open themes are only eligible on a cour
 Mario Open holes.
 
 The next two randomizer updates add options players will want rolled, not chosen: a
-hole draw rule (uniform, an expert-hole cap, a per-nine over-par ceiling) and wind
-profiles (vanilla, gentle, moderate, strong, a storm that builds over the round, an
-out-and-back). Players will also want odds across them, such as a 30% chance of Mario
+hole draw rule (uniform, an expert-hole cap, a per-nine over-par ceiling) and two wind
+profiles, one for speed (vanilla, gentle, moderate, strong, a storm that builds over the
+round) and one for direction (vanilla, a prevailing wind, an out-and-back), set out in
+ADR 0018. Players will also want odds across them, such as a 30% chance of Mario
 Open holes, or an 80% chance of leaving expert holes out and 20% of one per nine.
 
 ALTTP randomizer forks call this a mystery seed: any field of the settings document may
@@ -31,7 +32,7 @@ the conditions when they step onto the course. Players there keep a tuned settin
 and roll it again and again, and players here will do the same with their requests.
 
 If a weighted value stayed in `Settings`, a seed's record would say what was asked for
-but not what was rolled, and stats could not be grouped by the draw rule or wind profile
+but not what was rolled, and stats could not be grouped by the draw rule or wind profiles
 a seed actually used. If the site rolled the dice and passed concrete settings on, the
 randomness would live outside the package, the CLI would need its own copy, and the
 roll would not come from the seed's PRNG.
@@ -121,16 +122,17 @@ The parsing rules:
 
 ### Which randomness belongs where
 
-Randomness that is part of a rule stays in generation. Choosing *which* wind profile or
+Randomness that is part of a rule stays in generation. Choosing *which* wind profiles or
 draw rule a seed uses is the request's job. The variation the chosen rule produces
-(hole-to-hole wind under the vanilla profile, the uniform hole draw, picking a track
+(hole-to-hole wind under a profile, the uniform hole draw, picking a track
 that fits the course) happens in generation. So `music: "random"` stays a concrete
 setting.
 
 ### The manifest
 
 The manifest gains a `request` block beside `settings` and `course` in a schema bump,
-the one that also adds the draw rule and wind profile fields:
+the one that also adds the draw rule, the two wind profile fields and each hole's wind
+anchors (ADR 0017):
 
 - `request`: the request as submitted, kept so a seed shows how it came to be and the
   site can offer another seed from the same request.
@@ -160,7 +162,7 @@ keep it secret from anyone who reads the JSON.
   need a second implementation, and the roll would not come from the seed's PRNG.
 - **Weighted values stored in `Settings`, resolved inside generation.** That's how
   `music: "random"` works, but a seed's record would not say which draw rule or wind
-  profile it actually used, and every reader of `settings` would have to understand
+  profiles it actually used, and every reader of `settings` would have to understand
   weighted values.
 - **ALTTP's form: per-field weighting only, with a value-to-weight map.** Per-field
   rolls are independent, so a request can't say "with Mario Open holes, cap the expert
@@ -187,10 +189,10 @@ keep it secret from anyone who reads the JSON.
 - A request file is reusable as is: it holds no seed, and the simplest one is a plain
   settings object.
 - Stats and seed pages read concrete settings, so seeds can be grouped by draw rule,
-  wind profile or sources without parsing weights.
+  wind profiles or sources without parsing weights.
 - New settings fields can be weighted without new request syntax, but can never be
   named `sets` or any other reserved key.
-- The manifest schema changes once, for `request`, the draw rule and the wind profile
+- The manifest schema changes once, for `request`, the draw rule and the wind profiles
   together. Its loader keeps reading schemas 1 and 2.
 - A request upload is untrusted input: its size is limited, it's parsed strictly, and a
   YAML form, if accepted, is loaded with a safe loader.

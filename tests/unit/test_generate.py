@@ -28,6 +28,7 @@ from golf.randomizer.manifest import (
     required_roms,
 )
 from golf.randomizer.pool import build_pool
+from golf.randomizer.wind import BANDS, DIRECTION_PROFILES, SPEED_PROFILES
 
 
 @pytest.fixture(scope="module")
@@ -391,3 +392,78 @@ def test_a_capped_draw_needs_a_course_without_expert_holes():
             Settings(prng_seed="abc", draw_rule=DrawRule.expert_cap(9)),
         )
     assert generate(catalog, curation, Settings(prng_seed="abc", draw_rule=DrawRule()))
+
+
+# -- Wind profiles ----------------------------------------------------------------------------
+
+
+def test_vanilla_profiles_give_each_hole_the_wind_its_seed_deals(
+    real_catalog, real_curation
+):
+    course = generate(real_catalog, real_curation, Settings(prng_seed="abc")).course
+    assert all(slot.wind == slot.dealt_wind for slot in course.holes)
+
+
+def test_wind_profiles_set_the_anchors_and_nothing_else(real_catalog, real_curation):
+    plain = generate(real_catalog, real_curation, Settings(prng_seed="abc"))
+    windy = generate(
+        real_catalog,
+        real_curation,
+        Settings(
+            prng_seed="abc",
+            wind_speed_profile="back_nine_pressure",
+            wind_direction_profile="headwind_out",
+        ),
+    )
+    assert [slot.wind for slot in windy.course.holes] != [
+        slot.wind for slot in plain.course.holes
+    ]
+    for number, (slot, before) in enumerate(
+        zip(windy.course.holes, plain.course.holes, strict=True)
+    ):
+        assert (slot.id, slot.par, slot.wind_seed) == (
+            before.id,
+            before.par,
+            before.wind_seed,
+        )
+        direction, speed = slot.wind
+        assert speed in (BANDS["gentle"] if number < 9 else BANDS["strong"])
+        center = 0x80 if number < 9 else 0x00
+        assert ((direction - center) // 0x10 + 8) % 16 - 8 in range(-2, 3)
+    assert (windy.course.music, windy.course.magic_words) == (
+        plain.course.music,
+        plain.course.magic_words,
+    )
+    assert Manifest.from_json(json.loads(json.dumps(windy.to_json()))) == windy
+
+
+def test_the_two_wind_profiles_draw_from_their_own_streams(real_catalog, real_curation):
+    def holes(**profiles):
+        settings = Settings(prng_seed="abc", **profiles)
+        return generate(real_catalog, real_curation, settings).course.holes
+
+    both = holes(wind_speed_profile="strong", wind_direction_profile="prevailing")
+    speed_only = holes(wind_speed_profile="strong")
+    direction_only = holes(wind_direction_profile="prevailing")
+    assert [slot.wind_speed for slot in both] == [
+        slot.wind_speed for slot in speed_only
+    ]
+    assert [slot.wind_direction for slot in both] == [
+        slot.wind_direction for slot in direction_only
+    ]
+    # a vanilla part keeps the seed's own anchor beside a profiled one
+    assert all(slot.wind_direction == slot.dealt_wind[0] for slot in speed_only)
+    assert all(slot.wind_speed == slot.dealt_wind[1] for slot in direction_only)
+
+
+@pytest.mark.parametrize("speed", SPEED_PROFILES)
+@pytest.mark.parametrize("direction", DIRECTION_PROFILES)
+def test_every_pair_of_wind_profiles_generates(
+    real_catalog, real_curation, speed, direction
+):
+    settings = Settings(
+        prng_seed="abc", wind_speed_profile=speed, wind_direction_profile=direction
+    )
+    manifest = generate(real_catalog, real_curation, settings)
+    assert manifest.settings.wind_speed_profile == speed
+    assert manifest.settings.wind_direction_profile == direction

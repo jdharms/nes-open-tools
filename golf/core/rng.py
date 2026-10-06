@@ -82,8 +82,15 @@ class HoleWindForecast:
     winds: list[tuple[int, int]]  # per swing: (WindDirection $96, WindSpeed $97)
 
 
-def predict_hole(seed: int, swings: int = 12) -> HoleWindForecast:
-    """Predict a hole's pin, anchors and first `swings` wind values from its seed."""
+def predict_hole(
+    seed: int, swings: int = 12, anchors: tuple[int, int] | None = None
+) -> HoleWindForecast:
+    """Predict a hole's pin, anchors and first `swings` wind values from its seed.
+
+    `anchors` is the hole's (direction, speed) under the `wind_anchors` patch, which
+    reads them from a table and still makes both draws, so the pin and the jitter
+    are the same with or without it.
+    """
     state, a = lfsr_step(seed)
     pin_index = a & 0x03
     state, a = lfsr_step(state)
@@ -92,6 +99,8 @@ def predict_hole(seed: int, swings: int = 12) -> HoleWindForecast:
     speed_anchor = a & 0x0F
     if speed_anchor >= 0x0B:
         speed_anchor -= 8
+    if anchors is not None:
+        direction_anchor, speed_anchor = anchors
     slot_state = state
 
     winds = []

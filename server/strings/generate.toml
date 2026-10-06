@@ -56,6 +56,14 @@ An "Expert Hole" is any hole from Mario Open that's been determined to play hard
 than any hole from NES Open.  There are around 20 such holes.
 """
 
+[generate.wind_speed.label]
+note = "label over the wind speed select; how strong the wind is across the round (profile names follow)"
+text = "Wind Speed Profile"
+
+[generate.wind_direction.label]
+note = "label over the wind direction select; which way the wind blows across the round (profile names follow)"
+text = "Wind Direction Profile"
+
 [generate.music.label]
 note = "label over the course music select"
 text = "Course Music"

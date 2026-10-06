@@ -55,6 +55,7 @@ One line per document. Command-line tools are indexed in the top-level `README.m
 | [multi_bank_terrain.md](multi_bank_terrain.md) | Writing a course across terrain banks 0 and 1 (`golf-write`) |
 | [wram_expansion.md](wram_expansion.md) | Growing the terrain buffer past 48 rows |
 | [seeded_wind.md](seeded_wind.md) | Pin positions and wind as a function of a build-time seed |
+| [wind_profiles.md](wind_profiles.md) | A seed's wind speed and direction profiles: the bands, the intensity ramps and the cones |
 | [practice_swing.md](practice_swing.md) | Practice swings that cost no stroke |
 | [green_shortcut.md](green_shortcut.md) | B then Select opens the green detail view, B then Start the scorecard |
 | [putting_practice.md](putting_practice.md) | Starting every hole as a putt (design note, not shipped) |

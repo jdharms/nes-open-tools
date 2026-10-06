@@ -48,6 +48,7 @@ from golf.randomizer.manifest import (
     required_roms,
 )
 from golf.randomizer.music import RANDOM, TRACKS
+from golf.randomizer.wind import DIRECTION_PROFILES, SPEED_PROFILES, compass
 
 EXAMPLES = """
 examples:
@@ -55,6 +56,7 @@ examples:
   golf-randomize generate --par 71 --sources nes_open_us --music nes_uk --mercy-point none
   golf-randomize generate --experts-per-nine 0
   golf-randomize generate --draw-rule uniform
+  golf-randomize generate --wind-speed storm_rolling_in --wind-direction out_and_back
   golf-randomize build nes_open_us.nes demo.json -o demo.nes
   golf-randomize build nes_open_us.nes demo.json --unfinished --ips demo.unfinished.ips
   golf-qr-credentials -o keys.json
@@ -126,6 +128,8 @@ def settings_from_args(args: argparse.Namespace) -> Settings:
         else frozenset(),
         allow_family_repeats=args.allow_family_repeats,
         draw_rule=draw_rule_from_args(args),
+        wind_speed_profile=args.wind_speed,
+        wind_direction_profile=args.wind_direction,
         music=args.music,
         mercy_point=args.mercy_point,
         clubs=rules,
@@ -157,13 +161,17 @@ def summary(
         total_yards += entry.distance
         name = curation.for_hole(slot.id).display_name if curation is not None else None
         suffix = f"  {name}" if name else ""
+        direction, speed = slot.wind
         lines.append(
-            f"  {number:>2}  par {slot.par}  {entry.distance:>3} yd  {slot.id}{suffix}"
+            f"  {number:>2}  par {slot.par}  {entry.distance:>3} yd  "
+            f"wind {speed:>2} to {compass(direction):<3}  {slot.id}{suffix}"
         )
     mercy = "off" if course.mercy_point is None else f"stroke {course.mercy_point}"
     lines += [
         f"total: par {course.par}, {total_yards:,} yards",
         f"draw rule: {describe_draw_rule(manifest.settings.draw_rule)}",
+        f"wind: {manifest.settings.wind_speed_profile} speed, "
+        f"{manifest.settings.wind_direction_profile} direction",
         f"music: {course.music}",
         f"mercy tap-in: {mercy}",
         f"clubs: {describe_clubs(course.clubs)}",
@@ -313,6 +321,18 @@ def build_parser() -> argparse.ArgumentParser:
             "the most expert holes on a nine under expert_cap, 0 to leave them out "
             "(default: 1)"
         ),
+    )
+    gen.add_argument(
+        "--wind-speed",
+        choices=SPEED_PROFILES,
+        default=Settings().wind_speed_profile,
+        help="the wind speed profile (default: %(default)s)",
+    )
+    gen.add_argument(
+        "--wind-direction",
+        choices=DIRECTION_PROFILES,
+        default=Settings().wind_direction_profile,
+        help="the wind direction profile (default: %(default)s)",
     )
     gen.add_argument(
         "--music", default=RANDOM, help=f"{RANDOM} or one of {', '.join(TRACKS)}"

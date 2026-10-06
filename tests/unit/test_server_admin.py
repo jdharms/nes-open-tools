@@ -383,7 +383,8 @@ def test_a_voided_rounds_permalink_is_gone_and_comes_back_with_it(fake_builder):
     assert f'href="/h/{seed_id}"' in gone.text
     # the void note is the admin's alone, and no scores are shown
     assert "warm-up" not in gone.text
-    assert "90" not in gone.text[gone.text.index("<main") :]
+    # only the page's own content: the footer's release can hold any digits
+    assert "90" not in gone.text[gone.text.index("<main") : gone.text.index("</main>")]
     assert back.status_code == 200
     assert "round.heading" in back.text
 

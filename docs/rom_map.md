@@ -91,7 +91,7 @@ Byte-level layout of the course data banks: the `nes-open-golf-rom-layout` skill
 | Terrain data | 0, 1, 2 | `JapanCourseTerrainData`, `USCourseTerrainData`, `UKCourseTerrainData` | `terrain_data_locations.md`, `multi_bank_terrain.md` |
 | Lie classification | 15 | `$EDBC` `ProbeBallPosition`, `$EDEA` `ClassifyProbePosition`; `BallLie` (`$C9`) | `seasonal_terrain.md` |
 | Trees | 15 | `$F632` `ReadTreePixelColor`, `TreeColorMaskTable` (`$F3E2`) | |
-| Wind | 15, 13 | `$DA25` `WindAdjustmentRoutine`; anchors drawn at `$DBA0`; manual wind bank 13 `$89C2`/`$89CF`; in flight bank 13 `$B4FF` `ApplyWindEffect`, its cos lookup `$E7C3` `LE7C3` over `TrigLookupTable` (`$E7CB`) | `wind.md`, `seeded_wind.md` |
+| Wind | 15, 13 | `$DA25` `WindAdjustmentRoutine`; anchors drawn at `$DBA0`, or read from the `wind_anchors` table at `$E00B`; manual wind bank 13 `$89C2`/`$89CF`; in flight bank 13 `$B4FF` `ApplyWindEffect`, its cos lookup `$E7C3` `LE7C3` over `TrigLookupTable` (`$E7CB`) | `wind.md`, `seeded_wind.md` |
 | Random par 5 / par 3 holes (tournament) | 15 | `$DA55` `PickRandomPar5AndPar3Holes` | |
 | Course music | 15 | `$D9FE` `StartCourseBgm`, `CourseBgmTable` | `music_format.md` |
 

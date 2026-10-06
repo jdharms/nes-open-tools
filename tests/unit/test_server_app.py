@@ -23,6 +23,7 @@ from golf.randomizer.manifest import (
     Manifest,
 )
 from golf.randomizer.roms import VANILLA_ROMS, vanilla_rom
+from golf.randomizer.wind import DIRECTION_PROFILES, SPEED_PROFILES
 from server.app import DOWNLOAD_COOKIE, SESSION_COOKIE, create_app
 from server.auth import DiscordClient, DiscordError, DiscordIdentity
 from server.builder import SeedBuilder
@@ -396,7 +397,18 @@ def test_the_generate_form_offers_every_setting_with_its_default(client):
         assert re.search(rf'name="sources"\s+value="{rom.id}"\s+checked', page)
     assert 'name="allow_family_repeats"' in page
     assert re.search(r'<option value="random"\s+selected', page)
-    assert page.count("<option ") == 12
+    assert page.count("<option ") == 12 + len(SPEED_PROFILES) + len(DIRECTION_PROFILES)
+    for name, profiles in [
+        ("wind_speed", SPEED_PROFILES),
+        ("wind_direction", DIRECTION_PROFILES),
+    ]:
+        select = re.search(rf'<select[^>]*name="{name}">(.*?)</select>', page, re.S)
+        assert select is not None
+        options = re.findall(r'<option value="(\w+)"\s*(selected)?', select.group(1))
+        assert options == [
+            (profile, "selected" if profile == "vanilla" else "")
+            for profile in profiles
+        ]
     assert re.findall(r'<option value="(\w+)"\s*(selected)?', page)[:3] == [
         ("experts_0", ""),
         ("experts_1", "selected"),
@@ -499,6 +511,35 @@ def test_the_seed_page_shows_the_draw_rule_it_was_generated_under(
     assert stored.get("per_nine") == (None if per_nine is None else int(per_nine))
 
 
+def test_the_seed_page_names_the_wind_profiles_it_was_generated_under(
+    unwritten_client,
+):
+    form = FormState.default()
+    form.wind_speed, form.wind_direction = "storm_rolling_in", "out_and_back"
+    seed_id = generate_seed(unwritten_client, form)
+    page = unwritten_client.get(f"/h/{seed_id}").text
+    speed = re.search(r'<td data-wind-speed="storm_rolling_in">(.*?)</td>', page)
+    direction = re.search(r'<td data-wind-direction="out_and_back">(.*?)</td>', page)
+    assert speed is not None and "wind.speed.storm_rolling_in" in speed.group(1)
+    assert direction is not None
+    assert "wind.direction.out_and_back" in direction.group(1)
+    stored = unwritten_client.get(f"/h/{seed_id}.json").json()
+    assert stored["settings"]["wind_speed_profile"] == "storm_rolling_in"
+    assert stored["settings"]["wind_direction_profile"] == "out_and_back"
+    holes = stored["course"]["holes"]
+    assert all(hole["wind_speed"] in (0, 1, 2, 3) for hole in holes[:3])
+    assert all(hole["wind_speed"] in (7, 8, 9) for hole in holes[-3:])
+    with app_state(unwritten_client).db.transaction() as conn:
+        rows = conn.execute(
+            "SELECT wind_direction, wind_speed FROM seed_holes WHERE seed_id = ? "
+            "ORDER BY position",
+            (seed_id,),
+        ).fetchall()
+    assert [tuple(row) for row in rows] == [
+        (hole["wind_direction"], hole["wind_speed"]) for hole in holes
+    ]
+
+
 def test_a_seed_stored_before_draw_rules_shows_a_uniform_draw(
     catalog, curation, tmp_path
 ):
@@ -506,9 +547,13 @@ def test_a_seed_stored_before_draw_rules_shows_a_uniform_draw(
     with app_client(strings=UNWRITTEN, builder=builder) as test_client:
         seed_id = generate_seed(test_client)
         page = test_client.get(f"/h/{seed_id}").text
-        settings = test_client.get(f"/h/{seed_id}.json").json()["settings"]
+        stored = test_client.get(f"/h/{seed_id}.json").json()
     assert 'data-draw-rule="uniform"' in page
-    assert "draw_rule" not in settings
+    assert 'data-wind-speed="vanilla"' in page
+    assert 'data-wind-direction="vanilla"' in page
+    assert "draw_rule" not in stored["settings"]
+    assert "wind_speed_profile" not in stored["settings"]
+    assert "wind_speed" not in stored["course"]["holes"][0]
 
 
 def test_the_manifest_json_is_the_stored_manifest(client, fake_builder):

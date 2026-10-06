@@ -28,13 +28,16 @@ With the hole list trimmed to one of its 18 slots:
     "exclude_tags": [],
     "allow_family_repeats": false,
     "draw_rule": {"rule": "expert_cap", "per_nine": 1},
+    "wind_speed_profile": "storm_rolling_in",
+    "wind_direction_profile": "vanilla",
     "music": "random",
     "mercy_point": 9,
     "clubs": {"max": 14, "banned": [], "required_bag": null}
   },
   "course": {
     "holes": [
-      {"id": "nes_uk/09", "par": 5, "transforms": [], "wind_seed": 32048}
+      {"id": "nes_uk/09", "par": 5, "transforms": [], "wind_seed": 32048,
+       "wind_direction": 144, "wind_speed": 2}
     ],
     "music": "jp_france",
     "mercy_point": 9,
@@ -90,12 +93,14 @@ is strict: a missing or unknown field is an error. `golf/randomizer/build.py` tu
 | 2 | 4 | 2 | The unfinished stack adds `extended_sram_defaults`, a table the finisher fills with the BGM, swing, putt and spin defaults, and a seed with club rules leaves CHOOSE CLUBS out of the club house. Current code finishes its stored artifact through ABI 2, but does not rebuild it. |
 | 2 | 5 | 2 | The unfinished stack adds `round_stats`, which counts fairways hit and penalty strokes, and its scorecard QR sends them in payload protocol version 2. Current code finishes its stored artifact through ABI 2, but does not rebuild it. |
 | 2 | 6 | 2 | The unfinished stack adds `wind_fix`, which makes the wind push the ball the way its arrow points on all 16 directions (`docs/wind.md`, **The crosswind bug**). Schema 2 is the last without a draw rule: its seeds were drawn uniformly. |
-| 3 | 6 | 2 | `settings` gains `draw_rule`. This is the current schema and unfinished buildchain. |
+| 3 | 6 | 2 | `settings` gains `draw_rule`, `wind_speed_profile` and `wind_direction_profile`, and each hole gains `wind_direction` and `wind_speed`, which the unfinished stack's `wind_anchors` patch writes into the ROM (ADR 0017). This is the current schema and unfinished buildchain. |
 
 Loading schema 1 supplies `build_version = 1` and `finish_abi_version = 1` in memory and
 serializes it back in its original shape without adding either field. Loading schema 1
 or 2 supplies the `uniform` draw rule the same way: their `settings` have no `draw_rule`,
-refuse one, and serialize back without it. The website stores
+refuse one, and serialize back without it. The same goes for the wind: their settings
+have no wind profiles and their holes no anchors, so both profiles load as `vanilla` and
+each hole with the anchors its wind seed deals, which is the wind those ROMs play. The website stores
 and serves the original JSON text as well as the unfinished IPS, so neither artifact of an
 existing seed is rewritten by a schema update. Reading an old manifest and rebuilding it
 are deliberately separate: the site needs the former to keep seed and round pages
@@ -111,6 +116,8 @@ working, while its stored IPS makes the latter unnecessary.
 | `exclude_tags` | none | Curation tags that keep a hole out of the pool |
 | `allow_family_repeats` | false | Whether two holes of one family may share the course |
 | `draw_rule` | at most 1 expert hole a nine | How the holes are drawn from the pool, below |
+| `wind_speed_profile` | `vanilla` | How the holes' wind speeds are chosen ([wind_profiles.md](wind_profiles.md)) |
+| `wind_direction_profile` | `vanilla` | How the holes' wind directions are chosen |
 | `music` | `random` | A music slug, or `random` |
 | `mercy_point` | 9 | The stroke a hole ends on with a tap-in; `null` leaves the patch out |
 | `clubs` | no limits | Club rules, below |
@@ -154,7 +161,9 @@ hole's `over_par` in `data/difficulty/holes.json` over 3,000 seeds a rule:
 | `sram_magic` | The 16-bit value that marks a save as this seed's, neither byte `$00` or `$FF` |
 
 A slot is a catalog hole `id`, its `par` (a copy of the catalog's, for readability),
-`transforms` and a `wind_seed`. `transforms` names hole transforms, such as `mirror@1`
+`transforms`, a `wind_seed`, and the hole's wind anchors: `wind_direction`, a multiple of
+16 from 0 to 240 (`$00` up the screen, a tailwind; `$80` a headwind), and `wind_speed`,
+0 to 10 (`docs/wind.md`). `transforms` names hole transforms, such as `mirror@1`
 or `hazards@1:<seed>`, applied to the hole in order when the course is built
 (`docs/hole_transforms.md`). A name this release does not know, or a malformed seed,
 fails when the manifest loads. Generation adds no transforms yet. The wind seed is the 16-bit state the ROM's own RNG starts the hole from
@@ -234,11 +243,14 @@ data is already in the ROM, and imports a Mario Open theme from its dump (`music
    cap, and one that cannot raises `GenerationError`.
 5. **Music.** A named slug is used as given. `random` draws from the NES Open themes, or
    from all eight when at least one hole comes from Mario Open.
-6. **Wind.** `derive_hole_seeds(prng_seed)` gives the 18 wind seeds.
+6. **Wind.** `derive_hole_seeds(prng_seed)` gives the 18 wind seeds, which fix each
+   hole's pin and jitter. The two wind profiles then give each hole its direction and
+   speed anchors ([wind_profiles.md](wind_profiles.md)); a `vanilla` profile keeps what
+   the hole's wind seed deals.
 7. **Magic words.** Three distinct words from `golf/randomizer/data/word_bank.txt`.
 8. **SRAM magic.** Two bytes, each uniform over `$01`-`$FE`, high byte first.
 
-The layout, holes, music, magic words and SRAM magic each draw from their own generator,
+The layout, holes, wind directions, wind speeds, music, magic words and SRAM magic each draw from their own generator,
 `random.Random(f"{purpose}\0{prng_seed}")`, and the wind seeds from their own hash, so a
 change to one draw leaves the others as they were.
 
@@ -262,6 +274,7 @@ golf-randomize generate --seed demo -o demo.json
 golf-randomize generate --par 71 --sources nes_open_us --music nes_uk --mercy-point none
 golf-randomize generate --experts-per-nine 0
 golf-randomize generate --draw-rule uniform
+golf-randomize generate --wind-speed storm_rolling_in --wind-direction out_and_back
 golf-randomize build nes_open_us.nes demo.json -o demo.nes
 golf-randomize build nes_open_us.nes demo.json --unfinished --ips demo.unfinished.ips
 golf-randomize build nes_open_us.nes demo.json --credentials keys.json --name LUIGI --clubs 1W,3W,5I,PW
@@ -272,7 +285,8 @@ golf-randomize show demo.json
   `--seed`, `--par`, `--sources`, `--exclude-tags`, `--allow-family-repeats`, `--music`,
   `--mercy-point` (a stroke or `none`), and `--clubs-max`, `--banned` and `--required-bag`
   for the club rules. The draw rule is `--draw-rule` (`uniform` or `expert_cap`) and
-  `--experts-per-nine`, which alone means the expert cap. Lists are comma-separated; clubs use the choose-clubs labels. It
+  `--experts-per-nine`, which alone means the expert cap. The wind profiles are
+  `--wind-speed` and `--wind-direction`. Lists are comma-separated; clubs use the choose-clubs labels. It
   writes the manifest to `-o` (default `manifest.json`) and prints the course.
 - `build` runs `build_unfinished` and then `finish` on the unfinished IPS, as the site
   does. With no stage flag the result is a guest ROM. `--unfinished` stops after the first
@@ -284,5 +298,5 @@ golf-randomize show demo.json
   `--ips` writes the IPS from the vanilla ROM to the stage built.
 - `--catalog`, `--curation` and `--holes` point at a catalog index, curation file or hole
   store other than the checked-in ones.
-- `show` prints a manifest's holes with distances, totals, draw rule, music, mercy point, club rules,
+- `show` prints a manifest's holes with distances and wind anchors, totals, draw rule, wind profiles, music, mercy point, club rules,
   magic words and required ROMs.

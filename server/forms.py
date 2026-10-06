@@ -16,7 +16,7 @@ seed's club rules and finish ABI, and `to_save` applies the saving rule to a dow
 
 The mercy point and excluded tags are not on the form: a seed from the site takes their
 `Settings` defaults. The draw rule is one select over `DRAW_RULE_CHOICES`, three of the
-rules `Settings` can hold.
+rules `Settings` can hold, and the two wind profiles are a select each over every profile.
 """
 
 import base64
@@ -46,6 +46,7 @@ from golf.randomizer.manifest import (
 )
 from golf.randomizer.music import RANDOM, TRACKS
 from golf.randomizer.roms import vanilla_rom
+from golf.randomizer.wind import DIRECTION_PROFILES, SPEED_PROFILES
 
 #: par targets, largest first, as the form lists them
 PARS = tuple(sorted(COUNTS, reverse=True))
@@ -91,6 +92,10 @@ class FormState:
     clubs_max: str
     #: a key of `DRAW_RULE_CHOICES`
     draw_rule: str = ""
+    #: one of `SPEED_PROFILES`
+    wind_speed: str = ""
+    #: one of `DIRECTION_PROFILES`
+    wind_direction: str = ""
     banned: set[str] = field(default_factory=set)
     required_bag: set[str] = field(default_factory=set)
 
@@ -108,6 +113,8 @@ class FormState:
                 for name, rule in DRAW_RULE_CHOICES.items()
                 if rule == settings.draw_rule
             ),
+            wind_speed=settings.wind_speed_profile,
+            wind_direction=settings.wind_direction_profile,
         )
 
     @classmethod
@@ -128,6 +135,8 @@ class FormState:
             music=text("music"),
             clubs_max=text("clubs_max"),
             draw_rule=text("draw_rule"),
+            wind_speed=text("wind_speed"),
+            wind_direction=text("wind_direction"),
             banned=chosen("banned"),
             required_bag=chosen("required_bag"),
         )
@@ -148,6 +157,8 @@ class FormState:
             pairs.append(("allow_family_repeats", "on"))
         pairs += [
             ("draw_rule", self.draw_rule),
+            ("wind_speed", self.wind_speed),
+            ("wind_direction", self.wind_direction),
             ("music", self.music),
             ("clubs_max", self.clubs_max),
         ]
@@ -186,6 +197,10 @@ def settings_from_state(state: FormState) -> Settings:
         raise FormError(INVALID, field="sources")
     if state.draw_rule not in DRAW_RULE_CHOICES:
         raise FormError(INVALID, field="draw_rule")
+    if state.wind_speed not in SPEED_PROFILES:
+        raise FormError(INVALID, field="wind_speed")
+    if state.wind_direction not in DIRECTION_PROFILES:
+        raise FormError(INVALID, field="wind_direction")
     if state.music not in MUSIC_CHOICES:
         raise FormError(INVALID, field="music")
     if state.clubs_max not in {str(count) for count in range(1, BAG_SIZE + 1)}:
@@ -207,6 +222,8 @@ def settings_from_state(state: FormState) -> Settings:
             sources=frozenset(state.sources),
             allow_family_repeats=state.allow_family_repeats,
             draw_rule=DRAW_RULE_CHOICES[state.draw_rule],
+            wind_speed_profile=state.wind_speed,
+            wind_direction_profile=state.wind_direction,
             music=state.music,
             clubs=ClubRules(
                 max=clubs_max, banned=banned, required_bag=required or None

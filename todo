@@ -1,9 +1,5 @@
 Now:
 
-1. Layering ADR: Request → (resolve) → Settings → (generate) → Course → Unfinished ROM → Finished ROM
-2. Wind fix
-3. Draw rules as concrete settings: uniform, expert cap, per-nine ceiling, with difficulty scores in curation. These are useful through the form and CLI even without mystery requests.
-4. Wind Profiles as concrete settings.
 5. Resolve step and mystery generation, using CLI.
 6. Mystery
 
@@ -26,6 +22,7 @@ V4.0 - The Wind Update
 V5.0 - Randomization Updates
 V6.0 - Seed of the Day
 V7.0 - Graphics and artwork
+V8.0 - The Par 3 Update
 
 Ideas for Dale/Coach's dialogue:
 * Golf fun facts
@@ -33,29 +30,6 @@ Ideas for Dale/Coach's dialogue:
 * Vague, ominous koans: "You choose the club, the shot chooses you."
 * Wrong sport coach.  Gives advice for bowling, badminton, swimming, chess, starcraft (another flavor of bad coach)
 * 4th wall breaking coach (kind of like the triforce text)
-
-Notes for difficulty:
-
-┌──────────────────────────────────────────────────────┬───────────────┬─────────────┬────────────┐
-│                        option                        │ mean over par │ spread (SD) │ worst seed │
-├──────────────────────────────────────────────────────┼───────────────┼─────────────┼────────────┤
-│ NES Open only                                        │ +1.6          │ 1.0         │ +4.8       │
-├──────────────────────────────────────────────────────┼───────────────┼─────────────┼────────────┤
-│ both sources, expert holes left out                  │ +3.6          │ 1.2         │ +7.1       │
-├──────────────────────────────────────────────────────┼───────────────┼─────────────┼────────────┤
-│ both sources, ceiling 3.0 per nine                   │ +5.0          │ 0.9         │ +6.0       │
-├──────────────────────────────────────────────────────┼───────────────┼─────────────┼────────────┤
-│ both sources, ceiling 3.5 per nine                   │ +5.6          │ 1.1         │ +7.0       │
-├──────────────────────────────────────────────────────┼───────────────┼─────────────┼────────────┤
-│ both sources, max 1 expert per nine                  │ +5.8          │ 1.6         │ +11.3      │
-├──────────────────────────────────────────────────────┼───────────────┼─────────────┼────────────┤
-│ both sources, max 2 experts per nine, different pars │ +6.8          │ 2.1         │ +13.6      │
-├──────────────────────────────────────────────────────┼───────────────┼─────────────┼────────────┤
-│ both sources, no rule ("pure rando")                 │ +7.8          │ 2.5         │ +16.2      │
-├──────────────────────────────────────────────────────┼───────────────┼─────────────┼────────────┤
-│ Mario Open only                                      │ +9.6          │ 2.5         │ +17.2      │
-└──────────────────────────────────────────────────────┴───────────────┴─────────────┴────────────┘
-
 
 In-game/vanilla rom investigations:
 * Do bunker lips do anything?

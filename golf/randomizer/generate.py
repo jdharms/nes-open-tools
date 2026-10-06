@@ -2,9 +2,10 @@
 Generation: a catalog, a curation snapshot and settings in, a manifest out.
 
 Every random choice comes from `settings.prng_seed`, drawn fresh when the settings have
-none. Each purpose (the layout, the hole draw, the music, the magic words, the SRAM magic) gets its own
-generator derived from the seed, and the wind seeds come from `derive_hole_seeds`, so a
-change to how one thing is drawn leaves the others where they were.
+none. Each purpose (the layout, the hole draw, the wind directions, the wind speeds, the
+music, the magic words, the SRAM magic) gets its own generator derived from the seed, and
+the wind seeds come from `derive_hole_seeds`, so a change to how one thing is drawn leaves
+the others where they were.
 
 The settings' draw rule picks the hole draw: `draw_holes` for `uniform`, and
 `draw_holes_capped` for `expert_cap`.
@@ -22,6 +23,7 @@ from collections.abc import Sequence
 from dataclasses import replace
 
 from golf.core.patches.seeded_wind import derive_hole_seeds
+from golf.core.rng import predict_hole
 
 from .build import BUILD_VERSION, FINISH_ABI_VERSION
 from .catalog import JP_ROM, Catalog, CatalogEntry
@@ -30,6 +32,7 @@ from .layout import choose_layout
 from .manifest import NINE, SCHEMA, UNIFORM, Course, Manifest, Settings, Slot
 from .music import RANDOM, choose_music
 from .pool import Family, Pool, build_pool, source_rom
+from .wind import draw_directions, draw_speeds
 from .words import draw_magic_words
 
 GENERATOR_VERSION = 2
@@ -221,10 +224,29 @@ def generate(
         music = settings.music
 
     wind_seeds = derive_hole_seeds(prng_seed)
+    dealt = [predict_hole(wind_seed, swings=0) for wind_seed in wind_seeds]
+    directions = draw_directions(
+        settings.wind_direction_profile,
+        [forecast.direction_anchor for forecast in dealt],
+        stream(prng_seed, "wind_direction"),
+    )
+    speeds = draw_speeds(
+        settings.wind_speed_profile,
+        [forecast.speed_anchor for forecast in dealt],
+        stream(prng_seed, "wind_speed"),
+    )
     course = Course(
         holes=tuple(
-            Slot(entry.id, entry.par, wind_seed)
-            for entry, wind_seed in zip(entries, wind_seeds, strict=True)
+            Slot(
+                entry.id,
+                entry.par,
+                wind_seed,
+                wind_direction=direction,
+                wind_speed=speed,
+            )
+            for entry, wind_seed, direction, speed in zip(
+                entries, wind_seeds, directions, speeds, strict=True
+            )
         ),
         music=music,
         mercy_point=settings.mercy_point,

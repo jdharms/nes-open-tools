@@ -227,6 +227,7 @@ three requirements and the `course` step.
 | `signpost_color` | `color` (one of the curated NES colors in `SIGNPOST_COLOR_FAMILIES`, `golf/core/patches/signpost_color.py`); recolors the banner's brick, except on contest holes, which the game turns blue | |
 | `mercy_tap_in` | `mercy_point`, `mercy_result` (default `mercy_point` + 1) | |
 | `seeded_wind` | `seed` | `course_mirrors` |
+| `wind_anchors` | `anchors`: 18 `direction/speed` pairs, the direction two hex digits and the speed 0-10, as `80/7` (`docs/seeded_wind.md`, **Wind anchors and profiles**) | `course_mirrors` |
 | `wind_fix` | none; wraps the wind's cos lookup inside its table, so all 16 wind directions push the way they point (`docs/wind.md`, **The fix**) | |
 | `practice_swing` | `hold_frames` (default `0x78`) | |
 | `round_stats` | none; counts fairways hit and penalty strokes in SRAM for the QR payload (`docs/scorecard_qr.md`, Round stats) | `course_mirrors` |

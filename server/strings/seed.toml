@@ -381,6 +381,14 @@ text = "Zero"
 note = "draw rule row value; at most {count} expert holes on each nine, {count} 1 or more"
 text = "At most {count} per nine"
 
+[seed.details.wind_speed]
+note = "settings row label; the seed's wind speed profile (its name follows)"
+text = "Wind Speed Profile"
+
+[seed.details.wind_direction]
+note = "settings row label; the seed's wind direction profile (its name follows)"
+text = "Wind Direction Profile"
+
 [seed.details.mercy_point]
 note = "settings row label; the stroke a hole ends on with an automatic tap-in"
 text = "Mercy rule \"tap in\" after stroke..."

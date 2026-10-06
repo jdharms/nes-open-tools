@@ -1,6 +1,7 @@
 {% extends "base.html" %}
 {% import "_scorecard.html" as scorecard %}
 {% import "_download_settings.html" as controls %}
+{% import "_wind.html" as wind %}
 {# A summary value, marked so download.js can copy the control's current value into it. #}
 {% macro summary_value(field, value) -%}
   <span data-summary="{{ field }}">{{ value }}</span>
@@ -245,6 +246,14 @@
                   {% elif seed.experts_per_nine == 0 %}{{ t("seed.details.draw_rule_no_experts") }}
 {% else %}{{ t("seed.details.draw_rule_expert_cap", count=seed.experts_per_nine) }}{% endif %}
   </td>
+  </tr>
+  <tr>
+    <th scope="row">{{ t("seed.details.wind_speed") }}</th>
+    <td data-wind-speed="{{ seed.wind_speed_profile }}">{{ wind.speed_name(seed.wind_speed_profile) }}</td>
+  </tr>
+  <tr>
+    <th scope="row">{{ t("seed.details.wind_direction") }}</th>
+    <td data-wind-direction="{{ seed.wind_direction_profile }}">{{ wind.direction_name(seed.wind_direction_profile) }}</td>
   </tr>
   <tr>
     <th scope="row">{{ t("seed.details.mercy_point") }}</th>
