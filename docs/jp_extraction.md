@@ -404,6 +404,8 @@ tools/
    at runtime overflows that buffer, corrupting both the terrain past row 48 and the
    adjacent greens buffer. See `docs/wram_expansion.md` for the follow-up plan.
 
-3. **Course 5 (remix)**: Still open, low priority. The remap table at $6DE7 (in cart RAM
-   space) is interesting - may be populated at runtime from another location. Could
-   search PRG for the initialization data.
+3. **Course 5 (remix)**: Extraction remains open, low priority. Its runtime builder
+   starts at fixed-bank $DA22 and fills the remap table at $6DE7; $DA2C reads SRAM
+   progression at $6003. See [Mario Open free play](mario_open_free_play.md) for the
+   progression and menu investigation. This locates the builder but does not yet
+   reproduce its hole selection for extraction.

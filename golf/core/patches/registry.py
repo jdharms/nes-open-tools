@@ -37,6 +37,7 @@ from .green_slope_physics import (
     DEFAULT_STRENGTH,
     green_slope_physics_patch,
 )
+from .mario_open_free_play import mario_open_free_play_patch
 from .menu_trim import menu_trim_patch
 from .mercy_tap_in import mercy_tap_in_patches
 from .multi_bank import COURSE_MIRRORS_PATCH, MULTI_BANK_CODE_PATCH
@@ -391,6 +392,12 @@ PATCH_SPECS: dict[str, PatchSpec[Any, Any]] = {
             "Grow the terrain and attribute buffers past 48 rows (docs/wram_expansion.md)",
             NoParams,
             _fixed(WRAM_EXPANSION_PATCH),
+        ),
+        PatchSpec(
+            "mario_open_free_play",
+            "Mario Open (JP): all courses and no score dismissal (docs/mario_open_free_play.md)",
+            NoParams,
+            lambda ctx, params: mario_open_free_play_patch(),
         ),
         PatchSpec(
             "multi_bank_lookup",

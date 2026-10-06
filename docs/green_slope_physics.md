@@ -14,6 +14,10 @@ uv run golf-patch nes_open_us.nes -p green_slope_physics:strength=45,friction=60
 
 ## What vanilla does
 
+This section describes the US ROM. Mario Open uses identical slope tables and
+ordinary green calculations, but doubles the vector in the cup close-up; see
+[the US/JP comparison](jp_putting_physics.md).
+
 `LD_B1D5_Green` (bank 13, `$B1D5-$B244`) runs once per contact frame while the ball is
 on the green. The slope vector for the tile under the ball sits in `$EA-$EF`, written by
 `LF300` (`$F300`, fixed bank) — the same six bytes `ApplyWindEffect` uses for wind, which

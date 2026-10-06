@@ -210,6 +210,7 @@ three requirements and the `course` step.
 
 | Patch | Parameters | Requires |
 |---|---|---|
+| `mario_open_free_play` | none; JP ROM only, all courses and no score dismissal (`docs/mario_open_free_play.md`); CLI needs `--any-base` | |
 | `wram_expansion` | | |
 | `multi_bank_lookup` | | |
 | `course_mirrors` | | |

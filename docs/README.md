@@ -24,6 +24,8 @@ One line per document. Command-line tools are indexed in the top-level `README.m
 | Doc | About |
 |-----|-------|
 | [rom_map.md](rom_map.md) | Where to look: each topic's bank, address and starting label, and its doc. Add a row whenever you had to search |
+| [mario_open_free_play.md](mario_open_free_play.md) | Mario Open (JP) course progression, running-score dismissal, and the free-play patch |
+| [jp_putting_physics.md](jp_putting_physics.md) | US/JP putting comparison: identical slope tables and putter power, extra JP cup-view slope scaling |
 | [rom_disassembly.md](rom_disassembly.md) | The label file's coverage and invariants, the method for measuring data, the traps found, and what is left to confirm in Mesen |
 | [../golf/core/compression.md](../golf/core/compression.md) | Course terrain/greens compression: RLE + dictionary, horizontal transitions, vertical fill |
 | [terrain_data_locations.md](terrain_data_locations.md) | Byte ranges of the three vanilla courses' compressed terrain |
