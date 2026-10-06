@@ -18,12 +18,10 @@ chose; the only randomness in a field is `music: "random"`, which generation res
 against the holes it drew, because Mario Open themes are only eligible on a course with
 Mario Open holes.
 
-The next two randomizer updates add options players will want rolled, not chosen: a
-hole draw rule (uniform, an expert-hole cap, a per-nine over-par ceiling) and two wind
-profiles, one for speed (vanilla, gentle, moderate, strong, a storm that builds over the
-round) and one for direction (vanilla, a prevailing wind, an out-and-back), set out in
-ADR 0018. Players will also want odds across them, such as a 30% chance of Mario
-Open holes, or an 80% chance of leaving expert holes out and 20% of one per nine.
+The settings now hold options players will want rolled, not chosen: a hole draw rule
+and two wind profiles, one for speed and one for direction (ADR 0018). Players will also
+want odds across them, such as a 30% chance of Mario Open holes, or an 80% chance of
+leaving expert holes out and 20% of one per nine.
 
 ALTTP randomizer forks call this a mystery seed: any field of the settings document may
 be a weighted choice of legal values, and the generator rolls one. There, players
@@ -130,9 +128,8 @@ setting.
 
 ### The manifest
 
-The manifest gains a `request` block beside `settings` and `course` in a schema bump,
-the one that also adds the draw rule, the two wind profile fields and each hole's wind
-anchors (ADR 0017):
+The manifest gains a `request` block beside `settings` and `course`, in a schema bump
+of its own:
 
 - `request`: the request as submitted, kept so a seed shows how it came to be and the
   site can offer another seed from the same request.
@@ -192,8 +189,8 @@ keep it secret from anyone who reads the JSON.
   wind profiles or sources without parsing weights.
 - New settings fields can be weighted without new request syntax, but can never be
   named `sets` or any other reserved key.
-- The manifest schema changes once, for `request`, the draw rule and the wind profiles
-  together. Its loader keeps reading schemas 1 and 2.
+- The manifest schema changes for `request`, and its loader keeps reading every schema
+  before it.
 - A request upload is untrusted input: its size is limited, it's parsed strictly, and a
   YAML form, if accepted, is loaded with a safe loader.
 - A request that rolls an ungeneratable combination fails some fraction of the time

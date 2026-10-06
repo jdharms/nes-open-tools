@@ -113,3 +113,6 @@ blows toward, with the top of the screen as north.
 - `tests/unit/test_wind_anchors.py` and `tests/integration/test_wind_anchors_rom.py`: the
   patch, and `InitHole` and `WindAdjustmentRoutine` run from the patched ROM under
   emulation for all 18 holes.
+- Played once: on 2026-10-06 jdharms played the first three holes of a build 6 seed
+  rolled on a development site with `moderate` speed and `headwind_out` direction, and
+  the wind on them matched what `predict_hole` gives for the seed's manifest.
