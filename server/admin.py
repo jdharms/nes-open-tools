@@ -7,7 +7,7 @@ docs/randomizer_devplan.md, "Users and access".
 
 This module holds every admin page's reads in one file. When adding to it, consider
 splitting it into a `server/admin/` package by area (seeds, rounds, users, the audit log)
-first; nothing outside imports more than the names `server/admin_routes.py` uses.
+first; nothing outside imports more than the names `server/routes/admin_pages.py` uses.
 """
 
 import json

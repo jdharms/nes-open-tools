@@ -1,4 +1,5 @@
-"""The FastAPI application factory and its routes. See docs/randomizer_devplan.md, "Routes"."""
+"""The FastAPI application factory. The routes are in `server/routes/`. See
+docs/randomizer_devplan.md, "Routes"."""
 
 import asyncio
 import logging
@@ -6,115 +7,40 @@ import secrets
 import time
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager, suppress
-from dataclasses import replace
 from pathlib import Path
-from urllib.parse import urlencode
 
-from fastapi import FastAPI, HTTPException, Query, Request
+from fastapi import FastAPI, Request
 from fastapi.exception_handlers import http_exception_handler
-from fastapi.responses import (
-    HTMLResponse,
-    JSONResponse,
-    PlainTextResponse,
-    RedirectResponse,
-    Response,
-)
+from fastapi.responses import PlainTextResponse, Response
 from fastapi.templating import Jinja2Templates
 from starlette.concurrency import run_in_threadpool
 from starlette.exceptions import HTTPException as StarletteHTTPException
 from starlette.middleware.sessions import SessionMiddleware
 from starlette.routing import Mount
 
-from golf.randomizer.build import credentials_for
 from golf.randomizer.catalog import REPO_ROOT
-from golf.randomizer.generate import GenerationError
-from golf.randomizer.manifest import required_roms
-from golf.randomizer.roms import VANILLA_ROMS
-from golf.rendering.rangefinder import METADATA
 
-from .admin_routes import admin_router
-from .auth import (
-    DEV_DISCORD_PREFIX,
-    DEV_NAME,
-    SESSION_NEXT,
-    SESSION_STATE,
-    DiscordClient,
-    DiscordError,
-    current_user,
-    safe_next,
-    start_session,
-)
+from .auth import DiscordClient, current_user
 from .builder import BuilderUnavailableError, SeedBuilder
 from .config import Config
 from .db import Database
-from .download_settings import forget_settings, load_settings, save_settings
-from .entries import entries_for_user, load_entry, upsert_entry
-from .forms import (
-    DownloadState,
-    FormError,
-    FormState,
-    SavedSettings,
-    check_rom_hashes,
-    player_options_from_state,
-    saved_from_state,
-    settings_from_state,
-    to_save,
-)
 from .logging import request_id
-from .pages import ContentPage, PageCatalog
-from .ratelimit import (
-    GENERATE_CAPACITY,
-    GENERATE_REFILL_SECONDS,
-    RateLimiter,
-    client_key,
-)
-from .rounds import VoidedRound, find_round, rounds_for_seed, rounds_for_user
-from .seeds import insert_seed, load_seed, load_unfinished_ips
+from .pages import PageCatalog
+from .ratelimit import GENERATE_CAPACITY, GENERATE_REFILL_SECONDS, RateLimiter
+from .routes.account import account_router
+from .routes.admin_pages import admin_router
+from .routes.round_pages import round_router
+from .routes.seed_pages import seed_router
+from .routes.site import RANGEFINDER_DATA_URL, site_router
 from .static_files import CachedStaticFiles, StaticVersions
 from .strings import Strings
-from .submissions import MALFORMED, UNFINISHED, ScanError, submit_scan
-from .timings import (
-    EXCEPTION,
-    OK,
-    Sample,
-    TimingSink,
-    flush_periodically,
-)
-from .users import User, load_user, sign_in
+from .timings import EXCEPTION, Sample, TimingSink, flush_periodically
 from .version import site_version as read_site_version
-from .views import (
-    calendar_date,
-    download_stem,
-    generate_options,
-    round_view,
-    seed_view,
-    settings_view,
-    timestamp,
-    voided_round_view,
-)
+from .views import calendar_date, timestamp
 
 HERE = Path(__file__).resolve().parent
 STATIC_DIR = HERE / "static"
 TEMPLATES_DIR = HERE / "templates"
-
-#: the catalog prefix whose strings the ROM setup page embeds for rom.js
-ROM_SCRIPT_STRINGS = "rom.status"
-#: the catalog prefix whose strings the seed page embeds for download.js
-DOWNLOAD_SCRIPT_STRINGS = "seed.download.status"
-#: the catalog prefix whose strings the rangefinder page embeds for its modules
-RANGEFINDER_SCRIPT_STRINGS = "rangefinder.script"
-#: where the rangefinder's renders (`Config.rangefinder_dir`) are served
-RANGEFINDER_DATA_URL = "/rangefinder-data"
-
-#: generate.html shows one notice per value: a FormError reason, or one of these
-RATE_LIMITED = "rate_limited"
-UNAVAILABLE = "unavailable"
-POOL_TOO_SMALL = "pool"
-#: a seed kept as a permalink but no longer distributed
-SEED_WITHDRAWN = "seed_withdrawn"
-#: /me shows one notice per value: one of these, or a download FormError reason
-SETTINGS_SAVED = "saved"
-SETTINGS_FORGOTTEN = "forgotten"
 
 #: the route of a request that matched nothing, which would otherwise be every 404 path
 UNMATCHED = "unmatched"
@@ -122,24 +48,11 @@ UNMATCHED = "unmatched"
 #: paths a missing resource answers with JSON rather than the not-found page
 MACHINE_SUFFIXES = (".json", ".ips")
 
-#: the query parameter `/s/` adds for the scan that recorded the round, which the round page
-#: turns into its confirmation heading and a script then strips from the address bar
-RECORDED = "recorded"
-
 SESSION_COOKIE = "golf_session"
 #: seconds a sign-in lasts
 SESSION_MAX_AGE = 30 * 24 * 60 * 60
-#: a player's saved download settings (`SavedSettings.to_cookie`), set by each download
-DOWNLOAD_COOKIE = "golf_download"
-#: seconds the saved download settings last from each download
-DOWNLOAD_COOKIE_MAX_AGE = 365 * 24 * 60 * 60
-#: the name /auth/login?as= signs in as when it names none
-DEFAULT_DEV_NAME = "dev"
-#: sign_in_failed.html shows one notice per value
-log = logging.getLogger(__name__)
 
-SIGN_IN_EXPIRED = "expired"
-SIGN_IN_UNAVAILABLE = "unavailable"
+log = logging.getLogger(__name__)
 
 
 def route_template(request: Request) -> str:
@@ -157,15 +70,6 @@ def route_template(request: Request) -> str:
             if isinstance(route, Mount) and route.app is endpoint:
                 return route.path
     return UNMATCHED
-
-
-def json_refusal(
-    status_code: int, reason: str, values: dict | None = None
-) -> JSONResponse:
-    """A download refusal: download.js shows the notice for `error`, filled from `values`."""
-    return JSONResponse(
-        {"error": reason, "values": values or {}}, status_code=status_code
-    )
 
 
 def create_app(
@@ -305,10 +209,6 @@ def create_app(
         finally:
             request_id.reset(token)
 
-    def outcome(request: Request, reason: str) -> None:
-        """What a request came to, beyond its status code, for its timing row."""
-        request.state.sample.outcome = reason
-
     def sign_in_context(request: Request) -> dict:
         """What base.html's header needs on every page: the player, and where to come back to."""
         path = request.url.path
@@ -338,9 +238,10 @@ def create_app(
         name="rangefinder_data",
     )
     app.include_router(admin_router(templates))
-
-    def not_found() -> HTTPException:
-        return HTTPException(status_code=404)
+    app.include_router(site_router(templates, pages))
+    app.include_router(seed_router(templates))
+    app.include_router(round_router(templates))
+    app.include_router(account_router(templates))
 
     @app.exception_handler(StarletteHTTPException)
     async def http_error(request: Request, exc: StarletteHTTPException) -> Response:
@@ -376,484 +277,5 @@ def create_app(
         return PlainTextResponse(
             "Internal Server Error", status_code=500, headers=headers
         )
-
-    @app.get("/", response_class=HTMLResponse)
-    def home(request: Request):
-        return templates.TemplateResponse(request, "home.html", {"page": "home"})
-
-    def content_page(content: ContentPage):
-        def show(request: Request):
-            return templates.TemplateResponse(
-                request,
-                "page.html",
-                {"page": "content", "content_page": content},
-            )
-
-        return show
-
-    # A route per page rather than one `/pages/{slug}`, so each page's timings are its
-    # own; a slug that names no enabled page matches nothing and is not found.
-    for content in pages.enabled:
-        app.add_api_route(
-            f"/pages/{content.slug}",
-            content_page(content),
-            response_class=HTMLResponse,
-            name=f"content_page_{content.slug}",
-        )
-
-    @app.get("/rom", response_class=HTMLResponse)
-    def rom_setup(request: Request):
-        return templates.TemplateResponse(
-            request,
-            "rom.html",
-            {
-                "page": "rom",
-                "roms": VANILLA_ROMS,
-                "rom_strings": strings.for_script(ROM_SCRIPT_STRINGS),
-            },
-        )
-
-    @app.get("/rangefinder", response_class=HTMLResponse)
-    def rangefinder(request: Request):
-        return templates.TemplateResponse(
-            request,
-            "rangefinder.html",
-            {
-                "page": "rangefinder",
-                "metadata_url": f"{RANGEFINDER_DATA_URL}/{METADATA}",
-                "rangefinder_strings": strings.for_script(RANGEFINDER_SCRIPT_STRINGS),
-            },
-        )
-
-    def generate_page(
-        request: Request,
-        state: FormState,
-        error: str | None = None,
-        error_values: dict | None = None,
-        status_code: int = 200,
-    ):
-        return templates.TemplateResponse(
-            request,
-            "generate.html",
-            {
-                "page": "generate",
-                "options": generate_options(),
-                "form": state,
-                "error": error,
-                "error_values": error_values or {},
-            },
-            status_code=status_code,
-        )
-
-    @app.get("/generate", response_class=HTMLResponse)
-    def generate_form(request: Request):
-        return generate_page(request, FormState.default())
-
-    @app.post("/generate", response_class=HTMLResponse)
-    async def generate_seed(request: Request):
-        state = FormState.from_form(await request.form())
-        try:
-            settings = settings_from_state(state)
-        except FormError as problem:
-            outcome(request, problem.reason)
-            return generate_page(
-                request, state, problem.reason, problem.values, status_code=400
-            )
-
-        user = current_user(request)
-        user_id = user.id if user is not None else None
-        # Only a submission that would make the server work spends a token.
-        if not request.app.state.rate_limiter.allow(client_key(request, user_id)):
-            outcome(request, RATE_LIMITED)
-            return generate_page(request, state, RATE_LIMITED, status_code=429)
-
-        seed_builder: SeedBuilder = request.app.state.builder
-        db: Database = request.app.state.db
-
-        sample: Sample = request.state.sample
-
-        def create() -> str:
-            with sample.phase("generate"):
-                manifest = seed_builder.generate(settings)
-            unfinished_ips = seed_builder.build(manifest, sample)
-            with sample.phase("insert"):
-                return insert_seed(db, manifest, unfinished_ips, creator_id=user_id)
-
-        try:
-            seed_id = await run_in_threadpool(create)
-        except GenerationError as problem:
-            log.warning(
-                "generation found no pool: %s", problem, extra={"settings": settings}
-            )
-            outcome(request, POOL_TOO_SMALL)
-            return generate_page(request, state, POOL_TOO_SMALL, status_code=400)
-        except BuilderUnavailableError as problem:
-            log.error("cannot generate: %s", problem)
-            outcome(request, UNAVAILABLE)
-            return generate_page(request, state, UNAVAILABLE, status_code=503)
-        outcome(request, OK)
-        return RedirectResponse(f"/h/{seed_id}", status_code=303)
-
-    # Registered before the seed page, whose {seed_id} would otherwise match "<id>.json".
-    @app.get("/h/{seed_id}.json")
-    def seed_manifest(request: Request, seed_id: str):
-        row = load_seed(request.app.state.db, seed_id)
-        if row is None:
-            raise not_found()
-        return Response(row.manifest_json, media_type="application/json")
-
-    def saved_settings(request: Request) -> SavedSettings:
-        """A player's saved settings: the account's when signed in and saved, else the cookie's."""
-        user = current_user(request)
-        if user is not None:
-            account = load_settings(request.app.state.db, user.id)
-            if account is not None:
-                return account
-        return SavedSettings.from_cookie(request.cookies.get(DOWNLOAD_COOKIE))
-
-    def starting_settings(request: Request, seed_id: str) -> SavedSettings:
-        """What a seed's download form starts from: this seed's entry over saved settings.
-
-        The entry gives only name and clubs; the rest comes from the saved settings.
-        """
-        saved = saved_settings(request)
-        user = current_user(request)
-        if user is not None:
-            entry = load_entry(request.app.state.db, seed_id, user.id)
-            if entry is not None:
-                saved = saved.with_entry(entry.player_name, entry.clubs)
-        return saved
-
-    def set_download_cookie(response: Response, saved: SavedSettings) -> None:
-        response.set_cookie(
-            DOWNLOAD_COOKIE,
-            saved.to_cookie(),
-            max_age=DOWNLOAD_COOKIE_MAX_AGE,
-            httponly=True,
-            samesite="lax",
-            secure=config.base_url.startswith("https://"),
-        )
-
-    @app.get("/h/{seed_id}", response_class=HTMLResponse)
-    def seed_page(request: Request, seed_id: str):
-        row = load_seed(request.app.state.db, seed_id)
-        if row is None:
-            raise not_found()
-        seed_builder: SeedBuilder = request.app.state.builder
-        view = seed_view(
-            row,
-            seed_builder.catalog,
-            seed_builder.curation,
-            starting_settings(request, seed_id),
-        )
-        rounds = rounds_for_seed(request.app.state.db, seed_id)
-        user = current_user(request)
-        return templates.TemplateResponse(
-            request,
-            "seed.html",
-            {
-                "page": "seed",
-                "seed": view,
-                "rounds": rounds,
-                # scores stay collapsed, so as not to spoil the seed, until the viewer
-                # has recorded a round of their own on it
-                "rounds_open": user is not None
-                and any(r.user_id == user.id for r in rounds),
-                "download_strings": strings.for_script(DOWNLOAD_SCRIPT_STRINGS),
-            },
-        )
-
-    @app.post("/h/{seed_id}/patch.ips")
-    async def seed_patch(request: Request, seed_id: str):
-        row = load_seed(request.app.state.db, seed_id)
-        if row is None:
-            raise not_found()
-        if row.withdrawn:
-            outcome(request, SEED_WITHDRAWN)
-            return json_refusal(410, SEED_WITHDRAWN)
-        seed_builder: SeedBuilder = request.app.state.builder
-        sample: Sample = request.state.sample
-        manifest = row.manifest
-        state = DownloadState.from_form(await request.form())
-        try:
-            check_rom_hashes(state, required_roms(manifest, seed_builder.catalog))
-        except FormError as problem:
-            outcome(request, problem.reason)
-            return json_refusal(403, problem.reason, problem.values)
-        try:
-            options = player_options_from_state(
-                state, manifest.course.clubs, manifest.finish_abi_version
-            )
-        except FormError as problem:
-            outcome(request, problem.reason)
-            return json_refusal(400, problem.reason, problem.values)
-
-        db: Database = request.app.state.db
-        unfinished_ips = load_unfinished_ips(db, seed_id)
-        if unfinished_ips is None:  # pragma: no cover - seeds are never deleted
-            raise not_found()
-        # Signed in, the download enters the player in the seed and finishes with their
-        # credentials; signed out, it finishes a guest ROM and records nothing.
-        user = current_user(request)
-        credentials = None
-        if user is not None:
-            with sample.phase("entry"):
-                entry = upsert_entry(db, row.id, user.id, options)
-            credentials = credentials_for(row.qr_seed_id, user.player_id, entry.keys)
-        try:
-            with sample.phase("finish"):
-                patch = await run_in_threadpool(
-                    seed_builder.finish, manifest, unfinished_ips, options, credentials
-                )
-        except BuilderUnavailableError as problem:
-            log.error("cannot finish a download: %s", problem)
-            outcome(request, UNAVAILABLE)
-            return json_refusal(503, UNAVAILABLE)
-        # A withdrawal while the threadpool was finishing withholds the result. A signed-in
-        # request may already have created its entry, but no ROM leaves the server.
-        current = load_seed(db, seed_id)
-        if current is None:  # pragma: no cover - seeds are never deleted
-            raise not_found()
-        if current.withdrawn:
-            outcome(request, SEED_WITHDRAWN)
-            return json_refusal(410, SEED_WITHDRAWN)
-        outcome(request, OK)
-        response = Response(
-            patch,
-            media_type="application/octet-stream",
-            headers={
-                "Content-Disposition": f'attachment; filename="{download_stem(row)}.ips"'
-            },
-        )
-        saved = to_save(
-            options,
-            manifest.course.clubs,
-            manifest.finish_abi_version,
-            saved_settings(request),
-        )
-        if user is not None:
-            save_settings(db, user.id, saved)
-        set_download_cookie(response, saved)
-        return response
-
-    @app.get("/s/{scan}", response_class=HTMLResponse)
-    def scan(request: Request, scan: str):
-        # A scan is a GET that records, so nothing may cache the answer, and a repeat of it
-        # (the phone reopening the link, a chat unfurling it) must reach the same round. It
-        # only submits: the round is shown by its permalink, which this redirects to.
-        # A rejection has no round to point at, so it renders here.
-        db: Database = request.app.state.db
-        headers = {"Cache-Control": "no-store"}
-        try:
-            result = submit_scan(db, scan)
-        except ScanError as rejection:
-            status_code = 400 if rejection.reason in (MALFORMED, UNFINISHED) else 404
-            return templates.TemplateResponse(
-                request,
-                "scan_rejected.html",
-                {"page": None, "rejection": rejection.reason},
-                status_code=status_code,
-                headers=headers,
-            )
-        # `?recorded` only marks the scan that inserted the round, so the page can confirm it
-        # once; the permalink the browser settles on carries no query.
-        target = f"/r/{result.round.public_id}" + (f"?{RECORDED}" if result.new else "")
-        return RedirectResponse(target, status_code=303, headers=headers)
-
-    @app.get("/r/{round_id}", response_class=HTMLResponse)
-    def round_page(request: Request, round_id: str):
-        db: Database = request.app.state.db
-        found = find_round(db, round_id)
-        if found is None:
-            raise not_found()
-        row = load_seed(db, found.seed_id)
-        player = load_user(db, found.user_id)
-        if (
-            row is None or player is None
-        ):  # pragma: no cover - seeds and users are never deleted
-            raise not_found()
-        if isinstance(found, VoidedRound):
-            return templates.TemplateResponse(
-                request,
-                "round_voided.html",
-                {
-                    "page": None,
-                    "voided": voided_round_view(row, found, player.display_name),
-                },
-                status_code=410,
-            )
-        recorded = RECORDED in request.query_params
-        return templates.TemplateResponse(
-            request,
-            "round.html",
-            {
-                "page": None,
-                "round": round_view(row, found, player.display_name, recorded),
-            },
-        )
-
-    def me_page(
-        request: Request,
-        user: User,
-        *,
-        state: DownloadState | None = None,
-        result: str | None = None,
-        status_code: int = 200,
-    ):
-        """Render /me with saved settings or the submitted values after an error."""
-        db: Database = request.app.state.db
-        has_saved = (
-            load_settings(db, user.id) is not None or DOWNLOAD_COOKIE in request.cookies
-        )
-        settings = settings_view(saved_settings(request), has_saved)
-        if state is not None:
-            settings = replace(settings, state=state)
-        return templates.TemplateResponse(
-            request,
-            "me.html",
-            {
-                "page": "me",
-                "entries": entries_for_user(db, user.id),
-                "rounds": rounds_for_user(db, user.id),
-                "settings": settings,
-                "result": result,
-            },
-            status_code=status_code,
-        )
-
-    @app.get("/me", response_class=HTMLResponse)
-    def me(request: Request):
-        user = current_user(request)
-        if user is None:
-            if not config.sign_in_enabled:
-                raise not_found()
-            return RedirectResponse("/auth/login?next=/me", status_code=303)
-        return me_page(request, user, result=request.query_params.get("result"))
-
-    def me_redirect(result: str) -> RedirectResponse:
-        return RedirectResponse(
-            f"/me?{urlencode({'result': result})}#download-settings", status_code=303
-        )
-
-    @app.post("/me/download-settings")
-    async def me_save_settings(request: Request):
-        user = current_user(request)
-        if user is None:
-            raise not_found()
-        state = DownloadState.from_form(await request.form())
-        try:
-            saved = saved_from_state(state, saved_settings(request))
-        except FormError as problem:
-            outcome(request, problem.reason)
-            return me_page(
-                request, user, state=state, result=problem.reason, status_code=400
-            )
-        save_settings(request.app.state.db, user.id, saved)
-        outcome(request, OK)
-        response = me_redirect(SETTINGS_SAVED)
-        set_download_cookie(response, saved)
-        return response
-
-    @app.post("/me/download-settings/forget")
-    def me_forget_settings(request: Request):
-        user = current_user(request)
-        if user is None:
-            raise not_found()
-        forget_settings(request.app.state.db, user.id)
-        outcome(request, OK)
-        response = me_redirect(SETTINGS_FORGOTTEN)
-        response.delete_cookie(
-            DOWNLOAD_COOKIE,
-            httponly=True,
-            samesite="lax",
-            secure=config.base_url.startswith("https://"),
-        )
-        return response
-
-    def sign_in_failed(request: Request, reason: str, status_code: int):
-        return templates.TemplateResponse(
-            request,
-            "sign_in_failed.html",
-            {"page": None, "reason": reason},
-            status_code=status_code,
-        )
-
-    def redirect_uri() -> str:
-        return config.base_url.rstrip("/") + "/auth/callback"
-
-    @app.get("/auth/login")
-    def auth_login(
-        request: Request,
-        next: str | None = None,
-        as_: str | None = Query(None, alias="as"),
-    ):
-        if not config.sign_in_enabled:
-            raise not_found()
-        return_to = safe_next(next)
-        if config.dev_login:
-            name = as_ if as_ is not None else DEFAULT_DEV_NAME
-            if not DEV_NAME.fullmatch(name):
-                raise HTTPException(status_code=400)
-            user = sign_in(
-                request.app.state.db, DEV_DISCORD_PREFIX + name, name, None, None
-            )
-            start_session(request, user)
-            return RedirectResponse(return_to, status_code=303)
-        state = secrets.token_urlsafe(32)
-        request.session[SESSION_STATE] = state
-        request.session[SESSION_NEXT] = return_to
-        discord_client: DiscordClient = request.app.state.discord
-        return RedirectResponse(
-            discord_client.authorize_url(state, redirect_uri()), status_code=303
-        )
-
-    @app.get("/auth/callback")
-    async def auth_callback(
-        request: Request,
-        code: str | None = None,
-        state: str | None = None,
-        error: str | None = None,
-    ):
-        discord_client: DiscordClient | None = request.app.state.discord
-        if config.dev_login or discord_client is None:
-            raise not_found()
-        expected = request.session.pop(SESSION_STATE, None)
-        return_to = safe_next(request.session.pop(SESSION_NEXT, None))
-        if not expected or not state or not secrets.compare_digest(expected, state):
-            return sign_in_failed(request, SIGN_IN_EXPIRED, 400)
-        if error is not None or not code:
-            # The player turned Discord down: back where they were, still signed out.
-            return RedirectResponse(return_to, status_code=303)
-        try:
-            identity = await discord_client.identify(code, redirect_uri())
-        except DiscordError as problem:
-            log.warning("Discord sign-in failed: %s", problem)
-            return sign_in_failed(request, SIGN_IN_UNAVAILABLE, 502)
-        user = sign_in(
-            request.app.state.db,
-            identity.id,
-            identity.username,
-            identity.global_name,
-            identity.avatar,
-        )
-        start_session(request, user)
-        return RedirectResponse(return_to, status_code=303)
-
-    @app.post("/auth/logout")
-    async def auth_logout(request: Request):
-        form = await request.form()
-        next_value = form.get("next")
-        request.session.clear()
-        return RedirectResponse(
-            safe_next(next_value if isinstance(next_value, str) else None),
-            status_code=303,
-        )
-
-    # UptimeRobot's free plan checks with HEAD, which a GET route would refuse with a 405.
-    @app.api_route("/healthz", methods=["GET", "HEAD"])
-    def healthz(request: Request) -> dict[str, str]:
-        with request.app.state.db.transaction() as conn:
-            conn.execute("SELECT 1").fetchone()
-        return {"status": "ok"}
 
     return app
