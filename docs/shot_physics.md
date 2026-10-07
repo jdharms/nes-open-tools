@@ -115,7 +115,8 @@ In this order:
 5. **Probe**: `ProbeBallPosition` sets the lie for the spot under the ball (see **Lies on
    a real hole**). In the overhead view only, a second probe offset by the ball's height
    looks for trees first (see **Trees**).
-6. **Air or ground**: `ApplyWindEffect` in the air, `ProcessLanding` on contact.
+6. **Bunker lip**: a shot from sand can be put back in it (see **The bunker lip**).
+7. **Air or ground**: `ApplyWindEffect` in the air, `ProcessLanding` on contact.
 
 Once the ball is rolling, every frame is a contact frame. Gravity pulls the vertical speed
 negative, the height dips below zero, and the bounce leaves nothing.
@@ -193,6 +194,61 @@ to the left (`$C0`), as far as a diagonal tailwind (`$20`) takes it.
   Any landing harder than the softest one plugs the ball on the spot.
 - **Water**: the ball sinks, unless it arrives shallow (below `$30`) and the RNG draws
   `$E6` or more (about 1 in 10). Then it skips once, at half its vertical speed.
+
+## The bunker lip
+
+A shot played from sand can be stopped at the edge of the sand (`$B073-$B0D0`). The test
+runs each frame after the probe, and acts on the first frame that meets all of these:
+
+- the shot started in sand: `SwingSequenceEntry` (`$AA1E`) sets `BunkerExitArmedFlag`
+  (`$05A4`) only then;
+- the previous frame's lie (`$05B3`) was sand and this frame's is not;
+- the ball had been over sand for 3 frames or more (`BunkerFrameCount`, `$05A3`). Launch
+  from sand sets the count to 3, so the first exit always passes. A frame off the sand
+  zeroes it;
+- the height's top byte (`$B6`) is zero: the sprite is lifted less than 2 pixels.
+
+That frame clears the flag, so a shot is tested once. The ball is then put back if any of
+these holds:
+
+- the club is the putter;
+- the club is 1W-2I (`ClubSelection + 1 < 7`, the middle entry of
+  `MaybeBunkerExitClubThresholdTable`; Y is always 1);
+- the power meter stopped at `$18` or later (`$D6`, the weaker half of its travel) and the
+  ball is still low in the behind-the-golfer view (`BallScreenY` `$A8` or more).
+
+Putting it back copies the last position it had over sand (`$059C-$05A2`, saved every sand
+frame by `$B0F4`), probes there, clears the height, sets lie 3 and stops the ball.
+`BunkerDepth` is not touched. A ball that leaves the sand higher than that keeps the flag,
+so the test can still fire later in the same shot, in another bunker it has been over for
+3 frames: coming down across the far edge under 2 pixels of lift, or landing in the sand
+and moving out of it on the next frame. The ROM's physics does both under py65 over a
+synthetic ground. Either way the ball moves back less than a pixel and drops less than 2,
+and comes to rest in sand a pixel or two short of where it would have landed.
+
+How far the ball gets in those first frames is what the launch decides: club, power stop,
+swing speed, hi/lo, `BunkerDepth` and the sand's random power variance.
+
+### What players should know
+
+Distances are from the model at `BunkerDepth` 0, measured along the aim line from the ball
+to the edge of the sand. A pixel is 2 yards.
+
+- **The test is on the meter, not the power.** A power stop past the middle of the bar
+  (`$D6` below `$18`) counts as a strong swing. The middle of the bar is about 67% of full
+  power.
+- **3I through SW get out.** On a strong swing they are never caught. On a weaker one,
+  only a ball on the last pixel of sand is.
+- **1W through 2I need room.** On a strong swing they are caught when the edge is within
+  3-5 pixels (6-10 yards).
+- **Weak swings with those clubs are worse.** Around three-quarters of the way down the
+  meter the ball never lifts 2 pixels, so it is catchable for its whole carry, up to 16
+  pixels (32 yards). A high shot there clears after 3-5 pixels.
+- **High helps a little, low hurts a little.** About half a pixel each way on a strong
+  swing.
+- **The putter cannot leave a bunker.** It is stopped at the edge every time.
+- **A caught ball still moves.** It stops at the last sand it was over, not where it was
+  hit from, and the stroke counts.
 
 ## After the shot: water and out of bounds
 

@@ -104,6 +104,7 @@ Byte-level layout of the course data banks: the `nes-open-golf-rom-layout` skill
 | Aiming | 13 | `$8C77` `UpdateSetupAim`, `$BD57` `UpdateSwingAim` | |
 | Swing and meter | 13 | `$AA09` `SwingSequenceEntry`, `$A9A6` `ShotInitialization`, `$A8DD` `RenderSwingMeterMarkers` | `practice_swing.md` |
 | Ball physics | 13 | `$AD0A` `CalcLaunchVector`, `$B11F` `ProcessLanding`, `$B4FF` `ApplyWindEffect`, `$B451` `ApplyRollFriction`, `$B952` `ApplyLandingKick`, velocity helpers `$B6F0`-`$B893` | `shot_physics.md`, `green_slope_physics.md` |
+| Bunker lip rule (a sand shot put back in the sand) | 13 | `$B073`; armed at `$AA1E`, `BunkerFrameCount` (`$05A3`), `BunkerExitArmedFlag` (`$05A4`), sand snapshot `$059C`-`$05A2` (`$B0F4`), `MaybeBunkerExitClubThresholdTable` (`$B8AE`) | `shot_physics.md` |
 | Course (overhead) view | 13 | `$8DA6` `DrawCourseGameplayView`, `$8DCE` `LoadCourseViewTileset`, `$8FC2` `DrawBallSprites` | |
 | Green detail view | 13 | `$95A9` `DrawGreenDetailView`, `$95C6` `LoadGreenDetailViewTileset` | `green_shortcut.md` |
 | Cup view, ball drop | 9 | `$8000` `LoadGreenViewTileset`, `$8050` `BallDropAnimationEntry`, `$81C4` `UpdateBallAtCup` | |
