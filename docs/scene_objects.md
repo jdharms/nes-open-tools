@@ -8,7 +8,8 @@ streams, one moving it and one animating it, and is drawn from metasprite data i
 or bank 10. `golf-rom-peek trace` walks all of it (`golf/core/object_script.py`), and
 `golf-rom-peek known-data` labels what it finds.
 
-Which scene each object belongs to is not worked out here; the record tables are named by
+Which scene each object belongs to is not worked out here (`cutscene_sprites.md` does it
+for the golfers); the record tables are named by
 address, and their comments say which allocation site uses them.
 
 ## Records
@@ -119,5 +120,6 @@ The engine reaches code two ways, both answered by the walker:
 
 ## Open questions
 
-- Which scene each record table belongs to.
+- Which scene each record table belongs to. `cutscene_sprites.md` places the ones that
+  draw a golfer (sprites `$01`, `$02`, `$03`, `$05`).
 - What allocates the three bank 12 record lists in `RECORD_LISTS` with no allocator found.

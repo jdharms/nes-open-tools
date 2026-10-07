@@ -72,6 +72,8 @@ Byte-level layout of the course data banks: the `nes-open-golf-rom-layout` skill
 | Metasprite renderers | 15, 13 | `$FEBD` `RenderMetasprite`, `$FDCE` `RenderMetaspriteClipped`, `$FF38` `RenderMetaspriteWithAttr`; bank 13 `$9492` `RenderGreenViewMetasprite`; `$FF7E` `HideUnusedSprites` | `rom_disassembly.md` (four formats) |
 | Golfer and club sprites | 8 | `$8000` `RenderGolferAndClub` (per frame from bank 13 `$AAA2`); `...BodyMetaspriteData`, `ClubMetaspriteData` | `golfer_sprites.md` |
 | Golfer CHR | 0, 1, 2 | `LuigiSpriteChrStreams` (bank 0 `$A23D`) and siblings | `golfer_sprites.md` |
+| Golfer cutscene poses (signpost walk-on, hole result, club house) | 10, 12 | bank 10 sprite ids `$01`, `$02`, `$03`, `$05` (frame tables `$811D`, `$8994`, `$923B`, `$A2B1`); bank 12 `$B094` the hole result (from bank 11 `$BEE5`; `$B2F3` classifies the score, `$B35B` picks the record), `$AC01` `LC_AC01_PlaceGolferStandee`, `$B7D9` the hole in one (`$B81B` shared with the long drive and near-pin scenes), `$A4A4` the tournament placing celebration | `cutscene_sprites.md` |
+| Golfer cutscene CHR | 6, 7, 0 | bank 6 `$8000` (Mario), `$8AB2` (Luigi); bank 7 `$8000` (signpost, both); bank 0 `$B2E2` (wager) | `cutscene_sprites.md` |
 
 ## Input
 

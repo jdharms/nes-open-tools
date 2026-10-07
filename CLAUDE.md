@@ -39,7 +39,8 @@ A toolset for reverse engineering, editing and patching the NES Open Tournament 
 ## Repository Layout
 
 - `golf/` - shared library
-  - `core/` - ROM reading/writing, both compression codecs, NES graphics, golfer sprites,
+  - `core/` - ROM reading/writing, both compression codecs, NES graphics, golfer sprites
+    (the swing in `golfer_sprites.py`, the cutscene poses in `cutscene_sprites.py`),
     signpost, audio, `asm6502.py` assembler, `rom_analysis.py`, `rom_trace.py` (code
     reachability), `text_script.py` (the bank 11 dialogue script walker), `object_script.py`
     (the scene object walker), `known_data.py`

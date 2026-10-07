@@ -5,6 +5,8 @@
 How the swinging golfer and his club are drawn during a shot, and how the game decides
 *which* golfer to draw.
 
+The golfers' poses outside the shot screen are separate data: see `cutscene_sprites.md`.
+
 Confidence is marked per claim:
 
 - **[C]** Confirmed - read directly out of code/data, or verified live by jdharms.
