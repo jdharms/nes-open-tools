@@ -8,6 +8,7 @@ from fastapi.testclient import TestClient
 from golf.randomizer.catalog import Catalog, HoleStore
 from golf.randomizer.curation import CurationSnapshot
 from golf.randomizer.manifest import SCHEMA
+from golf.randomizer.wind import compass
 from server.app import create_app
 from server.config import Config
 from server.timings import Sample
@@ -20,6 +21,7 @@ from tests.unit.server_app.helpers import (
     generate_seed,
     post_download,
     scan_path,
+    seed_form,
 )
 
 ROUND_LINK = re.compile(r'href="/admin/rounds/([0-9A-Za-z]{10})"')
@@ -158,6 +160,26 @@ def test_detail_pages_show_the_seed_the_round_and_the_player(fake_builder):
     assert f'href="/r/{round_id}"' in round_page
     assert f'href="/admin/seeds/{seed_id}"' in user_page
     assert f'href="/admin/rounds/{round_id}"' in user_page
+
+
+HOLE_WIND = re.compile(
+    r"<td data-wind-direction>(\w+)</td>\s*"
+    r'<td class="num" data-wind-speed>(\d+)</td>'
+)
+
+
+def test_the_seed_page_shows_each_holes_wind_anchors_and_the_profiles(fake_builder):
+    form = seed_form(wind_speed="storm_rolling_in", wind_direction="prevailing")
+    with admin_client(fake_builder) as client:
+        seed_id = generate_seed(client, form)
+        sign_in(client, "admin")
+        seed_page = client.get(f"/admin/seeds/{seed_id}").text
+    holes = fake_builder.built.course.holes
+    assert HOLE_WIND.findall(seed_page) == [
+        (compass(hole.wind[0]), str(hole.wind[1])) for hole in holes
+    ]
+    assert "<code>storm_rolling_in</code>" in seed_page
+    assert "<code>prevailing</code>" in seed_page
 
 
 @pytest.mark.parametrize(

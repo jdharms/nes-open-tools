@@ -18,6 +18,7 @@ from itertools import groupby
 
 from golf.qr import payload
 from golf.randomizer.catalog import Catalog, CatalogError
+from golf.randomizer.wind import compass
 
 from . import audit
 from .db import Database
@@ -329,6 +330,10 @@ class HoleSlot:
     id: str
     par: int
     withdrawn: bool
+    #: the compass point the hole's direction anchor blows toward
+    wind_direction: str
+    #: the hole's speed anchor
+    wind_speed: int
 
 
 @dataclass(frozen=True)
@@ -369,7 +374,12 @@ def seed_detail(db: Database, seed_id: str, catalog: Catalog) -> SeedDetail | No
             withdrawn = catalog[slot.id].withdrawn
         except CatalogError:  # pragma: no cover - the catalog never loses an id
             withdrawn = True
-        holes.append(HoleSlot(number, str(slot.id), slot.par, withdrawn))
+        direction, speed = slot.wind
+        holes.append(
+            HoleSlot(
+                number, str(slot.id), slot.par, withdrawn, compass(direction), speed
+            )
+        )
     return SeedDetail(
         seed=seed,
         generator_version=seed.manifest.generator_version,

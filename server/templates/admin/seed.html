@@ -96,6 +96,8 @@
 
   <section>
     <h2>Holes</h2>
+    {% set settings = seed.manifest.settings %}
+    <p>Wind speed profile <code>{{ settings.wind_speed_profile }}</code> · Wind direction profile <code>{{ settings.wind_direction_profile }}</code></p>
     <div class="overflow-auto">
       <table class="striped">
         <thead>
@@ -103,6 +105,8 @@
             <th scope="col" class="num">#</th>
             <th scope="col">Hole</th>
             <th scope="col" class="num">Par</th>
+            <th scope="col">Wind</th>
+            <th scope="col" class="num">Speed</th>
           </tr>
         </thead>
         <tbody>
@@ -111,6 +115,8 @@
               <td class="num">{{ hole.number }}</td>
               <td><code>{{ hole.id }}</code>{% if hole.withdrawn %} <del>withdrawn</del>{% endif %}</td>
               <td class="num">{{ hole.par }}</td>
+              <td data-wind-direction>{{ hole.wind_direction }}</td>
+              <td class="num" data-wind-speed>{{ hole.wind_speed }}</td>
             </tr>
           {% endfor %}
         </tbody>
