@@ -47,7 +47,7 @@ text = "One per Nine"
 
 [generate.draw_rule.uniform]
 note = "plain: draw rule option; no limit, every hole equally likely, expert holes included"
-text = "Two per Nine"
+text = "No limit"
 
 [generate.draw_rule.help]
 note = "small line under the draw rule select; what an expert hole is: a Mario Open hole that plays harder than every NES Open hole"
