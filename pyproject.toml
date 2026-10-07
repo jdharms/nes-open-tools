@@ -73,6 +73,7 @@ golf-difficulty-report = "tools.research.difficulty_report:main"
 # Art round-trips
 golf-golfer-export = "tools.art.golfer_export:main"
 golf-signpost-import = "tools.art.signpost_import:main"
+golf-intro-sky = "tools.art.intro_sky:main"
 
 # Music
 golf-export-music = "tools.music.export:main"

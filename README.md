@@ -154,6 +154,7 @@ Build a standalone editor executable with `uv run pyinstaller run_editor.spec`.
 |---------|-------------|
 | `golf-golfer-export <rom> <out_dir>` | Export golfer animations as layered Aseprite files; see `docs/golfer_sprites.md` |
 | `golf-signpost-import <edited.aseprite>` | Read edited signpost banner art back out of a screen export; see `docs/prehole_signpost.md` |
+| `golf-intro-sky <mario_open_rom>` | Regenerate the sky image the `course_intro_sky` patch draws on the course intro scene; see `docs/course_intro_scene.md` |
 
 ### Music
 

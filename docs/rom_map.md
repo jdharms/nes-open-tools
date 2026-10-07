@@ -124,7 +124,7 @@ Byte-level layout of the course data banks: the `nes-open-golf-rom-layout` skill
 | Title screen | 12 | `$80EC` `TitleScreenUpdate` | `title_screen.md` |
 | Main menu chain | 12 | `$856E` `InitMainMenu`, `$8698` `MenuTick`, `$899F` `CallMenuChoiceHandler`, `MenuTextListData` | `menu_system.md` |
 | Club house entries | 12 | `$84F5`-`$855B` (`LC_84FA_OpenPrizeMoney` and siblings) | `menu_system.md` |
-| Course intro | 12 | `$9262` `SetupCourseIntroScene`, `$9478` `ShowCourseIntroScene` | `course_intro_scene.md` |
+| Course intro | 12 | `$9262` `SetupCourseIntroScene`, `$9478` `ShowCourseIntroScene`; `$92EC` the sunset showing after the scorecard, palette `$9837`; sprite 0 for the raster split is record `$98F3`, metasprite bank 10 `$AEA6` (tile `$1B`) | `course_intro_scene.md` |
 | Pre-hole signpost | 12 | `$AB87` `InitPreHoleSignpostScene`, `$ABA5` `DrawPreHoleSignpost` | `prehole_signpost.md` |
 | Prize money | 12 | `$8F34` | `prize_money.md` |
 | Options | 11 | `$8B1B` `RunOptionsScreen` | |

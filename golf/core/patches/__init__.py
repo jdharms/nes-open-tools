@@ -21,6 +21,15 @@ from .base import PatchError, ROMPatch
 from .byte_patch import BytePatch
 from .composite import CompositePatch
 from .course import CoursePatch, CourseWriteStats
+from .course_intro_sky import (
+    MARIO_OPEN_SKY_IMAGE,
+    CourseIntroSkyPatch,
+    Sky,
+    course_intro_sky_patch,
+    read_mario_open_sky,
+    read_sky_image,
+    write_sky_image,
+)
 from .course_theme import course_theme_patch
 from .green_shortcut import green_shortcut_patch
 from .menu_trim import (
@@ -156,6 +165,13 @@ __all__ = [
     "MusicImportPatch",
     "music_import_patch",
     "COURSE_TRACKS",
+    "CourseIntroSkyPatch",
+    "Sky",
+    "course_intro_sky_patch",
+    "read_mario_open_sky",
+    "read_sky_image",
+    "write_sky_image",
+    "MARIO_OPEN_SKY_IMAGE",
     "peach_dress_patch",
     "DRESS_COLOR_FAMILIES",
     "DRESS_COLORS",

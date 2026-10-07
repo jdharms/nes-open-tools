@@ -1,5 +1,5 @@
 """
-Decoder for the game's compressed graphics streams (`$D4C3` in the fixed bank).
+Codec for the game's compressed graphics streams (`$D4C3` in the fixed bank).
 
 Every pixel the game displays arrives through this codec: the cartridge has no
 CHR ROM (mapper 1, `CHR 8KB banks: 0`), so pattern data, nametables and
@@ -43,6 +43,10 @@ Modes:
 ``$A0``  same, bit-reversing each byte (a horizontal tile flip)
 ``$C0``  same, reading backwards (a vertical tile flip)
 =======  ======================================================================
+
+`compress_stream` writes streams for patches. It uses the four modes that carry
+their own data and none of the lookback modes, so what it writes decodes the
+same at any PPU address and after any earlier load.
 """
 
 from dataclasses import dataclass, field
@@ -225,3 +229,68 @@ def load_graphics_table(
         table.streams.append(result)
         cursor = result.end_ppu_addr
     return table, vram
+
+
+MAX_LENGTH = 1024  # the long form's ten length bits
+_SHORT_LENGTH = 32
+
+
+def _opcode(mode: int, length: int) -> bytes:
+    """The one- or two-byte opcode for `length` units of a non-lookback mode."""
+    if length <= _SHORT_LENGTH:
+        return bytes([mode | (length - 1)])
+    return bytes([0xE0 | (mode >> 3) | ((length - 1) >> 8), (length - 1) & 0xFF])
+
+
+def compress_stream(data: bytes) -> bytes:
+    """Encode `data` as one stream, terminator included.
+
+    Greedy: at each byte it takes the longest of a run, an incrementing run or
+    a two-byte pattern when that covers at least three bytes (four for a
+    pattern), and otherwise adds the byte to a literal.
+    """
+    out = bytearray()
+    literal = bytearray()
+
+    def flush() -> None:
+        for start in range(0, len(literal), MAX_LENGTH):
+            chunk = literal[start : start + MAX_LENGTH]
+            out.extend(_opcode(0x00, len(chunk)) + chunk)
+        literal.clear()
+
+    pos, size = 0, len(data)
+    while pos < size:
+        limit = min(size, pos + MAX_LENGTH)
+        run = 1
+        while pos + run < limit and data[pos + run] == data[pos]:
+            run += 1
+        rise = 1
+        while pos + rise < limit and data[pos + rise] == (data[pos] + rise) & 0xFF:
+            rise += 1
+        pairs = 0
+        if pos + 1 < size and data[pos] != data[pos + 1]:
+            pair_limit = min(size, pos + 2 * MAX_LENGTH)
+            while (
+                pos + 2 * pairs + 1 < pair_limit
+                and data[pos + 2 * pairs] == data[pos]
+                and data[pos + 2 * pairs + 1] == data[pos + 1]
+            ):
+                pairs += 1
+        if run >= max(3, rise, 2 * pairs if pairs >= 2 else 0):
+            flush()
+            out.extend(_opcode(0x20, run) + bytes([data[pos]]))
+            pos += run
+        elif pairs >= 2 and 2 * pairs >= rise:
+            flush()
+            out.extend(_opcode(0x40, pairs) + bytes(data[pos : pos + 2]))
+            pos += 2 * pairs
+        elif rise >= 3:
+            flush()
+            out.extend(_opcode(0x60, rise) + bytes([data[pos]]))
+            pos += rise
+        else:
+            literal.append(data[pos])
+            pos += 1
+    flush()
+    out.append(0xFF)
+    return bytes(out)

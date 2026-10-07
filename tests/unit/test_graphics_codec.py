@@ -1,4 +1,4 @@
-"""Unit tests for the $D4C3 graphics stream decoder.
+"""Unit tests for the $D4C3 graphics stream codec.
 
 Each literal mode and each of the three video-memory lookback modes gets a
 hand-built stream, so a regression shows up as a specific mode rather than a
@@ -7,6 +7,7 @@ corrupted image somewhere downstream.
 
 from golf.core.graphics_codec import (
     VideoMemory,
+    compress_stream,
     decompress_stream,
     load_graphics_table,
 )
@@ -162,3 +163,41 @@ class TestVideoMemory:
         vram = VideoMemory()
         vram.write(0x4000, 0x42)
         assert vram.read(0x0000) == 0x42
+
+
+class TestCompressStream:
+    """`compress_stream` output decodes back to its input through `decompress_stream`."""
+
+    @staticmethod
+    def round_trip(data, dest=0x0000):
+        vram, result = run(compress_stream(bytes(data)), dest=dest)
+        assert result.end_ppu_addr == dest + len(data)
+        return bytes(vram.data[dest : dest + len(data)])
+
+    def test_empty_is_only_the_terminator(self):
+        assert compress_stream(b"") == b"\xff"
+
+    def test_each_mode_is_chosen(self):
+        assert compress_stream(b"\x07" * 5) == bytes([0x24, 0x07, 0xFF])
+        assert compress_stream(bytes([5, 6, 7, 8])) == bytes([0x63, 0x05, 0xFF])
+        assert compress_stream(b"\xaa\xbb" * 3) == bytes([0x42, 0xAA, 0xBB, 0xFF])
+        assert compress_stream(b"\x01\x09\x04") == bytes([0x02, 1, 9, 4, 0xFF])
+
+    def test_long_forms(self):
+        assert compress_stream(b"\x03" * 1024) == bytes([0xE7, 0xFF, 0x03, 0xFF])
+        assert self.round_trip(b"\x03" * 2500) == b"\x03" * 2500
+        assert self.round_trip(b"\xaa\xbb" * 1500) == b"\xaa\xbb" * 1500
+        mixed = bytes((i * 37 + (i >> 3)) & 0xFF for i in range(3000))
+        assert self.round_trip(mixed) == mixed
+
+    def test_mixed_data_round_trips_at_any_address(self):
+        data = (
+            bytes(range(250, 256))
+            + bytes(range(10))
+            + b"\x00" * 40
+            + b"\x12\x34" * 20
+            + bytes([9, 1, 8, 2, 7, 7, 3])
+            + b"\xff" * 33
+        )
+        assert self.round_trip(data) == data
+        assert self.round_trip(data, dest=0x2000) == data

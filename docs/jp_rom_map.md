@@ -46,6 +46,15 @@ The course data tables (pointers, par, distances, decompression tables) are cons
 | Putter power and timing | 13 | `$B95D` power on the green, `$B962` off it; `$B96D` swing-speed factors; `$B98A` timing curve (57 bytes) | `jp_putting_physics.md` |
 | Swing meter rates | 13 | `$ABAF` low bytes, `$ABB2` high bytes | `jp_putting_physics.md` |
 
+## Scenes and graphics
+
+| Topic | Bank | Start here | Doc |
+|---|---|---|---|
+| Compressed graphics | 15 | `$D464` loader (inline bank, lo, hi), `$D689` loader from `$22/$23` and bank `$27`; same stream format as the US ROM | `golf/core/graphics_codec.py` |
+| Course intro scene (the landscape after choosing stroke play) | 12 | `$A018` loads the graphics; entries `$9F41` and `$9F51` (the sunset showing); frame tick and raster split `$A122`; phase dispatch `$A161` | `course_intro_scene.md` |
+| Course intro graphics | 8 | tables `$9D1A` (CHR `$0000`), `$AD1F` (CHR `$1000`), `$9483` (CHR `$1800`), `$B13B` (nametable) | `course_intro_scene.md` |
+| Course intro palettes | 12 | pointer table `$A844` (entry 0 `$A906`); sunset background palette `$A9C6` | `course_intro_scene.md` |
+
 ## Commonly read RAM
 
 | Variable | Address |

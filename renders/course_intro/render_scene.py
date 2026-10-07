@@ -1,8 +1,10 @@
-"""Rebuild the course intro screens straight out of the ROM.
+"""Rebuild the course intro screens straight out of the ROMs.
 
 Decodes the scene's four graphics tables, replays the nametable writes the
 scene's phase handlers make, and renders the result with the sprite-0 raster
-split at tile row 8.  See docs/course_intro_scene.md.
+split at tile row 8.  Mario Open's scene, which has no course name and splits
+at tile row 12, is rendered when that ROM is present.  See
+docs/course_intro_scene.md.
 """
 
 import os
@@ -24,6 +26,7 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 FONT_CHR = (6, 0xA781)  # landscape tiles + dialogue font -> PPU $1000
 PORTRAIT_CHR = (8, 0xA945)  # $071D = 0
 PALETTE = (12, 0x9777)
+SUNSET_PALETTE = (12, 0x9837)  # background half only, used when $071E is set
 SPLIT_ROW = 8  # sprite-0 split: rows 0-7 use CHR $0000
 
 COURSES = [
@@ -31,6 +34,12 @@ COURSES = [
     ("us", (8, 0xA452), (8, 0xB91B)),
     ("uk", (8, 0xA452), (8, 0xBB04)),
 ]
+
+# Mario Open (mario_open_jp.nes): every table is in bank 8, in load order.
+JP_TABLES = [(8, 0x9D1A), (8, 0xAD1F), (8, 0x9483), (8, 0xB13B)]
+JP_PALETTE = (12, 0xA906)
+JP_SUNSET_PALETTE = (12, 0xA9C6)  # the same bytes, used when $0618 is set
+JP_SPLIT_ROW = 12
 
 
 def nametable_write(rom, bank, cpu_addr, vram, fill_mode):
@@ -82,13 +91,23 @@ def build(rom, chr_table: tuple[int, int], nt_table: tuple[int, int]):
     return vram
 
 
-def render(rom, vram, out_path):
-    pal = rom.read_switched(PALETTE[1], PALETTE[0], 32)
+def build_jp(rom):
+    """Mario Open's scene as it stands once phase 1 has run, before the text box."""
+    vram = VideoMemory()
+    for bank, cpu_addr in JP_TABLES:
+        load_graphics_table(rom, bank, cpu_addr, vram)
+    nametable_write(rom, 12, 0xA9D6, vram, False)  # $A04B
+    nametable_write(rom, 12, 0xA1AF, vram, True)  # phase 1
+    return vram
+
+
+def render_image(vram, pal, split_row=SPLIT_ROW):
+    """The background at 256x240, from a palette of at least 16 bytes."""
     img = Image.new("RGB", (256, 240))
     px = img.load()
     assert px is not None
     for ty in range(30):
-        base = 0x0000 if ty < SPLIT_ROW else 0x1000
+        base = 0x0000 if ty < split_row else 0x1000
         for tx in range(32):
             tile = vram.data[0x2000 + ty * 32 + tx]
             attr = vram.data[0x23C0 + (ty // 4) * 8 + (tx // 4)]
@@ -100,8 +119,17 @@ def render(rom, vram, out_path):
                     value = rows[y][x]
                     nes = pal[0] if value == 0 else pal[palette_index * 4 + value]
                     px[tx * 8 + x, ty * 8 + y] = NES_SYSTEM_PALETTE[nes & 0x3F]
+    return img
+
+
+def save(img, out_path):
     img.resize((512, 480), Image.Resampling.NEAREST).save(out_path)
     print("wrote", out_path)
+
+
+def render(rom, vram, out_path):
+    pal = rom.read_switched(PALETTE[1], PALETTE[0], 32)
+    save(render_image(vram, pal), out_path)
 
 
 def main():
@@ -112,6 +140,23 @@ def main():
             build(rom, chr_table, nt_table),
             os.path.join(HERE, f"scene_{name}.png"),
         )
+
+    jp_path = os.path.join(ROOT, "mario_open_jp.nes")
+    if not os.path.exists(jp_path):
+        print("skipping the Mario Open scene:", jp_path, "not found")
+        return
+    jp = RomReader(jp_path)
+    vram = build_jp(jp)
+    pal = jp.read_switched(JP_PALETTE[1], JP_PALETTE[0], 32)
+    save(
+        render_image(vram, pal, JP_SPLIT_ROW),
+        os.path.join(HERE, "scene_mario_open.png"),
+    )
+    sunset = jp.read_switched(JP_SUNSET_PALETTE[1], JP_SUNSET_PALETTE[0], 16)
+    save(
+        render_image(vram, sunset, JP_SPLIT_ROW),
+        os.path.join(HERE, "scene_mario_open_sunset.png"),
+    )
 
 
 if __name__ == "__main__":

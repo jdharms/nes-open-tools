@@ -30,6 +30,11 @@ from golf.qr.port import layout as qr_layout
 from .base import ROMPatch
 from .composite import CompositePatch
 from .course import CoursePatch
+from .course_intro_sky import (
+    MARIO_OPEN_SKY_IMAGE,
+    course_intro_sky_patch,
+    read_sky_image,
+)
 from .course_theme import course_theme_patch
 from .extended_sram_defaults import (
     EXTENDED_SRAM_DEFAULTS_PATCH,
@@ -210,6 +215,12 @@ class MusicImportParams:
     track: int | None = None
     #: defaults to the dump's recorded tuning difference
     transpose_adjust: int | None = None
+
+
+@dataclass(frozen=True)
+class CourseIntroSkyParams:
+    #: a 256-pixel-wide image whose top 64 rows are the sky; Mario Open's when omitted
+    image: Path = MARIO_OPEN_SKY_IMAGE
 
 
 @dataclass(frozen=True)
@@ -576,6 +587,12 @@ PATCH_SPECS: dict[str, PatchSpec[Any, Any]] = {
             "Recolor Peach's dress in the putting view to a curated NES color",
             PeachDressParams,
             lambda ctx, params: peach_dress_patch(params.color),
+        ),
+        PatchSpec(
+            "course_intro_sky",
+            "Replace the course name on the course intro scene with open sky (docs/course_intro_scene.md)",
+            CourseIntroSkyParams,
+            lambda ctx, params: course_intro_sky_patch(read_sky_image(params.image)),
         ),
         PatchSpec(
             "putting_practice",

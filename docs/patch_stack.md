@@ -239,6 +239,7 @@ three requirements and the `course` step.
 | `sram_defaults` | `player_name` (A-Z, `.` and space, at most 10), `clubs` (up to 14 of `1W`-`4W`, `1I`-`9I`, `PW`, `SW`, `PT`; the putter is added), `bgm` (default true), `sram_magic` (default `0x3553`, "5S"; neither byte `$00` or `$FF`). To use the extended table, supply all three of `swing` and `putt` (`off`, `slow`, `medium`, `fast`) and `spin` (`off`, `top2`, `top1`, `normal`, `back1`, `back2`). Without them, BGM off uses the vanilla loop edit and cannot follow `extended_sram_defaults`. Only a save being initialized gets these values | `extended_sram_defaults` when swing, putt and spin are supplied |
 | `extended_sram_defaults` | none; installs the SRAM defaults routine and table at vanilla values in PLAYER STATS' code space | `menu_trim` |
 | `peach_dress` | `color` (one of the curated NES colors in `DRESS_COLOR_FAMILIES`, `golf/core/patches/peach_dress.py`); recolors Peach's dress in the putting view | |
+| `course_intro_sky` | `image` (a 256-pixel-wide image whose top 64 rows are the sky, in the three colors of background palette 0; default Mario Open's, `golf/core/patches/data/course_intro_sky.png`); draws that sky over the course name on the course intro scene (`docs/course_intro_scene.md`, **The sky patch**) | |
 | `putting_practice` | (experimental) | |
 | `mario_open_free_play` | none; all six courses and no score limit (`docs/mario_open_free_play.md`) | |
 
