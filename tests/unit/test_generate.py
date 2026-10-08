@@ -76,7 +76,7 @@ def test_draws_a_prng_seed_when_the_settings_have_none(real_catalog, real_curati
 
 def test_records_versions_and_round_trips(real_catalog, real_curation):
     manifest = generate(real_catalog, real_curation, Settings(prng_seed="abc"))
-    assert manifest.schema == SCHEMA == 3
+    assert manifest.schema == SCHEMA == 4
     assert manifest.generator_version == GENERATOR_VERSION
     assert manifest.build_version == BUILD_VERSION == 6
     assert manifest.finish_abi_version == FINISH_ABI_VERSION == 2

@@ -80,7 +80,7 @@ def signatures(catalog: Catalog, store: HoleStore) -> list[HoleSignature]:
     """
     found = []
     for entry in catalog.newest().values():
-        if not store.path_for(entry).exists():
+        if not store.has(entry):
             continue
         found.append(signature(entry, store.load(entry)))
     return found

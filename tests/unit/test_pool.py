@@ -1,10 +1,13 @@
 """Unit tests for building a generation pool from the catalog and curation."""
 
 from golf.randomizer.catalog import (
+    COMMUNITY,
+    DERIVED,
     JP_ROM,
     US_ROM,
     Catalog,
     CatalogEntry,
+    DerivedSource,
     FileSource,
     HoleId,
     RomSource,
@@ -55,6 +58,67 @@ def test_skips_withdrawn_newest_and_undrawable_lineages():
     curation = CurationSnapshot.from_json({"a/two": {"drawable": False}})
     assert pool_keys(build_pool(holes, curation, Settings())) == {
         "a/three": ["a/three"]
+    }
+
+
+def derived(hole_id: str, base: CatalogEntry, par: int = 3) -> CatalogEntry:
+    return CatalogEntry(
+        HoleId.parse(hole_id),
+        DerivedSource(base, "derived/hole.json"),
+        "1" * 64,
+        par,
+        190,
+        "Test",
+    )
+
+
+def test_a_derived_hole_is_drawn_only_when_its_kind_is_included():
+    base = entry("nes_us/12", par=5)
+    jp_base = entry("jp_uk/03", par=5, rom=JP_ROM)
+    holes = catalog(
+        base,
+        jp_base,
+        derived("jdharms/nes_us_12_short", base),
+        derived("jdharms/jp_uk_03_short", jp_base),
+        entry("dharms/cliffside", rom=None),
+    )
+    vanilla = {"jp_uk/03": ["jp_uk/03"], "nes_us/12": ["nes_us/12"]}
+    assert pool_keys(build_pool(holes, CurationSnapshot(), Settings())) == vanilla
+    with_derived = Settings(include=frozenset({DERIVED}))
+    assert pool_keys(build_pool(holes, CurationSnapshot(), with_derived)) == vanilla | {
+        "jdharms/jp_uk_03_short": ["jdharms/jp_uk_03_short"],
+        "jdharms/nes_us_12_short": ["jdharms/nes_us_12_short"],
+    }
+    # a derived hole needs its base's ROM
+    us_only = Settings(include=frozenset({DERIVED}), sources=frozenset({US_ROM}))
+    assert pool_keys(build_pool(holes, CurationSnapshot(), us_only)) == {
+        "jdharms/nes_us_12_short": ["jdharms/nes_us_12_short"],
+        "nes_us/12": ["nes_us/12"],
+    }
+    # a community hole needs no ROM at all
+    community = Settings(include=frozenset({COMMUNITY}), sources=frozenset({US_ROM}))
+    assert pool_keys(build_pool(holes, CurationSnapshot(), community)) == {
+        "dharms/cliffside": ["dharms/cliffside"],
+        "nes_us/12": ["nes_us/12"],
+    }
+
+
+def test_a_derived_hole_shares_its_bases_family_and_takes_tags():
+    base = entry("nes_us/12", par=5)
+    holes = catalog(base, derived("jdharms/nes_us_12_short", base))
+    curation = CurationSnapshot.from_json(
+        {
+            "nes_us/12": {"family": "nes_us_12"},
+            "jdharms/nes_us_12_short": {"family": "nes_us_12", "tags": ["short"]},
+        }
+    )
+    included = Settings(include=frozenset({DERIVED}))
+    pool = build_pool(holes, curation, included)
+    assert pool_keys(pool) == {"nes_us_12": ["jdharms/nes_us_12_short", "nes_us/12"]}
+    assert pool.families[0].pars == {3, 5}
+    no_short = Settings(include=frozenset({DERIVED}), exclude_tags=frozenset({"short"}))
+    assert pool_keys(build_pool(holes, curation, no_short)) == {
+        "nes_us_12": ["nes_us/12"]
     }
 
 

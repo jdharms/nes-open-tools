@@ -25,22 +25,37 @@ from golf.core.patches.wind_anchors import DIRECTIONS as WIND_DIRECTIONS
 from golf.core.patches.wind_anchors import SPEEDS as WIND_SPEEDS
 from golf.core.rng import predict_hole
 
-from .catalog import JP_ROM, US_ROM, Catalog, CatalogError, HoleId, RomSource
+from .catalog import (
+    COMMUNITY,
+    DERIVED,
+    JP_ROM,
+    US_ROM,
+    Catalog,
+    CatalogError,
+    HoleId,
+)
 from .layout import COUNTS
 from .music import RANDOM, TRACKS, track
 from .transforms import TransformError, parse_transform
 from .wind import DIRECTION_PROFILES, SPEED_PROFILES, VANILLA
 from .words import MagicWordsError, check_magic_words
 
-SCHEMA = 3
-#: schemas this code still reads; their settings have no `draw_rule` or wind profiles,
-#: and their holes no wind anchors
+SCHEMA = 4
+#: schemas this code still reads whose settings have no `draw_rule` or wind profiles,
+#: and whose holes have no wind anchors
 LEGACY_SCHEMAS = (1, 2)
+#: schemas this code still reads whose settings have no `include`: their pools held
+#: vanilla holes only
+VANILLA_ONLY_SCHEMAS = (*LEGACY_SCHEMAS, 3)
+READABLE_SCHEMAS = (*VANILLA_ONLY_SCHEMAS, SCHEMA)
 LEGACY_SCHEMA = 1
 LEGACY_BUILD_VERSION = 1
 LEGACY_FINISH_ABI_VERSION = 1
 HOLE_COUNT = 18
 SOURCES = (US_ROM, JP_ROM)
+#: the kinds of hole a seed's settings may add to its pool, which otherwise holds
+#: vanilla holes only (ADR 0023)
+INCLUDABLE = (DERIVED, COMMUNITY)
 DEFAULT_PAR = 72
 DEFAULT_MERCY_POINT = 9
 MERCY_POINTS = range(1, 256)
@@ -223,6 +238,7 @@ _SETTINGS_KEYS = (
     "prng_seed",
     "par",
     "sources",
+    "include",
     "exclude_tags",
     "allow_family_repeats",
     "draw_rule",
@@ -231,6 +247,11 @@ _SETTINGS_KEYS = (
     "music",
     "mercy_point",
     "clubs",
+)
+#: the settings a schema 4 manifest added
+_SCHEMA_4_SETTINGS = ("include",)
+_SCHEMA_3_SETTINGS_KEYS = tuple(
+    key for key in _SETTINGS_KEYS if key not in _SCHEMA_4_SETTINGS
 )
 #: the settings a schema 1 or 2 manifest doesn't have
 _SCHEMA_3_SETTINGS = tuple(
@@ -245,6 +266,8 @@ class Settings:
     prng_seed: str | None = None
     par: int = DEFAULT_PAR
     sources: frozenset[str] = frozenset(SOURCES)
+    #: the kinds of hole added to the pool beside the vanilla ones, from `INCLUDABLE`
+    include: frozenset[str] = frozenset()
     exclude_tags: frozenset[str] = frozenset()
     allow_family_repeats: bool = False
     draw_rule: DrawRule = DEFAULT_DRAW_RULE
@@ -260,6 +283,7 @@ class Settings:
 
     def __post_init__(self):
         object.__setattr__(self, "sources", frozenset(self.sources))
+        object.__setattr__(self, "include", frozenset(self.include))
         object.__setattr__(self, "exclude_tags", frozenset(self.exclude_tags))
         if self.prng_seed is not None and not (
             isinstance(self.prng_seed, str) and self.prng_seed
@@ -274,6 +298,10 @@ class Settings:
         if not self.sources or not self.sources <= set(SOURCES):
             raise ManifestError(
                 f"sources must be a non-empty selection of {list(SOURCES)}, got {list(self.sources)}"
+            )
+        if not self.include <= set(INCLUDABLE):
+            raise ManifestError(
+                f"include must be a selection of {list(INCLUDABLE)}, got {sorted(self.include)}"
             )
         if not all(isinstance(tag, str) and tag for tag in self.exclude_tags):
             raise ManifestError(
@@ -306,6 +334,7 @@ class Settings:
             "prng_seed": self.prng_seed,
             "par": self.par,
             "sources": [source for source in SOURCES if source in self.sources],
+            "include": [kind for kind in INCLUDABLE if kind in self.include],
             "exclude_tags": sorted(self.exclude_tags),
             "allow_family_repeats": self.allow_family_repeats,
             "draw_rule": self.draw_rule.to_json(),
@@ -317,17 +346,29 @@ class Settings:
         }
 
     @classmethod
-    def from_json(cls, data: object, legacy: bool = False) -> "Settings":
-        """Settings from a manifest. `legacy` reads a schema 1 or 2 manifest's, which have
-        no `draw_rule` or wind profiles: every seed then was drawn uniformly, with the
-        wind its seeds dealt."""
-        data = _fields(
-            data, _LEGACY_SETTINGS_KEYS if legacy else _SETTINGS_KEYS, "settings"
+    def from_json(cls, data: object, schema: int = SCHEMA) -> "Settings":
+        """Settings from a manifest of this schema.
+
+        A schema 1 or 2 manifest's have no `draw_rule` or wind profiles: every seed then
+        was drawn uniformly, with the wind its seeds dealt. A schema 3 manifest's or older
+        have no `include`: every pool then held vanilla holes only."""
+        legacy = schema in LEGACY_SCHEMAS
+        vanilla_only = schema in VANILLA_ONLY_SCHEMAS
+        keys = (
+            _LEGACY_SETTINGS_KEYS
+            if legacy
+            else _SCHEMA_3_SETTINGS_KEYS
+            if vanilla_only
+            else _SETTINGS_KEYS
         )
+        data = _fields(data, keys, "settings")
         return cls(
             prng_seed=data["prng_seed"],
             par=data["par"],
             sources=frozenset(_strings(data["sources"], "sources")),
+            include=frozenset()
+            if vanilla_only
+            else frozenset(_strings(data["include"], "include")),
             exclude_tags=frozenset(_strings(data["exclude_tags"], "exclude_tags")),
             allow_family_repeats=data["allow_family_repeats"],
             draw_rule=DrawRule() if legacy else DrawRule.from_json(data["draw_rule"]),
@@ -536,7 +577,7 @@ class Course:
         )
 
 
-_READABLE = ", ".join(map(str, (*LEGACY_SCHEMAS, SCHEMA)))
+_READABLE = ", ".join(map(str, READABLE_SCHEMAS))
 _MANIFEST_KEYS_V1 = (
     "schema",
     "generator_version",
@@ -571,10 +612,15 @@ class Manifest:
     course: Course
 
     def __post_init__(self):
-        if self.schema not in (*LEGACY_SCHEMAS, SCHEMA):
+        if self.schema not in READABLE_SCHEMAS:
             raise ManifestError(
                 f"unsupported manifest schema {self.schema!r}; this code reads schemas "
                 f"{_READABLE}"
+            )
+        if self.schema in VANILLA_ONLY_SCHEMAS and self.settings.include:
+            raise ManifestError(
+                f"manifest schema {self.schema} has no include; its pool held vanilla "
+                f"holes only, got {sorted(self.settings.include)}"
             )
         if self.schema in LEGACY_SCHEMAS:
             if self.settings.draw_rule != DrawRule():
@@ -632,9 +678,13 @@ class Manifest:
             data["finish_abi_version"] = self.finish_abi_version
         settings = self.settings.to_json()
         course = self.course.to_json()
+        if self.schema in VANILLA_ONLY_SCHEMAS:
+            for key in _SCHEMA_4_SETTINGS:
+                del settings[key]
         if self.schema in LEGACY_SCHEMAS:
             for key in _SCHEMA_3_SETTINGS:
-                del settings[key]
+                if key in settings:
+                    del settings[key]
             for hole in course["holes"]:
                 del hole["wind_direction"], hole["wind_speed"]
         return data | {
@@ -647,7 +697,7 @@ class Manifest:
     @classmethod
     def from_json(cls, data: object) -> "Manifest":
         schema = data.get("schema") if isinstance(data, dict) else None
-        if schema not in (*LEGACY_SCHEMAS, SCHEMA):
+        if schema not in READABLE_SCHEMAS:
             raise ManifestError(
                 f"unsupported manifest schema {schema!r}; this code reads schemas "
                 f"{_READABLE}"
@@ -669,18 +719,14 @@ class Manifest:
             ),
             catalog_version=data["catalog_version"],
             curation_stamp=data["curation_stamp"],
-            settings=Settings.from_json(
-                data["settings"], legacy=schema in LEGACY_SCHEMAS
-            ),
+            settings=Settings.from_json(data["settings"], schema),
             course=Course.from_json(data["course"], legacy=schema in LEGACY_SCHEMAS),
         )
 
 
 def required_roms(manifest: Manifest, catalog: Catalog) -> tuple[str, ...]:
     """The vanilla ROMs a seed's ROM is built from: the US ROM, plus any its holes or music come from."""
-    needed = {US_ROM, track(manifest.course.music).rom}
+    needed: set[str | None] = {US_ROM, track(manifest.course.music).rom}
     for slot in manifest.course.holes:
-        source = catalog[slot.id].source
-        if isinstance(source, RomSource):
-            needed.add(source.rom)
+        needed.add(catalog[slot.id].rom)
     return tuple(rom for rom in SOURCES if rom in needed)

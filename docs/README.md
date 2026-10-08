@@ -10,10 +10,12 @@ One line per document. Command-line tools are indexed in the top-level `README.m
 | [randomizer.md](randomizer.md) | Randomizer design: goals, logic, what gets randomized |
 | [randomizer_devplan.md](randomizer_devplan.md) | Randomizer site architecture, data model, routes and the ordered development plan |
 | [planning/download_settings.md](planning/download_settings.md) | Plan: saved download settings, the new SRAM option defaults and finish ABI 2 |
+| [planning/derived_holes_questions.md](planning/derived_holes_questions.md) | Derived holes: decisions taken without asking, open questions and what was left undone |
 | [deployment.md](deployment.md) | Running the randomizer site on its server: setup, releases, rollback and database restores |
 | [test_suite_performance.md](test_suite_performance.md) | Test runtime measurements, slow-test coverage review and workload splitting |
 | [documentation.md](documentation.md) | Philosophy and practices followed for documentation for the development process |
 | [catalog.md](catalog.md) | The randomizer hole catalog: frozen index, curation, ids, versions and families |
+| [derived_holes.md](derived_holes.md) | Derived holes: a vanilla hole and a checked-in delta, the delta format, publishing with `golf-derive`, and how a seed asks for them |
 | [manifest.md](manifest.md) | Randomizer seed manifests: settings, the concrete course, and how generation fills them |
 | [hole_transforms.md](hole_transforms.md) | Hole transforms: mirroring and hazard redraws, their names, versions and golden test |
 | [yardage_book.md](yardage_book.md) | A seed's yardage book: its holes as built, at its pins, with tee-shot wind; the stored holes and the render cache |

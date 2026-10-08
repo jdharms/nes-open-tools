@@ -5,6 +5,10 @@ The catalog is frozen and append-only. An entry binds an id to one hole's conten
 a content hash, and to its provenance. Nothing here steers generation: tags, retirement and
 families are curation (`golf.randomizer.curation`). A changed hole is a new version of its
 lineage, `nes_uk/01@2`, never an edit to an existing entry. See docs/catalog.md.
+
+A hole has one of three kinds, read from its source: a vanilla hole is dumped from a ROM,
+a derived hole is a vanilla hole with a delta applied (`golf.randomizer.delta`,
+docs/derived_holes.md), and a community hole is a hole file.
 """
 
 import hashlib
@@ -17,6 +21,8 @@ from pathlib import Path
 from golf.core import jp_rom_utils, rom_utils
 from golf.formats.hole_data import HoleData
 
+from . import delta as hole_delta
+
 REPO_ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_INDEX = REPO_ROOT / "data" / "catalog" / "holes.json"
 DEFAULT_COURSES = REPO_ROOT / "courses"
@@ -24,6 +30,13 @@ DEFAULT_COURSES = REPO_ROOT / "courses"
 US_ROM = "nes_open_us"
 JP_ROM = "mario_open_jp"
 VANILLA_AUTHOR = "Nintendo"
+
+VANILLA = "vanilla"
+DERIVED = "derived"
+COMMUNITY = "community"
+#: what a hole can be, by its source. Only vanilla holes are in every pool; a seed's
+#: settings ask for the others by kind (ADR 0023)
+KINDS = (VANILLA, DERIVED, COMMUNITY)
 
 _SEGMENT = r"[a-z0-9_]+"
 LINEAGE_PATTERN = re.compile(rf"{_SEGMENT}/{_SEGMENT}")
@@ -81,19 +94,26 @@ class HoleId:
         return self.lineage if self.version == 1 else f"{self.lineage}@{self.version}"
 
 
-def canonical_json(hole: HoleData) -> bytes:
-    """Everything about a hole that reaches the ROM, as the JSON `content_hash` hashes.
-
-    The site stores a transformed hole in this form (`server/seeds.py`), which the
-    renderers read as they do a hole file.
-    """
+def canonical_dict(hole: HoleData) -> dict:
+    """Everything about a hole that reaches the ROM, with terrain cut to its visible height."""
     data = hole.to_dict()
     canonical = {key: data[key] for key in ROM_BOUND_KEYS}
     canonical["terrain"] = {
         **data["terrain"],
         "rows": data["terrain"]["rows"][: hole.terrain_height],
     }
-    return json.dumps(canonical, sort_keys=True, separators=(",", ":")).encode()
+    return canonical
+
+
+def canonical_json(hole: HoleData) -> bytes:
+    """A hole's canonical dict as the JSON `content_hash` hashes.
+
+    The site stores a transformed hole in this form (`server/seeds.py`), which the
+    renderers read as they do a hole file.
+    """
+    return json.dumps(
+        canonical_dict(hole), sort_keys=True, separators=(",", ":")
+    ).encode()
 
 
 def content_hash(hole: HoleData) -> str:
@@ -123,15 +143,53 @@ class FileSource:
         return {"file": self.file}
 
 
-Source = RomSource | FileSource
+@dataclass(frozen=True)
+class DerivedSource:
+    """A derived hole: a vanilla hole and the delta that changes it.
+
+    `base` is the base's own catalog entry, so a derived entry resolves with nothing but
+    itself, and names one version of the base forever. `delta` is the delta file,
+    relative to `root`, the directory the catalog index is in.
+    """
+
+    base: "CatalogEntry"
+    delta: str
+    root: Path = field(default=DEFAULT_INDEX.parent, compare=False, repr=False)
+
+    @property
+    def path(self) -> Path:
+        return self.root / self.delta
+
+    def to_json(self) -> dict:
+        return {"base": str(self.base.id), "delta": self.delta}
 
 
-def _source_from_json(hole_id: str, data: dict) -> Source:
+Source = RomSource | FileSource | DerivedSource
+
+_DERIVED_KEYS = {"base", "delta"}
+
+
+def _source_from_json(hole_id: str, data: dict) -> RomSource | FileSource:
     if set(data) == {"rom", "course", "hole"}:
         return RomSource(data["rom"], data["course"], data["hole"])
     if set(data) == {"file"}:
         return FileSource(data["file"])
     raise CatalogError(f"{hole_id}: unrecognized source {data!r}")
+
+
+def check_delta_path(hole_id: object, delta: object) -> str:
+    """A delta's path as an index may write it: relative, and inside the index's directory."""
+    if (
+        not isinstance(delta, str)
+        or not delta
+        or Path(delta).is_absolute()
+        or ".." in Path(delta).parts
+        or "\\" in delta
+    ):
+        raise CatalogError(
+            f"{hole_id}: delta must be a path under the catalog directory, got {delta!r}"
+        )
+    return delta
 
 
 @dataclass(frozen=True)
@@ -143,6 +201,30 @@ class CatalogEntry:
     distance: int
     author: str
     withdrawn: bool = False
+
+    @property
+    def kind(self) -> str:
+        """One of `KINDS`."""
+        if isinstance(self.source, RomSource):
+            return VANILLA
+        return DERIVED if isinstance(self.source, DerivedSource) else COMMUNITY
+
+    @property
+    def rom(self) -> str | None:
+        """The vanilla ROM the hole's data comes from: its own, or its base's for a
+        derived hole. None for a community hole, which needs no ROM."""
+        source = self.source
+        if isinstance(source, DerivedSource):
+            return source.base.rom
+        return source.rom if isinstance(source, RomSource) else None
+
+    @property
+    def live(self) -> bool:
+        """Whether the hole can still be built: neither it nor its base is withdrawn."""
+        source = self.source
+        return not self.withdrawn and not (
+            isinstance(source, DerivedSource) and source.base.withdrawn
+        )
 
     def to_json(self) -> dict:
         data = {
@@ -160,7 +242,10 @@ class CatalogEntry:
 _ENTRY_KEYS = {"source", "content_hash", "par", "distance", "author"}
 
 
-def _entry_from_json(key: str, data: dict) -> CatalogEntry:
+def _entry_from_json(
+    key: str, data: dict, bases: Mapping[HoleId, CatalogEntry], root: Path
+) -> CatalogEntry:
+    """An entry from the index. `bases` resolves a derived entry's base."""
     hole_id = HoleId.parse(key)
     if str(hole_id) != key:
         raise CatalogError(
@@ -172,15 +257,45 @@ def _entry_from_json(key: str, data: dict) -> CatalogEntry:
         raise CatalogError(
             f"{key}: missing fields {sorted(missing)}, unknown {sorted(unknown)}"
         )
+    source = data["source"]
+    if isinstance(source, dict) and set(source) == _DERIVED_KEYS:
+        source = _derived_source(key, source, bases, root)
+    else:
+        source = _source_from_json(key, source)
     return CatalogEntry(
         id=hole_id,
-        source=_source_from_json(key, data["source"]),
+        source=source,
         content_hash=data["content_hash"],
         par=data["par"],
         distance=data["distance"],
         author=data["author"],
         withdrawn=data.get("withdrawn", False),
     )
+
+
+def _is_derived(data: object) -> bool:
+    source = data.get("source") if isinstance(data, dict) else None
+    return isinstance(source, dict) and set(source) == _DERIVED_KEYS
+
+
+def _derived_source(
+    key: str, data: dict, bases: Mapping[HoleId, CatalogEntry], root: Path
+) -> DerivedSource:
+    text = data["base"]
+    if not isinstance(text, str):
+        raise CatalogError(f"{key}: base must be a hole id, got {text!r}")
+    base_id = HoleId.parse(text)
+    if str(base_id) != text:
+        raise CatalogError(
+            f"{key}: base {text!r} is not canonical; write it as {base_id}"
+        )
+    base = bases.get(base_id)
+    if base is None:
+        raise CatalogError(
+            f"{key}: base {base_id} is not a vanilla hole in the catalog; a derived "
+            "hole's base is a vanilla hole"
+        )
+    return DerivedSource(base, check_delta_path(key, data["delta"]), root)
 
 
 @dataclass(frozen=True)
@@ -192,17 +307,31 @@ class Catalog:
 
     @classmethod
     def load(cls, path: Path = DEFAULT_INDEX) -> "Catalog":
-        return cls.from_json(json.loads(Path(path).read_text()))
+        path = Path(path)
+        return cls.from_json(json.loads(path.read_text()), root=path.parent)
 
     @classmethod
-    def from_json(cls, data: dict) -> "Catalog":
+    def from_json(cls, data: dict, root: Path = DEFAULT_INDEX.parent) -> "Catalog":
+        """The index. `root` is the directory its derived holes' deltas are under."""
         if set(data) != {"version", "holes"}:
             raise CatalogError(
                 f"catalog index needs exactly 'version' and 'holes', got {sorted(data)}"
             )
-        entries = {}
+        entries: dict[HoleId, CatalogEntry] = {}
+        derived = {}
         for key, value in data["holes"].items():
-            entry = _entry_from_json(key, value)
+            if _is_derived(value):
+                derived[key] = value
+                continue
+            entry = _entry_from_json(key, value, {}, root)
+            entries[entry.id] = entry
+        vanilla = {
+            hole_id: entry
+            for hole_id, entry in entries.items()
+            if entry.kind == VANILLA
+        }
+        for key, value in derived.items():
+            entry = _entry_from_json(key, value, vanilla, root)
             entries[entry.id] = entry
         return cls(data["version"], entries)
 
@@ -241,14 +370,13 @@ class Catalog:
         """Each lineage's highest version, the only one generation may draw.
 
         Supersession never rolls back: a lineage whose highest version is withdrawn has no
-        entry here, even when an older version is not withdrawn.
+        entry here, even when an older version is not withdrawn. Nor has a derived hole
+        whose base is withdrawn, since it cannot be built without it.
         """
         highest: dict[str, CatalogEntry] = {}
         for entry in self:
             highest[entry.id.lineage] = entry  # iteration is sorted, so versions ascend
-        return {
-            lineage: entry for lineage, entry in highest.items() if not entry.withdrawn
-        }
+        return {lineage: entry for lineage, entry in highest.items() if entry.live}
 
 
 class HoleStore:
@@ -256,14 +384,18 @@ class HoleStore:
 
     Vanilla holes live where the dump tools write them: `<root>/<course>/hole_NN.json` for
     the US ROM and `<root>/jp/<course>/hole_NN.json` for Mario Open. Community holes live at
-    their file path relative to the root.
+    their file path relative to the root. A derived hole has no file here: it is its
+    base, from this store, with its delta applied, worked out on each load.
     """
 
     def __init__(self, root: Path = DEFAULT_COURSES):
         self.root = Path(root)
 
     def path_for(self, entry: CatalogEntry) -> Path:
+        """The file an entry's own data is in: its hole file, or a derived hole's delta."""
         source = entry.source
+        if isinstance(source, DerivedSource):
+            return source.path
         if isinstance(source, FileSource):
             return self.root / source.file
         if source.rom == US_ROM:
@@ -271,6 +403,15 @@ class HoleStore:
         if source.rom == JP_ROM:
             return self.root / "jp" / source.course / f"hole_{source.hole:02d}.json"
         raise CatalogError(f"{entry.id}: unknown source ROM {source.rom!r}")
+
+    def has(self, entry: CatalogEntry) -> bool:
+        """Whether the entry's data is here to load: its file, and for a derived hole
+        its base's too. A checkout without a ROM's dump has neither that ROM's holes nor
+        the holes derived from them."""
+        source = entry.source
+        if isinstance(source, DerivedSource) and not self.has(source.base):
+            return False
+        return self.path_for(entry).exists()
 
     def load(self, entry: CatalogEntry, *, even_withdrawn: bool = False) -> HoleData:
         """The entry's hole, checked against its hash.
@@ -283,14 +424,31 @@ class HoleStore:
         path = self.path_for(entry)
         if not path.exists():
             raise CatalogError(f"{entry.id}: hole data not found at {path}")
-        hole = HoleData()
-        hole.load(str(path))
+        if isinstance(entry.source, DerivedSource):
+            hole = self._derive(entry.id, entry.source, even_withdrawn)
+        else:
+            hole = HoleData()
+            hole.load(str(path))
         actual = content_hash(hole)
         if actual != entry.content_hash:
             raise CatalogError(
                 f"{entry.id}: {path} has content hash {actual}, catalog has {entry.content_hash}"
             )
         return hole
+
+    def _derive(
+        self, hole_id: HoleId, source: DerivedSource, even_withdrawn: bool
+    ) -> HoleData:
+        try:
+            base = self.load(source.base, even_withdrawn=even_withdrawn)
+        except CatalogError as problem:
+            raise CatalogError(f"{hole_id}: its base, {problem}") from None
+        try:
+            delta = json.loads(source.path.read_text())
+            derived = hole_delta.apply(canonical_dict(base), delta, str(source.base.id))
+        except (ValueError, KeyError, TypeError) as problem:
+            raise CatalogError(f"{hole_id}: {source.path}: {problem}") from None
+        return HoleData.from_dict(derived)
 
 
 # -- Syncing vanilla holes -----------------------------------------------------------------

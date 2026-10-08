@@ -139,6 +139,12 @@ matches. The checked-in `data/` tables, `renders/` images and the catalog's hash
 and so does Mario Open's course intro sky
 (`golf/core/patches/data/course_intro_sky.png`), which the `course_intro_sky` patch draws (ADR 0019).
 
+**Derived holes**: a forward tee or a variant of a vanilla hole is committed as a delta,
+the cells and metadata that differ from its base, under `data/catalog/derived/`, and is
+built from the base each time it is loaded. `golf-derive` publishes one from an edited
+hole file. A seed draws them only when its settings `include` them. See
+`docs/derived_holes.md`.
+
 ## Development Notes
 
 ### Adding CLI tools

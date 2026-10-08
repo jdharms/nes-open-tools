@@ -2,9 +2,11 @@
 The pool: the holes a seed may draw, grouped into the families a draw chooses between.
 
 A hole is in the pool when its lineage's newest version is not withdrawn, curation leaves
-it drawable, its source ROM is one the settings allow, and it has none of the excluded
-tags. Community holes have no source ROM and are never in the pool until the settings
-gain a way to ask for them.
+it drawable, its kind is one the settings ask for, its source ROM is one the settings
+allow, and it has none of the excluded tags. Vanilla holes are always asked for. A derived
+or community hole is in the pool only when the settings' `include` names its kind, so a
+hole added to the catalog is in no pool that did not ask for its kind (ADR 0023). A derived
+hole's source ROM is its base's; a community hole has none, and needs none.
 
 Holes a curator put in one family form one `Family`; every other hole is a family of its
 own, and so is every hole when the settings allow family repeats. Generation draws a
@@ -15,7 +17,7 @@ the draw rule that caps them. See docs/manifest.md.
 
 from dataclasses import dataclass, field
 
-from .catalog import Catalog, CatalogEntry, HoleId, RomSource
+from .catalog import VANILLA, Catalog, CatalogEntry, HoleId
 from .curation import EXPERT_TAG, CurationSnapshot
 from .manifest import Settings
 
@@ -48,8 +50,8 @@ class Pool:
 
 
 def source_rom(entry: CatalogEntry) -> str | None:
-    """The vanilla ROM a hole comes from, or None for a community hole."""
-    return entry.source.rom if isinstance(entry.source, RomSource) else None
+    """The vanilla ROM a hole's data comes from, or None for a community hole."""
+    return entry.rom
 
 
 def build_pool(
@@ -59,7 +61,11 @@ def build_pool(
     experts = set()
     for lineage, entry in sorted(catalog.newest().items()):
         record = curation.for_hole(entry.id)
-        if not record.drawable or source_rom(entry) not in settings.sources:
+        if not record.drawable:
+            continue
+        if entry.kind != VANILLA and entry.kind not in settings.include:
+            continue
+        if entry.rom is not None and entry.rom not in settings.sources:
             continue
         if record.tags & settings.exclude_tags:
             continue
