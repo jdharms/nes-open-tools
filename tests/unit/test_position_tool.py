@@ -427,7 +427,7 @@ class TestPositionToolArrowKeys:
         # Press right arrow
         result = position_tool.handle_key_down(pygame.K_RIGHT, 0, mock_context)
 
-        assert result.needs_render
+        assert result.is_handled
         assert mock_context.hole_data.metadata["tee"]["x"] == initial_x + 1
         assert mock_context.hole_data.modified
 
@@ -488,7 +488,7 @@ class TestPositionToolHandleKeyDown:
         result = position_tool.handle_key_down(pygame.K_RIGHT, 0, mock_context)
 
         # Should have corrected to position 0 and moved tee right
-        assert result.needs_render
+        assert result.is_handled
         assert mock_context.hole_data.metadata["tee"]["x"] == initial_x + 1
 
 

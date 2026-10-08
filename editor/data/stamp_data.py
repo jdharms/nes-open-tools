@@ -9,8 +9,6 @@ from pathlib import Path
 
 from golf.formats import compact_json as json
 
-from .clipboard_data import ClipboardData
-
 
 class StampMetadata:
     """Metadata for a stamp."""
@@ -70,24 +68,6 @@ class StampData:
         self.height: int = 0
         self.mode: str = "terrain"  # "terrain" or "greens"
         self.metadata: StampMetadata = StampMetadata()
-
-    @staticmethod
-    def from_clipboard(
-        clipboard: ClipboardData, metadata: StampMetadata | None = None
-    ) -> "StampData":
-        """Create stamp from clipboard data."""
-        stamp = StampData()
-        stamp.tiles = [row.copy() for row in clipboard.tiles]  # Deep copy
-        stamp.attributes = (
-            [row.copy() for row in clipboard.attributes]
-            if clipboard.attributes
-            else None
-        )
-        stamp.width = clipboard.width
-        stamp.height = clipboard.height
-        stamp.mode = clipboard.mode
-        stamp.metadata = metadata if metadata is not None else StampMetadata()
-        return stamp
 
     def to_json(self) -> str:
         """The stamp as the JSON text `save` writes."""

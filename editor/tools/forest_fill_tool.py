@@ -3,14 +3,6 @@ Forest fill tool - intelligent WFC-based forest region filling.
 """
 
 import pygame
-from pygame import Rect
-
-from editor.controllers.view_state import ViewState
-from editor.core.constants import (
-    CANVAS_OFFSET_X,
-    CANVAS_OFFSET_Y,
-    STATUS_HEIGHT,
-)
 
 from .base_tool import ToolResult
 
@@ -34,19 +26,7 @@ class ForestFillTool:
                 message="Forest fill not available (neighbor data missing)",
             )
 
-        # Create view state for coordinate conversion
-        canvas_rect = Rect(
-            CANVAS_OFFSET_X,
-            CANVAS_OFFSET_Y,
-            context.screen_width - CANVAS_OFFSET_X,
-            context.screen_height - CANVAS_OFFSET_Y - STATUS_HEIGHT,
-        )
-        view_state = ViewState(
-            canvas_rect,
-            context.state.canvas_offset_x,
-            context.state.canvas_offset_y,
-            context.state.canvas_scale,
-        )
+        view_state = context.view_state
 
         # Get clicked tile
         tile = view_state.screen_to_tile(pos)
@@ -95,7 +75,7 @@ class ForestFillTool:
             context.hole_data.set_terrain_tile(row, col, tile_value)
 
         message = f"Forest Fill: Filled {len(changes)} tiles"
-        return ToolResult.modified(terrain=True, message=message)
+        return ToolResult.modified(message=message)
 
     def handle_mouse_up(self, pos, button, context):
         return ToolResult.not_handled()

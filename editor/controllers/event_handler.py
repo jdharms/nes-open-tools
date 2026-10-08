@@ -7,13 +7,7 @@ Handles user input events including mouse, keyboard, and window events.
 from collections.abc import Callable
 
 import pygame
-from pygame import Rect
 
-from editor.core.constants import (
-    CANVAS_OFFSET_X,
-    CANVAS_OFFSET_Y,
-    STATUS_HEIGHT,
-)
 from editor.ui.pickers import GreensTilePicker, TilePicker, ToolPicker
 from editor.ui.widgets import Button
 from golf.formats.hole_data import HoleData
@@ -47,7 +41,6 @@ class EventHandler:
         on_resize: Callable[[int, int], None],
         on_tool_change: Callable[[], None],
         on_create_stamp: Callable[[], None] | None = None,
-        on_terrain_modified: Callable[[], None] | None = None,
     ):
         """
         Initialize event handler.
@@ -69,7 +62,6 @@ class EventHandler:
             on_select_flag: Callback to select a flag position by index (0-3)
             on_resize: Callback for window resize (width, height)
             on_create_stamp: Callback for creating stamp from selection
-            on_terrain_modified: Callback when terrain is modified
         """
         self.state = state
         self.hole_data = hole_data
@@ -89,9 +81,8 @@ class EventHandler:
         self.on_select_flag = on_select_flag
         self.on_resize = on_resize
         self.on_tool_change = on_tool_change
-        self.on_terrain_modified = on_terrain_modified
 
-        # Create tool context (will be updated by Application with transform_logic and forest_filler)
+        # Create tool context (will be updated by Application with forest_filler)
         from editor.tools.base_tool import ToolContext
 
         self.tool_context = ToolContext(
@@ -99,7 +90,6 @@ class EventHandler:
             state=state,
             terrain_picker=terrain_picker,
             greens_picker=greens_picker,
-            transform_logic=None,  # Will be set by Application
             forest_filler=None,  # Will be set by Application
             screen_width=screen_width,
             screen_height=screen_height,
@@ -109,6 +99,8 @@ class EventHandler:
         """Update screen dimensions."""
         self.screen_width = width
         self.screen_height = height
+        self.tool_context.screen_width = width
+        self.tool_context.screen_height = height
 
     def handle_events(self, events: list[pygame.event.Event]) -> bool:
         """
@@ -220,9 +212,6 @@ class EventHandler:
 
     def _process_tool_result(self, result):
         """Process a tool result and trigger necessary callbacks."""
-        if result.terrain_modified and self.on_terrain_modified:
-            self.on_terrain_modified()
-
         if result.message:
             self.state.tool_message = result.message
 
@@ -266,9 +255,6 @@ class EventHandler:
         elif event.key == pygame.K_y and pygame.key.get_mods() & pygame.KMOD_CTRL:
             # Ctrl+Y = Redo
             self._redo()
-        elif event.key == pygame.K_i and pygame.key.get_mods() & pygame.KMOD_CTRL:
-            # Ctrl+I = Toggle invalid tile highlighting (changed from Ctrl+X to avoid conflict with Cut)
-            self.state.toggle_invalid_tiles()
 
         # Selection tool shortcuts (delegate to active tool if it's Selection)
         elif event.key == pygame.K_c and pygame.key.get_mods() & pygame.KMOD_CTRL:
@@ -317,24 +303,12 @@ class EventHandler:
         # Key was handled
         return True
 
-    def _get_canvas_rect(self) -> Rect:
-        """Get the canvas drawing area."""
-        return Rect(
-            CANVAS_OFFSET_X,
-            CANVAS_OFFSET_Y,
-            self.screen_width - CANVAS_OFFSET_X,
-            self.screen_height - CANVAS_OFFSET_Y - STATUS_HEIGHT,
-        )
-
     def _undo(self):
         """Undo last action."""
         if self.state.undo_manager.can_undo():
             previous_state = self.state.undo_manager.undo(self.hole_data)
             if previous_state:
                 self._restore_hole_data(previous_state)
-                # Invalidate terrain validation cache
-                if self.on_terrain_modified:
-                    self.on_terrain_modified()
 
     def _redo(self):
         """Redo last undone action."""
@@ -342,9 +316,6 @@ class EventHandler:
             next_state = self.state.undo_manager.redo(self.hole_data)
             if next_state:
                 self._restore_hole_data(next_state)
-                # Invalidate terrain validation cache
-                if self.on_terrain_modified:
-                    self.on_terrain_modified()
 
     def _restore_hole_data(self, snapshot: HoleData):
         """Restore hole data from snapshot."""

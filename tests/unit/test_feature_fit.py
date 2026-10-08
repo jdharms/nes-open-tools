@@ -15,6 +15,7 @@ from golf.algorithms.feature_fit import (
     style_grid,
     tile_pixels,
 )
+from golf.algorithms.green_zones import FLAT_TILE, FRINGE, GREEN, fringe_zones
 from golf.core.palettes import TERRAIN_WIDTH
 from tests.synthetic_holes import synthetic_hole
 
@@ -141,6 +142,69 @@ def test_fit_draws_the_shape_with_the_family_s_tiles(name):
     assert pick[0, 0] == family.empty
     wrong = (family.render(pick) != target).sum()
     assert wrong < 0.1 * target.sum()
+
+
+def test_the_green_family_draws_in_zones_one_shape_within_the_next():
+    family = families()["green"]
+    assert [families()[name].levels for name in ("fairway", "hazard", "boundary")] == [
+        1,
+        1,
+        1,
+    ]
+    assert family.levels == GREEN == 2
+    assert family.tiles[0] == FLAT_TILE
+    assert (family.masks[family.full] == GREEN).all()
+    assert (family.masks[family.empty] == 0).all()
+    # a seam counts a pixel once for each shape the two tiles disagree about
+    full, empty = family.full, family.empty
+    assert family.seam_right[full, empty] == family.seam_below[empty, full] == 16
+    # $64, fringe then putting surface from the top down, against the flat tile and
+    # against rough: three or four pixels of fringe along the side, then green
+    side = family.index[0x64]
+    assert 3 <= family.seam_right[side, full] <= 4
+    assert family.seam_right[side, full] + family.seam_right[side, empty] == 16
+    assert family.seam_below[side, full] == 0
+
+
+def test_green_grid_reads_slopes_as_putting_surface_and_strips_as_rough():
+    family = families()["green"]
+    hole = rough_hole()
+    hole.greens[5][5:9] = [0x64, 0x33, FLAT_TILE, 0x71]
+    hole.greens[6][5] = 0x100
+    grid = style_grid(family, hole)
+    assert grid.shape == (24, 24)
+    assert list(grid[5, 5:9]) == [
+        family.index[0x64],
+        family.full,
+        family.full,
+        family.empty,
+    ]
+    assert grid[6, 5] == grid[0, 0] == family.empty
+
+
+def test_fit_draws_zones_with_the_green_family_s_tiles():
+    fitter = load_fitters()["green"]
+    family = fitter.family
+    target = fringe_zones(disc(12, 12, 46, 49, 26))
+    pick = fitter.fit(target)
+    assert pick[6, 5] == family.full
+    assert pick[0, 0] == family.empty
+    drawn = family.render(pick)
+    assert ((drawn == GREEN) != (target == GREEN)).sum() < 0.08 * (
+        target == GREEN
+    ).sum()
+    assert ((drawn >= FRINGE) != (target >= FRINGE)).sum() < 0.08 * (
+        target >= FRINGE
+    ).sum()
+    # a ring of fringe tiles, each between two others
+    fringe = np.pad((pick != family.full) & (pick != family.empty), 1)
+    beside = (
+        fringe[:-2, 1:-1].astype(int)
+        + fringe[2:, 1:-1]
+        + fringe[1:-1, :-2]
+        + fringe[1:-1, 2:]
+    )
+    assert set(beside[fringe[1:-1, 1:-1]].tolist()) == {2}
 
 
 def test_fairway_and_hazard_differ_in_their_lips():

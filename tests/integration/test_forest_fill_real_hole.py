@@ -8,7 +8,6 @@ placeholders: a large region with real terrain around it for the fill to match.
 import pytest
 
 from golf.algorithms.forest_fill import PLACEHOLDER_TILE, ForestFiller
-from golf.core.neighbor_validator import TerrainNeighborValidator
 from golf.formats.hole_data import HoleData
 
 #: the tiles of UK hole 18 replaced by placeholders, from the top row down
@@ -33,16 +32,34 @@ PLACEHOLDER_MASK = [
 ]
 
 
-@pytest.fixture
-def neighbor_validator():
-    """Load the terrain neighbor validator."""
-    return TerrainNeighborValidator()
+@pytest.fixture(scope="module")
+def vanilla_pairs(vanilla_courses):
+    """("right" or "down", tile, its neighbor that way) for every pair of neighbors in
+    the visible terrain of the NES Open holes."""
+    pairs = set()
+    paths = [
+        path
+        for course in ("japan", "us", "uk")
+        for path in sorted((vanilla_courses / course).glob("hole_*.json"))
+    ]
+    assert len(paths) == 54
+    for path in paths:
+        hole = HoleData()
+        hole.load(path)
+        rows = hole.terrain[: hole.terrain_height]
+        for row, tiles in enumerate(rows):
+            for col, tile in enumerate(tiles):
+                if col + 1 < len(tiles):
+                    pairs.add(("right", tile, tiles[col + 1]))
+                if row + 1 < len(rows):
+                    pairs.add(("down", tile, rows[row + 1][col]))
+    return pairs
 
 
 @pytest.fixture
-def forest_filler(neighbor_validator):
+def forest_filler():
     """Create a ForestFiller instance."""
-    return ForestFiller(neighbor_validator)
+    return ForestFiller()
 
 
 @pytest.fixture
@@ -154,59 +171,29 @@ def test_fill_placeholder_regions(forest_filler, hole_18_with_placeholders):
     )
 
 
-def test_neighbor_validation_after_fill(
-    forest_filler, neighbor_validator, hole_18_with_placeholders
+def test_filled_tiles_sit_beside_their_neighbors_as_some_vanilla_hole_has_them(
+    forest_filler, vanilla_pairs, hole_18_with_placeholders
 ):
-    """Test that filled regions have valid neighbor relationships.
-
-    This test will fail until test_fill_placeholder_regions is fixed,
-    since we can't validate neighbors of tiles that weren't filled.
-    """
+    """Every pair of neighbors the fill makes occurs in the vanilla holes."""
     terrain = hole_18_with_placeholders.terrain
+    filled = {}
+    for region in forest_filler.detect_regions(terrain):
+        filled.update(forest_filler.fill_region(terrain, region))
+    after = [list(row) for row in terrain]
+    for (row, col), tile in filled.items():
+        after[row][col] = tile
 
-    # Detect and fill regions
-    regions = forest_filler.detect_regions(terrain)
-    all_changes = {}
-    for region in regions:
-        changes = forest_filler.fill_region(terrain, region)
-        all_changes.update(changes)
-
-    # Apply changes
-    import copy
-
-    filled_terrain = copy.deepcopy(terrain)
-    for (row, col), tile in all_changes.items():
-        filled_terrain[row][col] = tile
-
-    # Validate neighbors
-    invalid_tiles = neighbor_validator.get_invalid_tiles(filled_terrain)
-
-    if invalid_tiles:
-        print(f"\n{len(invalid_tiles)} tiles with invalid neighbors:")
-        for row, col in list(invalid_tiles)[:10]:  # Show first 10
-            tile = filled_terrain[row][col]
-            print(f"  ({row}, {col}): 0x{tile:02X}")
-
-            # Check each neighbor
-            for direction, (dr, dc) in [
-                ("up", (-1, 0)),
-                ("down", (1, 0)),
-                ("left", (0, -1)),
-                ("right", (0, 1)),
-            ]:
-                nr, nc = row + dr, col + dc
-                if 0 <= nr < len(filled_terrain) and 0 <= nc < len(filled_terrain[0]):
-                    neighbor = filled_terrain[nr][nc]
-                    tile_hex = f"0x{tile:02X}"
-                    neighbor_hex = f"0x{neighbor:02X}"
-
-                    if tile_hex in neighbor_validator.neighbors:
-                        valid_neighbors = neighbor_validator.neighbors[tile_hex].get(
-                            direction, []
-                        )
-                        if neighbor_hex not in valid_neighbors:
-                            print(f"    {direction}: {neighbor_hex} (invalid)")
-
-    assert len(invalid_tiles) == 0, (
-        f"All filled tiles should have valid neighbors, found {len(invalid_tiles)} invalid"
-    )
+    unseen = []
+    for row, col in filled:
+        for step, (dy, dx) in (("right", (0, 1)), ("down", (1, 0))):
+            for a, b in (
+                ((row, col), (row + dy, col + dx)),
+                ((row - dy, col - dx), (row, col)),
+            ):
+                if min(*a, *b) < 0 or b[0] >= len(after) or b[1] >= len(after[0]):
+                    continue
+                pair = (step, after[a[0]][a[1]], after[b[0]][b[1]])
+                if pair not in vanilla_pairs:
+                    unseen.append((a, f"${pair[1]:02X} {step} ${pair[2]:02X}"))
+    assert len(filled) == 199
+    assert not unseen

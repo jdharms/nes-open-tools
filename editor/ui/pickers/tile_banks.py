@@ -276,10 +276,6 @@ class SimpleTileBank:
             + self.border_width
         )
 
-    def get_tile_count(self) -> int:
-        """Return number of tiles in this bank."""
-        return len(self.tile_indices)
-
     def render(
         self,
         screen: Surface,
@@ -530,10 +526,6 @@ class GroupedTileBank:
             + self.padding
             + self.border_width
         )
-
-    def get_tile_count(self) -> int:
-        """Return number of tiles in this bank."""
-        return sum(len(subbank.tile_indices) for subbank in self.subbanks)
 
     def render(
         self,

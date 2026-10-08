@@ -89,9 +89,9 @@ class RowOperationsTool:
         _update_scroll_limit(hole_data)
 
         # Return result indicating terrain was modified
-        return ToolResult.modified(terrain=True)
+        return ToolResult.modified()
 
-    def remove_row(self, context: ToolContext, from_top: bool = False) -> ToolResult:
+    def remove_row(self, context: ToolContext) -> ToolResult:
         """Remove TWO terrain rows with undo support (soft removal).
 
         Constraints:
@@ -116,4 +116,4 @@ class RowOperationsTool:
         _update_scroll_limit(hole_data)
 
         # Return result indicating terrain was modified
-        return ToolResult.modified(terrain=True)
+        return ToolResult.modified()

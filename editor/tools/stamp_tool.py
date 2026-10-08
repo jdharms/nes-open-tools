@@ -3,15 +3,10 @@ Stamp tool for browsing and placing stamp patterns.
 """
 
 import pygame
-from pygame import Rect
 
-from editor.controllers.view_state import ViewState
 from editor.core.constants import (
-    CANVAS_OFFSET_X,
-    CANVAS_OFFSET_Y,
     GREENS_HEIGHT,
     GREENS_WIDTH,
-    STATUS_HEIGHT,
     TERRAIN_WIDTH,
 )
 from editor.data import StampData
@@ -24,7 +19,6 @@ class StampToolState:
 
     def __init__(self):
         self.current_stamp: StampData | None = None
-        self.preview_pos: tuple[int, int] | None = None  # (row, col)
 
     def set_stamp(self, stamp: StampData | None):
         """Set current stamp."""
@@ -33,7 +27,6 @@ class StampToolState:
     def clear(self):
         """Clear stamp selection."""
         self.current_stamp = None
-        self.preview_pos = None
 
     def reset(self):
         """Reset tool state."""
@@ -72,19 +65,7 @@ class StampTool:
                 message=f"Stamp: Cannot place {self.state.current_stamp.mode} stamp in {context.state.mode} mode",
             )
 
-        # Create view state for coordinate conversion
-        canvas_rect = Rect(
-            CANVAS_OFFSET_X,
-            CANVAS_OFFSET_Y,
-            context.screen_width - CANVAS_OFFSET_X,
-            context.screen_height - CANVAS_OFFSET_Y - STATUS_HEIGHT,
-        )
-        view_state = ViewState(
-            canvas_rect,
-            context.state.canvas_offset_x,
-            context.state.canvas_offset_y,
-            context.state.canvas_scale,
-        )
+        view_state = context.view_state
 
         tile = view_state.screen_to_tile(pos)
         if not tile:
@@ -99,23 +80,10 @@ class StampTool:
     def handle_mouse_motion(self, pos, context):
         # Update preview position
         if self.state.current_stamp is not None:
-            # Create view state for coordinate conversion
-            canvas_rect = Rect(
-                CANVAS_OFFSET_X,
-                CANVAS_OFFSET_Y,
-                context.screen_width - CANVAS_OFFSET_X,
-                context.screen_height - CANVAS_OFFSET_Y - STATUS_HEIGHT,
-            )
-            view_state = ViewState(
-                canvas_rect,
-                context.state.canvas_offset_x,
-                context.state.canvas_offset_y,
-                context.state.canvas_scale,
-            )
+            view_state = context.view_state
 
             tile = view_state.screen_to_tile(pos)
             if tile:
-                self.state.preview_pos = tile
                 # Update highlight state for rendering
                 context.highlight_state.stamp_preview_pos = tile
                 context.highlight_state.current_stamp = self.state.current_stamp
@@ -139,7 +107,6 @@ class StampTool:
     def on_activated(self, context):
         """Called when tool becomes active."""
         # Clear any previous preview
-        self.state.preview_pos = None
         context.highlight_state.stamp_preview_pos = None
         context.highlight_state.current_stamp = None
 
@@ -223,6 +190,5 @@ class StampTool:
 
         stamp_name = stamp.get_display_name()
         return ToolResult.modified(
-            terrain=(context.state.mode == "terrain"),
             message=f"Stamp: Placed '{stamp_name}' ({tiles_placed} tiles)",
         )

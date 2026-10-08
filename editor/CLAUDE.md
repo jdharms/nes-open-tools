@@ -7,9 +7,9 @@ Pygame-based course editor (`golf-editor`). The data it edits is described in
 - `ui/` - widgets, dialogs, tile pickers, toolbar
 - `controllers/` - editor state, event handling, view state, undo management
 - `rendering/` - specialized renderers (terrain, greens, grid, sprites)
-- `tools/` - editor tools (paint, transform, eyedropper, forest fill, etc.)
-- `algorithms/` - fringe generation and green fill; algorithms the randomizer shares,
-  forest fill among them, are in `golf/algorithms/`
+- `tools/` - editor tools (paint, the brushes, eyedropper, forest fill, etc.)
+- `algorithms/` - Green Fix; algorithms the randomizer shares, forest fill among them,
+  are in `golf/algorithms/`
 
 A standalone executable is built with PyInstaller from the repo root:
 `uv run pyinstaller run_editor.spec`.
@@ -43,7 +43,7 @@ if key == pygame.K_TAB:
 `editor/application.py` coordinates components and manages state.
 
 - MUST handle EventHandler callbacks, update EditorState and HoleData, delegate operations
-  to tools via ToolManager, invalidate caches when state changes, and create the context
+  to tools via ToolManager, and create the context
   objects (ViewState, RenderContext, HighlightState) used for rendering.
 - MUST NOT handle pygame events directly or implement tool logic.
 
@@ -51,7 +51,6 @@ if key == pygame.K_TAB:
 # GOOD: coordination
 def _set_mode(self, mode: str):
     self.state.mode = mode
-    self.invalidate_terrain_validation_cache()
     self._update_mode_buttons()
 
 # BAD: tool implementation
@@ -63,28 +62,34 @@ def _paint_tile(self, pos):
 
 `editor/tools/*.py` execute specific editing operations.
 
-- MUST receive a ToolContext, execute the operation, return a ToolResult saying what
-  changed, and own their own state (e.g. TransformTool owns TransformToolState).
+- MUST receive a ToolContext, execute the operation, return a ToolResult saying whether
+  the event was handled, and own their own state (e.g. StampTool owns StampToolState).
 - MUST NOT access Application or EventHandler, or handle raw pygame events.
 
 ```python
 # GOOD: tool execution
 def handle_mouse_down(self, pos, button, modifiers, context):
-    tile = view_state.screen_to_tile(pos)
+    tile = context.view_state.screen_to_tile(pos)
     if tile:
         context.hole_data.set_terrain_tile(row, col, value)
-        return ToolResult.modified(terrain=True)
+        return ToolResult.modified()
 ```
 
 ## Context objects
 
 - **ViewState** (`controllers/view_state.py`) - viewport camera (offset_x, offset_y,
   scale) and coordinate conversions (`screen_to_tile()`, `tile_to_screen()`, ...).
-  **Always use these for coordinate conversion**; never re-derive the math.
+  **Always use these for coordinate conversion**; never re-derive the math. Tools get
+  one from `context.view_state`, a property that builds a fresh ViewState from the
+  context's screen size and the editor state's offsets and zoom on each access. The
+  canvas rectangle (right of the tile picker, below the toolbar, above the status bar,
+  excluding the tool picker column) is defined once, by `canvas_rect(screen_width,
+  screen_height)` in the same module; Application uses it too, so a position over the
+  tool picker converts to `None`.
 - **RenderContext** (`rendering/render_context.py`) - rendering resources (tileset,
-  sprites, mode) and settings (show_grid, show_sprites, selected_flag_index).
+  sprites, mode) and settings (grid_mode, show_sprites, selected_flag_index).
 - **HighlightState** (`controllers/highlight_state.py`) - temporary highlights (hover,
-  transform preview, invalid tiles), updated via callbacks rather than polled.
+  brush strokes), updated via callbacks rather than polled.
 
 ## State
 
@@ -97,10 +102,11 @@ def handle_mouse_down(self, pos, button, modifiers, context):
 
 ## Common pitfalls
 
-- **State changes in EventHandler.** `self.state.show_grid = not self.state.show_grid` in
-  a key handler is wrong; call `self.on_toggle_grid()` and let Application change it.
+- **State changes in EventHandler.** `self.state.mode = "greens"` in a key handler is
+  wrong; call `self.on_mode_change()` and let Application change it.
 - **Duplicated coordinate math.** Don't compute `(pos[0] - canvas_rect.x + offset_x) //
-  tile_size`; use `view_state.screen_to_tile(pos)`.
+  tile_size` or build a `Rect` from layout constants; use
+  `context.view_state.screen_to_tile(pos)`.
 - **Bypassing ToolManager.** Don't call a specific tool's `handle_mouse_down` directly;
   get `self.tool_manager.get_active_tool()` and route through it.
 - **Recreating UI components on resize.** Update positions (`self.toolbar.resize(width)`)
@@ -135,22 +141,19 @@ selected tool, so an action can be repeated.
 
 Best practices:
 
-- Return `ToolResult.modified()` when data changes (triggers re-render),
-  `ToolResult.handled()` when the event is consumed without a change, and
-  `ToolResult.not_handled()` to let other handlers see it.
+- Return `ToolResult.modified()` when data changes, `ToolResult.handled()` when the
+  event is consumed without a change, and `ToolResult.not_handled()` to let other
+  handlers see it. Either of the first two may carry a `message` for the status bar.
 - Push undo state **before** modifying data.
-- Use `context.get_selected_tile()` / `context.set_selected_tile()` for mode-agnostic tile
-  access.
 - Keep tool-specific state as instance variables (e.g. `self.is_painting`).
 
 ## Keys
 
 ToolManager validates hotkey uniqueness on registration and raises `ValueError` on a
-conflict. Tool hotkeys currently in use: A, B, C, D, F, K, M, O, P, R, S, T, U, V, `=` (add row),
+conflict. Tool hotkeys currently in use: A, B, C, D, F, K, M, N, O, P, R, S, U, V, `=` (add row),
 `-` (remove row); `grep -n -A2 'def get_hotkey' editor/tools/*.py` is the source of truth.
 Also reserved: G (grid), Tab (mode), 1-3 (palette), F1-F4 (flag position), Ctrl+Z/Y
-(undo/redo), Ctrl+S (save),
-Ctrl+X (invalid tiles), `,`/`.` (brush radius, in the brushes).
+(undo/redo), Ctrl+S (save), `,`/`.` (brush radius, in the brushes).
 
 ## Tool-specific behavior
 
@@ -171,6 +174,20 @@ paints out-of-bounds ground and fits the line (`$80`-`$9B`) round it
 cells inside the line as placeholder for Forest Fill rather than filling them, so the
 user can seed clearings first (ADR 0014). The placeholder is out of bounds to it and
 bare ground to the Feature Brush.
+
+**Green Brush**: `GreenBrushTool`, in the same file again, paints a green's putting
+surface in greens mode, in the green's own pixels, and fits the fringe round it
+(`green_change` in `feature_brush.py`, the zones of the greens tiles in
+`golf/algorithms/green_zones.py`). It writes the fringe, flat putting surface and the
+rough, so nothing has to be run after it; slopes survive except where the fringe moves
+onto them. The greens renderer draws the same stroke overlay as the terrain renderer
+(`render_feature_brush` in `rendering/highlight_utils.py`). See `docs/feature_brush.md`
+and ADR 0020.
+
+**Green Fix**: the action on `U`. It redoes every rough tile outside the fringe, keeping
+the way the green's rough is checkered, and fills placeholder: rough where it is joined
+to the grid's edge, flat putting surface elsewhere. The rough's rules are the Green
+Brush's (`rough_tile` and `rough_phase` in `golf/algorithms/green_zones.py`).
 
 **Stamps**: built-in stamps live in `data/stamps/built-in/`, user stamps in
 `~/.config/golf-editor/stamps`. Everything under `hazard/` is generated by

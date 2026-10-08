@@ -1,10 +1,9 @@
 """
 NES Open Tournament Golf - Editor Algorithms
 
-Contains algorithmic tools for the editor (e.g., fringe generation, green fill).
+Contains algorithmic tools for the editor (e.g., green fix).
 """
 
-from .fringe_generator import FringeGenerator
-from .green_fill import GreenFill
+from .green_fix import GreenFix
 
-__all__ = ["FringeGenerator", "GreenFill"]
+__all__ = ["GreenFix"]

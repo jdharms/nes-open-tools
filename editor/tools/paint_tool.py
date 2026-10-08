@@ -3,15 +3,10 @@ Paint tool for terrain and greens editing.
 """
 
 import pygame
-from pygame import Rect
 
-from editor.controllers.view_state import ViewState
 from editor.core.constants import (
-    CANVAS_OFFSET_X,
-    CANVAS_OFFSET_Y,
     GREENS_HEIGHT,
     GREENS_WIDTH,
-    STATUS_HEIGHT,
     TERRAIN_WIDTH,
 )
 
@@ -78,19 +73,7 @@ class PaintTool:
 
     def _paint_at(self, pos: tuple[int, int], context: ToolContext) -> ToolResult:
         """Paint at screen position based on current mode."""
-        # Create view state for coordinate conversion
-        canvas_rect = Rect(
-            CANVAS_OFFSET_X,
-            CANVAS_OFFSET_Y,
-            context.screen_width - CANVAS_OFFSET_X,
-            context.screen_height - CANVAS_OFFSET_Y - STATUS_HEIGHT,
-        )
-        view_state = ViewState(
-            canvas_rect,
-            context.state.canvas_offset_x,
-            context.state.canvas_offset_y,
-            context.state.canvas_scale,
-        )
+        view_state = context.view_state
 
         mode = context.state.mode
 
@@ -118,7 +101,7 @@ class PaintTool:
 
                     context.hole_data.set_terrain_tile(row, col, selected_tile)
                     self.last_paint_pos = tile
-                    return ToolResult.modified(terrain=True)
+                    return ToolResult.modified()
 
                 # Clicked on same value - update position but don't modify
                 self.last_paint_pos = tile
@@ -141,7 +124,7 @@ class PaintTool:
 
                     context.hole_data.set_greens_tile(row, col, selected_tile)
                     self.last_paint_pos = tile
-                    return ToolResult.modified(terrain=False)
+                    return ToolResult.modified()
 
                 # Clicked on same value - update position but don't modify
                 self.last_paint_pos = tile

@@ -22,10 +22,6 @@ class CategoryNode:
             all_ids.extend(child.get_all_stamp_ids())
         return all_ids
 
-    def get_depth(self) -> int:
-        """Get depth of this node (0 = root)."""
-        return self.path.count("/")
-
 
 class CategoryTree:
     """Hierarchical category tree for stamps."""

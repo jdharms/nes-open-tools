@@ -23,8 +23,8 @@ class ToolButton:
     def __init__(
         self, tool_name: str, label: str, icon_char: str, is_action: bool = False
     ):
-        self.tool_name = tool_name  # "paint", "transform", "forest_fill"
-        self.label = label  # "Paint", "Transform", "Forest Fill"
+        self.tool_name = tool_name  # "paint", "forest_fill"
+        self.label = label  # "Paint", "Forest Fill"
         self.icon_char = icon_char  # Unicode icon/emoji
         self.is_action = is_action  # True for action tools that execute immediately
         self.rect: Rect | None = None  # Set during layout

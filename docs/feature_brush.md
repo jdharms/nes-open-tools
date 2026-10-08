@@ -3,7 +3,8 @@
 The editor tool that paints fairways, bunkers and water as shapes, and the fit behind it
 that chooses their border tiles. The decision and what was turned down are in ADR 0013.
 The Out of Bounds Brush paints out-of-bounds ground the same way and draws its line
-([below](#out-of-bounds-brush), ADR 0014).
+([below](#out-of-bounds-brush), ADR 0014). The Green Brush paints a green's putting
+surface and draws the fringe round it ([below](#green-brush), ADR 0020).
 
 ## Using it
 
@@ -64,7 +65,8 @@ another (`SETTLED_BONUS`). Nothing further away changes.
 `golf/algorithms/feature_fit.py`. A feature is `$27` inside and border tiles round its
 edge; every tile draws a different shape in color 3, so the tile for a cell follows from
 where the outline crosses it. A family is the set of tiles one kind of border is drawn
-with; features use two (the out-of-bounds line is a third, [below](#the-line)):
+with; features use two (the out-of-bounds line is a third, [below](#the-line), and a
+green's fringe a fourth, [below](#the-zones)):
 
 | Family | Tiles | Draws |
 |--------|-------|-------|
@@ -119,6 +121,8 @@ side by side (`right`) and stacked (`below`), and how often each 2x2 block occur
 kinds owns the whole tile; pairs and blocks that take in anything else, a tree say, are
 left out, and so are blocks all `$27` or all bare ground. For `boundary`, `$3F` stands
 for any out-of-bounds cell, forest included, and cells are read from the tiles alone.
+For `green`, counted over the greens, `B0` stands for the flat tile and every slope, and
+`--` for the rough.
 
 ```bash
 uv run golf-feature-style           # rewrite the table from courses/
@@ -263,3 +267,107 @@ A stroke takes about 40 ms.
 - The interior has to be filled; a hole with placeholder in it cannot be written.
 - A fairway brushed over an unfilled region paints over its placeholder.
 - The line is not drawn in a supertile with palette 0 that a feature needs.
+
+## Green Brush
+
+Greens mode only.
+
+| Input | Does |
+|-------|------|
+| `N` | Select the Green Brush |
+| Left-drag | Paint putting surface |
+| Right-drag | Erase it back to rough |
+| `,` / `.`, `Esc` | As for the Feature Brush; the palette makes no difference |
+
+The stroke is in the green's own pixels, 192 by 192. On release the fringe is fitted
+round the putting surface as far as the stroke moved it, as one undo step. Nothing else
+has to be run: the rough beyond the fringe is written too. Green Fix (`U`) is for
+tidying a green edited some other way: it redoes all the rough outside the fringe,
+checkered the way it is already, and fills any placeholder, rough outside the fringe
+and flat putting surface inside (`editor/algorithms/green_fix.py`).
+
+- Cells that become putting surface are the flat tile (`$B0`). Slopes are kept wherever
+  the putting surface was already, and lost where the fringe moves onto them; paint
+  slopes afterwards (Carpet, `C`).
+- Cells that become rough take their place in the rough's checkerboard, whichever way
+  the green's rough is checkered already.
+- Rough beside a changed cell gains or loses its strip of fringe (below).
+- Nothing on a green is left alone, and a stroke need not touch the green that is
+  there: one on open rough starts a second putting surface, and erasing inside one
+  leaves rough ringed by fringe.
+- The editor's placeholder (`0x100`) reads as rough, and stays where nothing changes.
+
+### The zones
+
+A green is drawn in three colors: 1 is the putting surface, 3 the rough, and the fringe
+is a checkerboard of 1 and 2. `golf/algorithms/green_zones.py` reads every pixel of a
+tile as one of three zones, rough, fringe or putting surface:
+
+| Tiles | Are |
+|-------|-----|
+| `$48`-`$6F`, `$74`-`$83` | the 56 fringe tiles, each a different cut of the cell into the zones |
+| `$B0`, `$30`-`$47`, `$88`-`$A7` | flat and sloped putting surface |
+| `$29`, `$2C` | rough, checkered |
+| `$70`-`$73`, `$84`-`$87` | `$29` and `$2C` with a one-pixel strip of fringe along the right, bottom, top and left side |
+
+No vanilla green holds any other tile, and every fringe tile is used, the rarest
+(`$7A`) five times.
+
+The fringe is a band of constant width: rough beside it is four to six pixels from the
+nearest putting surface, five most often. So the zones of a green follow from its
+putting surface alone (`fringe_zones`: fringe within `FRINGE_WIDTH`, 4.5 pixels, and
+rough beyond), and the brush only has to be told where the putting surface is.
+
+A straight run of the band sits in one of two places in a cell, two to three pixels
+apart: `$64` has fringe from the cell's top edge and putting surface from its fifth row,
+`$62` two rows of rough and then fringe to the bottom, and `$49` and `$4A` step from one
+to the other. The tiles the tile picker files as corners are diagonals: mostly
+rough with a wedge of fringe, or mostly putting surface with one.
+
+A strip tile goes beside the four tiles whose band begins at the cell's edge: left of
+`$66`, above `$64`, right of `$67` and below `$65` (`rough_tile`). 99.9% of the vanilla
+greens' rough tiles follow that rule. 139 of the 144 greens have `$29` where row plus
+column is even and five the other way round (`rough_phase`); 1.3% of rough tiles are
+off their own green's checkerboard.
+
+### The fit
+
+The fit is the one above with a fourth family, `green`: the flat tile filling the cell,
+the 56 fringe tiles as their zones, and rough as `empty`. A family in zones draws one
+shape within the next, here the putting surface and the putting surface with its
+fringe, and each is fitted with its own outline: a tile's misfit is the sum over both,
+and a seam counts a pixel once for each shape the two tiles disagree about. Slopes
+count as the flat tile, in the fit and in the statistics.
+
+A stroke adds to or cuts from the putting surface the tiles draw, drops anything
+thinner than three pixels near the stroke, and makes the zones again within six pixels
+of where the putting surface changed. The cells whose zones changed and the cells next
+to them are fitted, the latter keeping their tiles unless the change calls for another
+(`SETTLED_BONUS`), against two more cells of context.
+
+### Measurements
+
+Over the 144 vanilla greens, with the statistics of all of them:
+
+- The zones made from a vanilla green's putting surface alone, fitted: 98.3% of
+  fringe cells reproduced, 83 greens exactly, and 99.9% of 2x2 blocks in vanilla.
+- The putting surface moved 3 right and 5 down: 98.6% of blocks in vanilla, and the
+  fitted putting surface off by 2.8% of its pixels.
+- 2.5% of vanilla fringe cells have other than two fringe cells beside them, mostly
+  three, at tight inward corners; 4.1% of a moved green's.
+
+A stroke takes a median of 11 ms and at most 49 ms, over 432 random strokes.
+
+### Limits
+
+- The outline lands two to three pixels from where it was painted along a straight
+  run, since the band has two places in a cell.
+- A slanted or tightly curved edge is lumpier than the vanilla greens' edges: the
+  shape decides the tiles, not an eye for where a step looks best.
+- A single click of a radius of 6 or under on an edge may change nothing.
+- A shape thinner than three pixels is dropped; a putting surface too small for any
+  tiles to draw changes nothing.
+- Putting surface is not painted within five pixels of the edge of the 24x24 grid
+  (`GREEN_MARGIN`), so that the fringe closes there; putting surface already at the
+  edge is left as it is.
+- Slopes under a moved fringe are lost, and new putting surface is always flat.

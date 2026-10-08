@@ -4,6 +4,8 @@ Tool protocol and base definitions for editor tools.
 
 from typing import TYPE_CHECKING, Protocol
 
+from editor.controllers.view_state import ViewState, canvas_rect
+
 if TYPE_CHECKING:
     from editor.controllers.highlight_state import HighlightState
     from editor.tools.tool_manager import ToolManager
@@ -77,7 +79,6 @@ class ToolContext:
         state,
         terrain_picker,
         greens_picker,
-        transform_logic,
         forest_filler,
         screen_width: int,
         screen_height: int,
@@ -91,7 +92,6 @@ class ToolContext:
         self.state = state
         self.terrain_picker = terrain_picker
         self.greens_picker = greens_picker
-        self.transform_logic = transform_logic
         self.forest_filler = forest_filler
         self.screen_width = screen_width
         self.screen_height = screen_height
@@ -101,19 +101,16 @@ class ToolContext:
         self._on_revert_to_previous_tool = on_revert_to_previous_tool
         self._on_select_flag = on_select_flag
 
-    def get_selected_tile(self) -> int:
-        """Get currently selected tile based on mode."""
-        if self.state.mode == "greens":
-            return self.greens_picker.selected_tile
-        else:
-            return self.terrain_picker.selected_tile
-
-    def set_selected_tile(self, tile: int) -> None:
-        """Set selected tile based on mode."""
-        if self.state.mode == "greens":
-            self.greens_picker.selected_tile = tile
-        else:
-            self.terrain_picker.selected_tile = tile
+    @property
+    def view_state(self) -> "ViewState":
+        """The camera as it is now, built fresh from the screen size and the
+        editor state's scroll offsets and zoom."""
+        return ViewState(
+            canvas_rect(self.screen_width, self.screen_height),
+            self.state.canvas_offset_x,
+            self.state.canvas_offset_y,
+            self.state.canvas_scale,
+        )
 
     def get_eyedropper_tool(self):
         """Get eyedropper tool for delegation (used by Paint tool)."""
@@ -143,18 +140,8 @@ class ToolContext:
 class ToolResult:
     """Result of a tool operation."""
 
-    def __init__(
-        self,
-        is_handled: bool = False,
-        needs_undo_push: bool = False,
-        needs_render: bool = False,
-        terrain_modified: bool = False,
-        message: str | None = None,
-    ):
+    def __init__(self, is_handled: bool = False, message: str | None = None):
         self.is_handled = is_handled
-        self.needs_undo_push = needs_undo_push
-        self.needs_render = needs_render
-        self.terrain_modified = terrain_modified
         self.message = message
 
     @staticmethod
@@ -168,12 +155,6 @@ class ToolResult:
         return ToolResult(is_handled=False)
 
     @staticmethod
-    def modified(terrain: bool = False, message: str | None = None) -> "ToolResult":
+    def modified(message: str | None = None) -> "ToolResult":
         """Content was modified."""
-        return ToolResult(
-            is_handled=True,
-            needs_undo_push=False,  # Tool handles undo timing
-            needs_render=True,
-            terrain_modified=terrain,
-            message=message,
-        )
+        return ToolResult(is_handled=True, message=message)

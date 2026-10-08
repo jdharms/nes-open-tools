@@ -16,13 +16,17 @@ when the shape needs it. The statistics are `data/tables/feature_style.json`, wr
 `golf-feature-style`.
 
 The out-of-bounds line (`golf.algorithms.boundary`) is fitted the same way, as a third
-family whose tiles cut a cell into out-of-bounds ground and rough. See
-`docs/feature_brush.md`.
+family whose tiles cut a cell into out-of-bounds ground and rough.
+
+A green's fringe (`golf.algorithms.green_zones`) is a fourth, whose tiles cut a cell
+three ways, into rough, fringe and putting surface. Its shapes are zones, numbered from
+the outside in, and it is fitted as two shapes at once: the putting surface, and that
+with the fringe round it. See `docs/feature_brush.md`.
 """
 
 import json
 from collections import Counter
-from collections.abc import Iterable
+from collections.abc import Callable, Iterable
 from dataclasses import dataclass, field
 from functools import cache
 from pathlib import Path
@@ -36,6 +40,14 @@ from golf.formats.hole_data import HoleData
 
 from .boundary import FOREST_TILES, LINE_TILES, OPEN_GROUND, line_masks
 from .features import KIND_OF_PALETTE, TEE_BOX, TERRAIN_TILESET, Kind, find_features
+from .green_zones import (
+    FIRST_GREEN_TILE,
+    FLAT_TILE,
+    FRINGE_TILES,
+    GREENS_TILESET,
+    ROUGH_TILES,
+    tile_zones,
+)
 
 STYLE_TABLE = (
     Path(__file__).resolve().parents[2] / "data" / "tables" / "feature_style.json"
@@ -93,6 +105,11 @@ class TileFamily:
     index past the last, `empty`, stands for bare ground. A feature's family draws in
     color 3 and is found by `find_features`; a family with no `kinds` brings its own
     `masks` and is read straight from the tiles, with `full_tiles` counting as its first.
+
+    `masks` may be zones instead, whole numbers from 0, outside the shape, up to
+    `levels`, its inside: the family then draws `levels` shapes, one within the next.
+    A family that is not drawn in the terrain brings `read`, which gives a hole as its
+    indexes.
     """
 
     def __init__(
@@ -102,8 +119,10 @@ class TileFamily:
         kinds: Iterable[Kind] = (),
         masks: np.ndarray | None = None,
         full_tiles: Iterable[int] = (),
+        read: "Callable[[TileFamily, HoleData], np.ndarray] | None" = None,
     ):
         self.name = name
+        self.read = read
         self.tiles = list(tiles)
         self.kinds = frozenset(kinds)
         #: tiles besides the first that fill the whole cell
@@ -116,20 +135,27 @@ class TileFamily:
         self.empty = len(self.tiles)
         self.size = len(self.tiles) + 1
         self.index = {tile: i for i, tile in enumerate(self.tiles)}
-        #: `[index, y, x]`: the pixels each index draws of the shape
-        self.masks = np.concatenate([masks, np.zeros((1, 8, 8), bool)])
+        #: `[index, y, x]`: the pixels each index draws of the shape, or their zones
+        self.masks = np.concatenate([masks, np.zeros((1, 8, 8), masks.dtype)])
+        #: how many shapes the family draws, one within the next
+        self.levels = int(self.masks.max())
         #: tiles that are all feature or all ground: a block of only one of them has no
         #: border to speak of
         self.plain = np.zeros(self.size, bool)
         self.plain[[self.full, self.empty]] = True
-        m = self.masks
-        #: `[a, b]`: pixels that disagree along the seam when b is right of, or below, a
-        self.seam_right = (m[:, None, :, 7] != m[None, :, :, 0]).sum(-1).astype(float)
-        self.seam_below = (m[:, None, 7, :] != m[None, :, 0, :]).sum(-1).astype(float)
+        m = self.masks.astype(int)
+        #: `[a, b]`: pixels that disagree along the seam when b is right of, or below, a,
+        #: counted once for each shape they disagree about
+        self.seam_right = (
+            np.abs(m[:, None, :, 7] - m[None, :, :, 0]).sum(-1).astype(float)
+        )
+        self.seam_below = (
+            np.abs(m[:, None, 7, :] - m[None, :, 0, :]).sum(-1).astype(float)
+        )
 
     def render(self, pick: np.ndarray) -> np.ndarray:
-        """The shape a grid of indexes draws; locked cells draw none of it, except
-        `LOCKED_FULL`, which draws all of it."""
+        """The shape a grid of indexes draws, or its zones; locked cells draw none of
+        it, except `LOCKED_FULL`, which draws all of it."""
         rows, cols = pick.shape
         index = np.where(pick == LOCKED_FULL, self.full, pick)
         cells = self.masks[np.where(index < 0, self.empty, index)]
@@ -143,7 +169,8 @@ class TileFamily:
 def families() -> dict[str, TileFamily]:
     """The families: fairways draw with the tiles that have no black outline, and the
     out-of-bounds line with its own, inside which forest counts as bare out-of-bounds
-    ground."""
+    ground. A green's fringe draws with its own, in zones, and its slopes count as the
+    flat putting surface."""
     pixels = tile_pixels()
     soft = [tile for tile in BORDER_TILES if not (pixels[tile] == 0).any()]
     out = np.concatenate([np.ones((1, 8, 8), bool), line_masks(pixels)])
@@ -157,6 +184,12 @@ def families() -> dict[str, TileFamily]:
             [OPEN_GROUND, *LINE_TILES],
             masks=out,
             full_tiles=FOREST_TILES,
+        ),
+        "green": TileFamily(
+            "green",
+            [FLAT_TILE, *FRINGE_TILES],
+            masks=tile_zones(tile_pixels(GREENS_TILESET))[[FLAT_TILE, *FRINGE_TILES]],
+            read=green_grid,
         ),
     }
 
@@ -188,14 +221,29 @@ def tile_grid(family: TileFamily, hole: HoleData) -> np.ndarray:
     return grid
 
 
+def green_grid(family: TileFamily, hole: HoleData) -> np.ndarray:
+    """The hole's green as the indexes of the family that draws its fringe: the fringe
+    tiles, the flat tile and every slope as the first, and the rough as `empty`, with
+    the editor's placeholder."""
+    tiles = np.array(hole.greens)
+    grid = np.where(tiles < FIRST_GREEN_TILE, family.empty, family.full)
+    grid[np.isin(tiles, list(ROUGH_TILES))] = family.empty
+    grid[tiles >= len(tile_pixels(GREENS_TILESET))] = family.empty
+    for tile in FRINGE_TILES:
+        grid[tiles == tile] = family.index[tile]
+    return grid
+
+
 def style_grid(family: TileFamily, hole: HoleData) -> np.ndarray:
     """The hole's visible terrain as the family's indexes, for counting.
 
     A cell is a tile's index where one feature of the family's kinds owns the whole tile,
     `empty` where the tile is bare ground, and `LOCKED` anywhere else: beside a tree or
     the forest says nothing about how a border meets the ground. A family with no kinds
-    is read from the tiles alone (`tile_grid`).
+    is read from the tiles alone (`tile_grid`), or by its own `read`.
     """
+    if family.read is not None:
+        return family.read(family, hole)
     height = hole.terrain_height
     if not family.kinds:
         return tile_grid(family, hole)
@@ -394,16 +442,29 @@ class FeatureFitter:
         (`LOCKED_FULL`) - are what the free cells have to agree with. Free cells set in `settled` begin as they are in `start`
         and change only for a gain of more than `SETTLED_BONUS`. Pixels set in `loose`
         cost nothing either way.
+
+        For a family that draws in zones, `target` is the zones wanted, and each of its
+        shapes - the pixels of a zone or any further in - is fitted with its own outline.
         """
         family = self.family
         rows, cols = target.shape[0] // 8, target.shape[1] // 8
-        cells = target.reshape(rows, 8, cols, 8).transpose(0, 2, 1, 3)
-        weight = np.maximum(outline_distance(target) - SLIDE, 0) + TIE_BREAK
-        if loose is not None:
-            weight = np.where(loose, 0.0, weight)
-        weight = weight.reshape(rows, 8, cols, 8).transpose(0, 2, 1, 3)
-        filled = np.asarray(cells.all((2, 3)))
-        touched = np.asarray(cells.any((2, 3)))
+
+        def per_cell(pixels: np.ndarray) -> np.ndarray:
+            return pixels.reshape(rows, 8, cols, 8).transpose(0, 2, 1, 3)
+
+        #: each shape the family draws, as the least zone that is part of it
+        shapes = range(1, family.levels + 1)
+        cells = per_cell(target)
+        weights = []
+        for shape in shapes:
+            weight = (
+                np.maximum(outline_distance(target >= shape) - SLIDE, 0) + TIE_BREAK
+            )
+            if loose is not None:
+                weight = np.where(loose, 0.0, weight)
+            weights.append(per_cell(weight))
+        filled = np.asarray((cells >= family.levels).all((2, 3)))
+        touched = np.asarray((cells >= 1).any((2, 3)))
         by_target = np.where(filled, family.full, family.empty)
         if start is None:
             pick = by_target
@@ -433,9 +494,15 @@ class FeatureFitter:
             (int(row), int(col))
             for row, col in zip(*np.nonzero(near & free & ~locked), strict=True)
         ]
+        masks = [family.masks >= shape for shape in shapes]
         misfit = {
             cell: np.append(
-                ((cells[cell][None] != family.masks) * weight[cell][None]).sum((1, 2)),
+                sum(
+                    (((cells[cell] >= shape)[None] != mask) * weight[cell][None]).sum(
+                        (1, 2)
+                    )
+                    for shape, mask, weight in zip(shapes, masks, weights, strict=True)
+                ),
                 np.inf,
             )
             for cell in active
@@ -560,10 +627,6 @@ class FeatureFitter:
                 if not changed:
                     break
         return np.where(locked, start if start is not None else LOCKED, pick)
-
-
-def write_style_table(counts: Iterable[StyleCounts], path: Path = STYLE_TABLE) -> None:
-    path.write_text(style_table_text(counts))
 
 
 def style_table_text(counts: Iterable[StyleCounts]) -> str:

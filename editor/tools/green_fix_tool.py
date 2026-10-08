@@ -1,19 +1,21 @@
 """
-Green fill tool - fills exterior with rough tiles and interior with flat putting surface.
+Green fix tool - redoes the rough round a green and fills placeholder: rough outside the
+fringe, flat putting surface inside it.
 """
 
 import pygame
 
-from editor.algorithms.green_fill import GreenFill
+from editor.algorithms.green_fix import GreenFix
+from golf.algorithms.green_zones import rough_phase
 
 from .base_tool import ToolResult
 
 
-class GreenFillTool:
-    """Green fill tool - fills rough tiles outside fringe and flat tiles inside."""
+class GreenFixTool:
+    """Green fix tool - redoes the rough outside the fringe and fills placeholder."""
 
     def __init__(self):
-        self._filler = GreenFill()
+        self._filler = GreenFix()
 
     def handle_mouse_down(self, pos, button, modifiers, context):
         return ToolResult.not_handled()
@@ -31,7 +33,7 @@ class GreenFillTool:
         return ToolResult.not_handled()
 
     def on_activated(self, context):
-        """Execute green fill when tool is activated (action tool)."""
+        """Execute green fix when tool is activated (action tool)."""
         # Only works in greens mode
         if context.state.mode != "greens":
             return
@@ -43,8 +45,8 @@ class GreenFillTool:
         # Replace rough tiles with placeholders
         with_placeholders = self._replace_rough_with_placeholder(greens)
 
-        # Run fill algorithm
-        filled = self._filler.fill(with_placeholders)
+        # Run fill algorithm, keeping the rough checkered the way it is
+        filled = self._filler.fill(with_placeholders, rough_phase(greens))
 
         # Find changes
         changes = []
@@ -74,7 +76,7 @@ class GreenFillTool:
         pass
 
     def get_hotkey(self) -> int | None:
-        """Return 'U' key for Green Fill tool."""
+        """Return 'U' key for Green Fix tool."""
         return pygame.K_u
 
     def is_action_tool(self) -> bool:
@@ -88,7 +90,7 @@ class GreenFillTool:
         result = []
         for row in greens:
             new_row = [
-                GreenFill.PLACEHOLDER if tile in GreenFill.ROUGH_TILES else tile
+                GreenFix.PLACEHOLDER if tile in GreenFix.ROUGH_TILES else tile
                 for tile in row
             ]
             result.append(new_row)

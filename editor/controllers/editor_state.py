@@ -42,7 +42,6 @@ class EditorState:
 
         # View settings
         self.grid_mode: GridMode = GridMode.TILE
-        self.show_invalid_tiles: bool = False
 
         # Canvas position and zoom (per-mode)
         self._canvas_states: dict[str, CanvasState] = {
@@ -100,15 +99,6 @@ class EditorState:
             self.grid_mode = GridMode.SUPERTILE
         else:
             self.grid_mode = GridMode.OFF
-
-    @property
-    def show_grid(self) -> bool:
-        """Backward compatibility: returns True if grid is visible."""
-        return self.grid_mode != GridMode.OFF
-
-    def toggle_invalid_tiles(self):
-        """Toggle invalid tile highlighting."""
-        self.show_invalid_tiles = not self.show_invalid_tiles
 
     def select_flag(self, index: int):
         """Select which flag position to display (0-3)."""

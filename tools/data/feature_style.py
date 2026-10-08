@@ -4,7 +4,7 @@ Feature Style - regenerate the tile statistics the editor's feature brush fits w
 
 Counts, over the vanilla holes of both ROMs, how often each pair of feature tiles sits
 side by side or stacked and which 2x2 blocks of them occur, once for fairways, once for
-bunkers and water, and once for the out-of-bounds line, and writes
+bunkers and water, once for the out-of-bounds line and once for a green's fringe, and writes
 data/tables/feature_style.json. Needs the courses
 `golf-rehydrate` dumps. See docs/feature_brush.md.
 """

@@ -5,14 +5,6 @@ Measure tool - measure distances between points in yards.
 import math
 
 import pygame
-from pygame import Rect
-
-from editor.controllers.view_state import ViewState
-from editor.core.constants import (
-    CANVAS_OFFSET_X,
-    CANVAS_OFFSET_Y,
-    STATUS_HEIGHT,
-)
 
 from .base_tool import ToolResult
 
@@ -70,19 +62,7 @@ class MeasureTool:
         if button != 1:
             return ToolResult.not_handled()
 
-        # Create view state for coordinate conversion
-        canvas_rect = Rect(
-            CANVAS_OFFSET_X,
-            CANVAS_OFFSET_Y,
-            context.screen_width - CANVAS_OFFSET_X,
-            context.screen_height - CANVAS_OFFSET_Y - STATUS_HEIGHT,
-        )
-        view_state = ViewState(
-            canvas_rect,
-            context.state.canvas_offset_x,
-            context.state.canvas_offset_y,
-            context.state.canvas_scale,
-        )
+        view_state = context.view_state
 
         # Convert screen position to game pixel coordinates
         game_pixel_pos = view_state.screen_to_game_pixels(pos)
@@ -110,19 +90,7 @@ class MeasureTool:
             self.preview_point = None
             return ToolResult.not_handled()
 
-        # Create view state for coordinate conversion
-        canvas_rect = Rect(
-            CANVAS_OFFSET_X,
-            CANVAS_OFFSET_Y,
-            context.screen_width - CANVAS_OFFSET_X,
-            context.screen_height - CANVAS_OFFSET_Y - STATUS_HEIGHT,
-        )
-        view_state = ViewState(
-            canvas_rect,
-            context.state.canvas_offset_x,
-            context.state.canvas_offset_y,
-            context.state.canvas_scale,
-        )
+        view_state = context.view_state
 
         # Convert screen position to game pixel coordinates
         game_pixel_pos = view_state.screen_to_game_pixels(pos)

@@ -17,7 +17,7 @@ from golf.formats.hole_data import HoleData
 
 from .font_cache import get_font
 from .grid_renderer import GridRenderer
-from .highlight_utils import draw_dashed_line, draw_tile_border
+from .highlight_utils import draw_dashed_line, draw_tile_border, render_feature_brush
 from .render_context import RenderContext
 from .selection_renderer import SelectionRenderer
 from .sprite_renderer import SpriteRenderer
@@ -56,7 +56,6 @@ class GreensRenderer:
         sprites = render_ctx.sprites
         grid_mode = render_ctx.grid_mode
         selected_flag_index = render_ctx.selected_flag_index
-        transform_state = highlight_state.transform_state
         shift_hover_tile = highlight_state.shift_hover_tile
 
         # Check if carpet paint tool is active (for dimming protected tiles)
@@ -82,27 +81,13 @@ class GreensRenderer:
                     dim_surf.fill((0, 0, 0, 128))  # 50% black overlay
                     screen.blit(dim_surf, (x, y))
 
-        # Render shift-hover highlights (AFTER base tiles, BEFORE transform preview)
+        # Render shift-hover highlights (AFTER base tiles)
         if shift_hover_tile is not None:
             GreensRenderer._render_shift_hover_highlights(
                 screen,
                 canvas_rect,
                 hole_data,
                 shift_hover_tile,
-                canvas_scale,
-                canvas_offset_x,
-                canvas_offset_y,
-            )
-
-        # Render transform preview with gold borders (ON TOP of tiles)
-        if transform_state is not None and transform_state.is_active:
-            GreensRenderer._render_transform_preview(
-                screen,
-                canvas_rect,
-                hole_data,
-                tileset,
-                transform_state.preview_changes,
-                transform_state.origin_tile,
                 canvas_scale,
                 canvas_offset_x,
                 canvas_offset_y,
@@ -177,65 +162,12 @@ class GreensRenderer:
                 "greens",
             )
 
-        # Render fringe generation path overlay
-        if highlight_state.fringe_path:
-            GreensRenderer._render_fringe_path_overlay(
-                screen,
-                canvas_rect,
-                view_state,
-                highlight_state,
-            )
+        # Render green brush stroke and cursor
+        if highlight_state.feature_brush_cursor or highlight_state.feature_brush_points:
+            render_feature_brush(screen, view_state, highlight_state)
 
         # Render grid
         GridRenderer.render(screen, view_state, GREENS_WIDTH, GREENS_HEIGHT, grid_mode)
-
-    @staticmethod
-    def _render_transform_preview(
-        screen,
-        canvas_rect,
-        hole_data,
-        tileset,
-        preview_changes,
-        origin_tile,
-        canvas_scale,
-        canvas_offset_x,
-        canvas_offset_y,
-    ):
-        """Render preview tiles with their transformed values and gold borders."""
-        tile_size = TILE_SIZE * canvas_scale
-
-        # Render preview tiles with their transformed values
-        for (row, col), transformed_tile_idx in preview_changes.items():
-            x = canvas_rect.x + col * tile_size - canvas_offset_x
-            y = canvas_rect.y + row * tile_size - canvas_offset_y
-
-            # Cull off-screen tiles
-            if x + tile_size < canvas_rect.x or x > canvas_rect.right:
-                continue
-            if y + tile_size < canvas_rect.y or y > canvas_rect.bottom:
-                continue
-
-            # Render the transformed tile
-            tile_surf = tileset.render_tile_greens(transformed_tile_idx, canvas_scale)
-            screen.blit(tile_surf, (x, y))
-
-            # Draw gold border around tile
-            draw_tile_border(screen, x, y, tile_size)
-
-        # Render border around origin tile
-        if origin_tile:
-            row, col = origin_tile
-            x = canvas_rect.x + col * tile_size - canvas_offset_x
-            y = canvas_rect.y + row * tile_size - canvas_offset_y
-
-            # Only render if on-screen
-            if not (
-                x + tile_size < canvas_rect.x
-                or x > canvas_rect.right
-                or y + tile_size < canvas_rect.y
-                or y > canvas_rect.bottom
-            ):
-                draw_tile_border(screen, x, y, tile_size)
 
     @staticmethod
     def _render_shift_hover_highlights(
@@ -400,42 +332,3 @@ class GreensRenderer:
             # Draw point as filled circle with black outline
             pygame.draw.circle(screen, point_color, (screen_x, screen_y), 4)
             pygame.draw.circle(screen, (0, 0, 0), (screen_x, screen_y), 4, 1)
-
-    @staticmethod
-    def _render_fringe_path_overlay(
-        screen: Surface,
-        canvas_rect,
-        view_state: ViewState,
-        highlight_state: HighlightState,
-    ):
-        """Render fringe generation path overlay."""
-        if not highlight_state.fringe_path:
-            return
-
-        tile_size = int(TILE_SIZE * view_state.scale)
-
-        # Render path tiles with green border
-        for row, col in highlight_state.fringe_path:
-            screen_pos = view_state.tile_to_screen((row, col))
-            if screen_pos is None:
-                continue
-            rect = pygame.Rect(screen_pos[0], screen_pos[1], tile_size, tile_size)
-            pygame.draw.rect(screen, (0, 255, 0), rect, 2)  # Green, 2px border
-
-        # Render initial position with thicker, brighter border
-        if highlight_state.fringe_initial_pos:
-            row, col = highlight_state.fringe_initial_pos
-            screen_pos = view_state.tile_to_screen((row, col))
-            if screen_pos is not None:
-                rect = pygame.Rect(screen_pos[0], screen_pos[1], tile_size, tile_size)
-                pygame.draw.rect(
-                    screen, (0, 255, 128), rect, 4
-                )  # Bright green, 4px border
-
-        # Render current position with yellow border
-        if highlight_state.fringe_current_pos:
-            row, col = highlight_state.fringe_current_pos
-            screen_pos = view_state.tile_to_screen((row, col))
-            if screen_pos is not None:
-                rect = pygame.Rect(screen_pos[0], screen_pos[1], tile_size, tile_size)
-                pygame.draw.rect(screen, (255, 255, 0), rect, 3)  # Yellow, 3px border

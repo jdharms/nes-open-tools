@@ -6,7 +6,27 @@ Manages viewport camera position, zoom, and coordinate transformations.
 
 from pygame import Rect
 
-from editor.core.constants import TILE_SIZE
+from editor.core.constants import (
+    CANVAS_OFFSET_X,
+    CANVAS_OFFSET_Y,
+    STATUS_HEIGHT,
+    TILE_SIZE,
+    TOOL_PICKER_WIDTH,
+)
+
+
+def canvas_rect(screen_width: int, screen_height: int) -> Rect:
+    """Get the canvas drawing area for a screen size.
+
+    The canvas sits right of the tile picker, below the toolbar and above the
+    status bar; the tool picker column on the right is outside it.
+    """
+    return Rect(
+        CANVAS_OFFSET_X,
+        CANVAS_OFFSET_Y,
+        screen_width - CANVAS_OFFSET_X - TOOL_PICKER_WIDTH,
+        screen_height - CANVAS_OFFSET_Y - STATUS_HEIGHT,
+    )
 
 
 class ViewState:
@@ -71,41 +91,6 @@ class ViewState:
         if tile is None:
             return None
         return (tile[0] // 2, tile[1] // 2)
-
-    def tile_to_screen(self, tile_pos: tuple[int, int]) -> tuple[int, int]:
-        """
-        Convert tile coordinates to screen position (top-left corner).
-
-        Args:
-            tile_pos: Tile coordinates (row, col)
-
-        Returns:
-            Screen position (x, y) in pixels
-        """
-        row, col = tile_pos
-        x = self.canvas_rect.x + col * self.tile_size - self.offset_x
-        y = self.canvas_rect.y + row * self.tile_size - self.offset_y
-        return (x, y)
-
-    def is_tile_visible(self, tile_pos: tuple[int, int]) -> bool:
-        """
-        Check if a tile is visible in the current viewport.
-
-        Args:
-            tile_pos: Tile coordinates (row, col)
-
-        Returns:
-            True if tile is visible in viewport
-        """
-        x, y = self.tile_to_screen(tile_pos)
-        tile_size = self.tile_size
-
-        return not (
-            x + tile_size < self.canvas_rect.x
-            or x > self.canvas_rect.right
-            or y + tile_size < self.canvas_rect.y
-            or y > self.canvas_rect.bottom
-        )
 
     def screen_to_game_pixels(
         self, screen_pos: tuple[int, int]

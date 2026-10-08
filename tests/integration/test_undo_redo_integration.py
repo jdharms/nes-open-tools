@@ -7,12 +7,10 @@ from pygame import Rect
 
 from editor.controllers.editor_state import EditorState
 from editor.controllers.event_handler import EventHandler
-from editor.controllers.transform_logic import TransformLogic
 from editor.core.pygame_rendering import Tileset
 from editor.tools.row_operations_tool import RowOperationsTool
 from editor.tools.tool_manager import ToolManager
 from editor.ui.pickers import GreensTilePicker, TilePicker
-from golf.core.compressor import load_compression_tables
 from golf.formats.hole_data import HoleData
 
 
@@ -45,7 +43,6 @@ def editor_setup():
     tool_manager.register_tool("row_operations", row_operations_tool)
 
     # Create event handler
-    transform_logic = TransformLogic(load_compression_tables())
     mock_tool_picker = Mock()
     mock_stamp_browser = Mock()
     event_handler = EventHandler(
@@ -68,8 +65,7 @@ def editor_setup():
         on_tool_change=lambda: None,
     )
 
-    # Set transform_logic and forest_filler on tool_context
-    event_handler.tool_context.transform_logic = transform_logic
+    # Set forest_filler on tool_context
     event_handler.tool_context.forest_filler = None
 
     return {
@@ -225,7 +221,7 @@ class TestRowOperationUndo:
         initial_height = hole_data.terrain_height
 
         # Remove row (soft removal: decreases height by 2, keeps data)
-        row_operations_tool.remove_row(event_handler.tool_context, False)
+        row_operations_tool.remove_row(event_handler.tool_context)
 
         assert hole_data.terrain_height == initial_height - 2
         assert state.undo_manager.can_undo()
