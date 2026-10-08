@@ -22,13 +22,11 @@ class UndoManager:
         self.undo_stack: list[HoleData] = []
         self.redo_stack: list[HoleData] = []
         self.max_undo_levels = max_undo_levels
-        self._current_data: HoleData | None = None
 
     def set_initial_state(self, hole_data: HoleData):
         """Set the initial state (called when loading a file)."""
         self.undo_stack.clear()
         self.redo_stack.clear()
-        self._current_data = hole_data
 
     def push_state(self, hole_data: HoleData):
         """
@@ -48,8 +46,6 @@ class UndoManager:
 
         # Clear redo stack on new action
         self.redo_stack.clear()
-
-        self._current_data = hole_data
 
     def can_undo(self) -> bool:
         """Check if undo is available."""
@@ -127,4 +123,3 @@ class UndoManager:
         """Clear all undo/redo history."""
         self.undo_stack.clear()
         self.redo_stack.clear()
-        self._current_data = None

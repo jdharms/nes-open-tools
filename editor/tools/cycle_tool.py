@@ -3,15 +3,10 @@ Cycle tool - cycle through tiles in their bank/sub-bank.
 """
 
 import pygame
-from pygame import Rect
 
-from editor.controllers.view_state import ViewState
 from editor.core.constants import (
-    CANVAS_OFFSET_X,
-    CANVAS_OFFSET_Y,
     GREENS_HEIGHT,
     GREENS_WIDTH,
-    STATUS_HEIGHT,
     TERRAIN_WIDTH,
 )
 
@@ -31,19 +26,7 @@ class CycleTool:
         if button not in (1, 3):
             return ToolResult.not_handled()
 
-        # Create view state for coordinate conversion
-        canvas_rect = Rect(
-            CANVAS_OFFSET_X,
-            CANVAS_OFFSET_Y,
-            context.screen_width - CANVAS_OFFSET_X,
-            context.screen_height - CANVAS_OFFSET_Y - STATUS_HEIGHT,
-        )
-        view_state = ViewState(
-            canvas_rect,
-            context.state.canvas_offset_x,
-            context.state.canvas_offset_y,
-            context.state.canvas_scale,
-        )
+        view_state = context.view_state
 
         mode = context.state.mode
 
@@ -115,7 +98,7 @@ class CycleTool:
 
         direction = "←" if button == 1 else "→"
         message = f"Cycle: 0x{current_tile:02X} {direction} 0x{new_tile:02X}"
-        return ToolResult.modified(terrain=True, message=message)
+        return ToolResult.modified(message=message)
 
     def _cycle_greens(self, view_state, pos, button, context) -> ToolResult:
         """Cycle greens tile at clicked position."""
@@ -153,4 +136,4 @@ class CycleTool:
 
         direction = "←" if button == 1 else "→"
         message = f"Cycle: 0x{current_tile:02X} {direction} 0x{new_tile:02X}"
-        return ToolResult.modified(terrain=False, message=message)
+        return ToolResult.modified(message=message)

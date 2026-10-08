@@ -16,9 +16,6 @@ class ClipboardData:
         self.width: int = 0
         self.height: int = 0
         self.mode: str = "terrain"  # "terrain" or "greens"
-        self.source_region: tuple[int, int, int, int] | None = (
-            None  # (row, col, width, height)
-        )
 
     def copy_region(
         self, hole_data: HoleData, rect: tuple[int, int, int, int], mode: str
@@ -96,7 +93,6 @@ class ClipboardData:
             # Greens don't use attributes (always same palette)
             self.attributes = None
 
-        self.source_region = rect
         return True
 
     def get_tile(self, row: int, col: int) -> int | None:
@@ -111,7 +107,6 @@ class ClipboardData:
         self.attributes = None
         self.width = 0
         self.height = 0
-        self.source_region = None
 
     def is_empty(self) -> bool:
         """Check if clipboard is empty."""

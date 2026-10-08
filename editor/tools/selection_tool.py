@@ -3,15 +3,11 @@ Selection tool for rectangular selection with cut/copy/paste operations.
 """
 
 import pygame
-from pygame import Rect
 
 from editor.controllers.view_state import ViewState
 from editor.core.constants import (
-    CANVAS_OFFSET_X,
-    CANVAS_OFFSET_Y,
     GREENS_HEIGHT,
     GREENS_WIDTH,
-    STATUS_HEIGHT,
     TERRAIN_WIDTH,
 )
 from editor.data import ClipboardData
@@ -91,19 +87,7 @@ class SelectionTool:
         if button != 1:  # Only left click
             return ToolResult.not_handled()
 
-        # Create view state for coordinate conversion
-        canvas_rect = Rect(
-            CANVAS_OFFSET_X,
-            CANVAS_OFFSET_Y,
-            context.screen_width - CANVAS_OFFSET_X,
-            context.screen_height - CANVAS_OFFSET_Y - STATUS_HEIGHT,
-        )
-        view_state = ViewState(
-            canvas_rect,
-            context.state.canvas_offset_x,
-            context.state.canvas_offset_y,
-            context.state.canvas_scale,
-        )
+        view_state = context.view_state
 
         # If in paste mode, commit paste
         if self.state.paste_mode:
@@ -145,19 +129,7 @@ class SelectionTool:
         return ToolResult.not_handled()
 
     def handle_mouse_motion(self, pos, context):
-        # Create view state for coordinate conversion
-        canvas_rect = Rect(
-            CANVAS_OFFSET_X,
-            CANVAS_OFFSET_Y,
-            context.screen_width - CANVAS_OFFSET_X,
-            context.screen_height - CANVAS_OFFSET_Y - STATUS_HEIGHT,
-        )
-        view_state = ViewState(
-            canvas_rect,
-            context.state.canvas_offset_x,
-            context.state.canvas_offset_y,
-            context.state.canvas_scale,
-        )
+        view_state = context.view_state
 
         # Update selection drag
         if self.state.is_selecting:
@@ -294,7 +266,6 @@ class SelectionTool:
         width = context.state.clipboard.width if context.state.clipboard else 0
         height = context.state.clipboard.height if context.state.clipboard else 0
         return ToolResult.modified(
-            terrain=(context.state.mode == "terrain"),
             message=f"Cut {width}x{height} region to clipboard",
         )
 
@@ -326,7 +297,6 @@ class SelectionTool:
         width = end_col - start_col + 1
         height = end_row - start_row + 1
         return ToolResult.modified(
-            terrain=(context.state.mode == "terrain"),
             message=f"Deleted {width}x{height} region",
         )
 
@@ -413,7 +383,6 @@ class SelectionTool:
         # User can press Esc or right-click to exit paste mode
 
         return ToolResult.modified(
-            terrain=(context.state.mode == "terrain"),
             message=f"Pasted {tiles_pasted} tiles (click to paste again, Esc/right-click to cancel)",
         )
 

@@ -255,11 +255,6 @@ class TestSetInitialState:
         assert undo_manager.can_undo() is False
         assert undo_manager.can_redo() is False
 
-    def test_set_initial_state_stores_reference(self, undo_manager, simple_hole_data):
-        """set_initial_state should store reference to hole data."""
-        undo_manager.set_initial_state(simple_hole_data)
-        assert undo_manager._current_data is simple_hole_data
-
 
 class TestClear:
     """Tests for clearing all history."""

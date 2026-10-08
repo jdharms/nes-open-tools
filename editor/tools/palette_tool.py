@@ -3,14 +3,6 @@ Palette tool for painting attribute (palette) values on terrain.
 """
 
 import pygame
-from pygame import Rect
-
-from editor.controllers.view_state import ViewState
-from editor.core.constants import (
-    CANVAS_OFFSET_X,
-    CANVAS_OFFSET_Y,
-    STATUS_HEIGHT,
-)
 
 from .base_tool import ToolContext, ToolResult
 
@@ -81,19 +73,7 @@ class PaletteTool:
                 is_handled=True, message="Palette: Not available in greens mode"
             )
 
-        # Create view state for coordinate conversion
-        canvas_rect = Rect(
-            CANVAS_OFFSET_X,
-            CANVAS_OFFSET_Y,
-            context.screen_width - CANVAS_OFFSET_X,
-            context.screen_height - CANVAS_OFFSET_Y - STATUS_HEIGHT,
-        )
-        view_state = ViewState(
-            canvas_rect,
-            context.state.canvas_offset_x,
-            context.state.canvas_offset_y,
-            context.state.canvas_scale,
-        )
+        view_state = context.view_state
 
         supertile = view_state.screen_to_supertile(pos)
         if supertile and supertile != self.last_paint_pos:
@@ -119,7 +99,7 @@ class PaletteTool:
                     row, col, context.state.selected_palette
                 )
                 self.last_paint_pos = supertile
-                return ToolResult.modified(terrain=False)
+                return ToolResult.modified()
 
             # Clicked on same value - update position but don't modify
             self.last_paint_pos = supertile

@@ -5,11 +5,19 @@ Shared utilities for drawing tile highlighting borders in terrain and greens ren
 """
 
 import pygame
+from pygame import Surface
+
+from editor.controllers.highlight_state import HighlightState
+from editor.controllers.view_state import ViewState
 
 # Highlighting constants
 HIGHLIGHT_COLOR = (255, 215, 0)  # Gold color
-INVALID_NEIGHBOR_COLOR = (255, 0, 0)  # Red color
 HIGHLIGHT_BORDER_WIDTH = 2
+
+# Feature brush overlay colors (RGBA)
+FEATURE_BRUSH_PAINT_COLOR = (255, 255, 255, 110)
+FEATURE_BRUSH_ERASE_COLOR = (255, 80, 80, 110)
+FEATURE_BRUSH_CURSOR_COLOR = (255, 255, 255, 220)
 
 
 def draw_tile_border(
@@ -85,3 +93,36 @@ def draw_dashed_line(
             pygame.draw.line(surface, color, start, end, width)
         drawing = not drawing
         pos = next_pos
+
+
+def render_feature_brush(
+    screen: Surface, view_state: ViewState, highlight_state: HighlightState
+):
+    """Render the feature brush's stroke in progress and its cursor outline."""
+    canvas_rect = view_state.canvas_rect
+    scale = view_state.scale
+    # Game pixel (x, y) covers a scale-sized square; the brush is centered on it
+    radius = max(1, round((highlight_state.feature_brush_radius + 0.5) * scale))
+    color = (
+        FEATURE_BRUSH_ERASE_COLOR
+        if highlight_state.feature_brush_erasing
+        else FEATURE_BRUSH_PAINT_COLOR
+    )
+
+    def center(point: tuple[int, int]) -> tuple[int, int]:
+        x, y = view_state.game_pixels_to_screen(point)
+        return (x + scale // 2 - canvas_rect.x, y + scale // 2 - canvas_rect.y)
+
+    overlay = Surface(canvas_rect.size, pygame.SRCALPHA)
+    if highlight_state.feature_brush_points:
+        for point in set(highlight_state.feature_brush_points):
+            pygame.draw.circle(overlay, color, center(point), radius)
+    if highlight_state.feature_brush_cursor:
+        pygame.draw.circle(
+            overlay,
+            FEATURE_BRUSH_CURSOR_COLOR,
+            center(highlight_state.feature_brush_cursor),
+            radius,
+            1,
+        )
+    screen.blit(overlay, canvas_rect.topleft)

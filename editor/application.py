@@ -10,18 +10,14 @@ import pygame
 from pygame import Rect
 
 from golf.algorithms.forest_fill import ForestFiller
-from golf.core.compressor import load_compression_tables
 from golf.formats.hole_data import HoleData
 
 from .controllers.editor_state import EditorState, GridMode
 from .controllers.event_handler import EventHandler
 from .controllers.highlight_state import HighlightState
 from .controllers.stamp_library import StampLibrary
-from .controllers.transform_logic import TransformLogic
-from .controllers.view_state import ViewState
+from .controllers.view_state import ViewState, canvas_rect
 from .core.constants import (
-    CANVAS_OFFSET_X,
-    CANVAS_OFFSET_Y,
     COLOR_BG,
     COLOR_STATUS,
     COLOR_TEXT,
@@ -29,7 +25,6 @@ from .core.constants import (
     PICKER_WIDTH,
     STATUS_HEIGHT,
     TERRAIN_WIDTH,
-    TILE_SIZE,
     TOOL_PICKER_WIDTH,
     TOOLBAR_HEIGHT,
 )
@@ -43,10 +38,13 @@ from .tools.add_row_tool import AddRowTool
 from .tools.carpet_paint_tool import CarpetPaintTool
 from .tools.cycle_tool import CycleTool
 from .tools.eyedropper_tool import EyedropperTool
-from .tools.feature_brush_tool import BoundaryBrushTool, FeatureBrushTool
+from .tools.feature_brush_tool import (
+    BoundaryBrushTool,
+    FeatureBrushTool,
+    GreenBrushTool,
+)
 from .tools.forest_fill_tool import ForestFillTool
-from .tools.fringe_generation_tool import FringeGenerationTool
-from .tools.green_fill_tool import GreenFillTool
+from .tools.green_fix_tool import GreenFixTool
 from .tools.measure_tool import MeasureTool
 from .tools.metadata_editor_tool import MetadataEditorTool
 from .tools.paint_tool import PaintTool
@@ -57,7 +55,6 @@ from .tools.row_operations_tool import RowOperationsTool
 from .tools.selection_tool import SelectionTool
 from .tools.stamp_tool import StampTool
 from .tools.tool_manager import ToolManager
-from .tools.transform_tool import TransformTool
 from .ui.dialogs import open_file_dialog, save_file_dialog
 from .ui.pickers import GreensTilePicker, TilePicker, ToolPicker
 from .ui.stamp_browser import StampBrowser
@@ -107,33 +104,8 @@ class EditorApplication:
                 print(f"Warning: Failed to load sprite {sprite_name}: {e}")
                 self.sprites[sprite_name] = None
 
-        # Load compression tables for transform drag feature
-        tables_path = str(get_resource_path("data/tables/compression_tables.json"))
-        self.compression_tables = load_compression_tables(tables_path)
-        self.transform_logic = TransformLogic(self.compression_tables)
-
-        # Load terrain neighbor validator
-        try:
-            from golf.core.neighbor_validator import TerrainNeighborValidator
-
-            neighbors_path = str(
-                get_resource_path("data/tables/terrain_neighbors.json")
-            )
-            self.terrain_neighbor_validator = TerrainNeighborValidator(neighbors_path)
-        except FileNotFoundError:
-            print(
-                "Warning: terrain_neighbors.json not found, neighbor validation disabled"
-            )
-            self.terrain_neighbor_validator = None
-        except Exception as e:
-            print(f"Warning: Failed to load neighbor validator: {e}")
-            self.terrain_neighbor_validator = None
-
         # Load Forest Filler algorithm
         self.forest_filler = ForestFiller()
-
-        # Cache for invalid tiles (performance optimization)
-        self.cached_invalid_terrain_tiles = None
 
         # Create application state
         self.state = EditorState()
@@ -180,10 +152,9 @@ class EditorApplication:
         self.tool_picker.register_tool("feature_brush", "Feature", "🖍")
         self.tool_picker.register_tool("boundary_brush", "OOB", "🚧")
         self.tool_picker.register_tool("forest_fill", "Forest Fill", "🌲")
-        self.tool_picker.register_tool("transform", "Transform", "↔")
         self.tool_picker.register_tool("cycle", "Cycle", "🔄")
-        self.tool_picker.register_tool("fringe_generation", "Fringe Gen", "🌊")
-        self.tool_picker.register_tool("green_fill", "Green Fill", "🌿", is_action=True)
+        self.tool_picker.register_tool("green_brush", "Green", "🟢")
+        self.tool_picker.register_tool("green_fix", "Green Fix", "🌿", is_action=True)
         self.tool_picker.register_tool("carpet_paint", "Carpet", "⛳")
         self.tool_picker.register_tool("measure", "Measure", "📏")
         self.tool_picker.register_tool("metadata_editor", "Metadata", "📝")
@@ -212,11 +183,10 @@ class EditorApplication:
         self.tool_manager.register_tool("feature_brush", FeatureBrushTool())
         self.tool_manager.register_tool("boundary_brush", BoundaryBrushTool())
         self.tool_manager.register_tool("palette", PaletteTool())
-        self.tool_manager.register_tool("transform", TransformTool())
         self.tool_manager.register_tool("eyedropper", EyedropperTool())
         self.tool_manager.register_tool("forest_fill", ForestFillTool())
-        self.tool_manager.register_tool("green_fill", GreenFillTool())
-        self.tool_manager.register_tool("fringe_generation", FringeGenerationTool())
+        self.tool_manager.register_tool("green_brush", GreenBrushTool())
+        self.tool_manager.register_tool("green_fix", GreenFixTool())
         self.tool_manager.register_tool("cycle", CycleTool())
         self.tool_manager.register_tool("measure", MeasureTool())
         self.tool_manager.register_tool("row_operations", RowOperationsTool())
@@ -245,11 +215,9 @@ class EditorApplication:
             on_resize=self._on_resize,
             on_tool_change=self._on_tool_change,
             on_create_stamp=self._on_create_stamp,
-            on_terrain_modified=self.invalidate_terrain_validation_cache,
         )
 
-        # Set transform_logic, forest_filler, tool_manager, highlight_state, stamp_library, and revert callback on tool_context (needed by tools)
-        self.event_handler.tool_context.transform_logic = self.transform_logic
+        # Set forest_filler, tool_manager, highlight_state, stamp_library, and revert callback on tool_context (needed by tools)
         self.event_handler.tool_context.forest_filler = self.forest_filler
         self.event_handler.tool_context.tool_manager = self.tool_manager
         self.event_handler.tool_context.highlight_state = self.highlight_state
@@ -312,11 +280,8 @@ class EditorApplication:
                 tool_name, self.event_handler.tool_context
             )
 
-            # Check if this was an action tool (active tool didn't change)
-            if self.tool_manager.active_tool_name == current_tool:
-                # Action tool executed - invalidate cache for terrain modifications
-                self.invalidate_terrain_validation_cache()
-            else:
+            # An action tool leaves the active tool as it was
+            if self.tool_manager.active_tool_name != current_tool:
                 # Normal tool switch - track previous tool for revert
                 self.previous_tool_name = current_tool
 
@@ -370,29 +335,8 @@ class EditorApplication:
 
     def _process_tool_result(self, result):
         """Process a tool result (same logic as EventHandler._process_tool_result)."""
-        if result.terrain_modified:
-            self.invalidate_terrain_validation_cache()
         if result.message:
             print(result.message)
-
-    def invalidate_terrain_validation_cache(self):
-        """Invalidate cached invalid tiles (call when terrain is modified)."""
-        self.cached_invalid_terrain_tiles = None
-
-    def get_invalid_terrain_tiles(self):
-        """Get invalid terrain tiles (cached, recomputes only when needed)."""
-        if self.terrain_neighbor_validator is None:
-            return set()
-
-        if self.cached_invalid_terrain_tiles is None:
-            # Cache miss - recompute
-            self.cached_invalid_terrain_tiles = (
-                self.terrain_neighbor_validator.get_invalid_tiles(
-                    self.hole_data.terrain
-                )
-            )
-
-        return self.cached_invalid_terrain_tiles
 
     def _on_load(self):
         """Load a hole file."""
@@ -404,16 +348,12 @@ class EditorApplication:
             self.state.reset_canvas_position()
             # Clear undo history when loading new file
             self.state.undo_manager.set_initial_state(self.hole_data)
-            # Invalidate cache when loading new hole
-            self.invalidate_terrain_validation_cache()
 
     def _on_load_file(self, path: str):
         """Load a hole file from a specific path (e.g., drag-and-drop)."""
         if not path.lower().endswith(".json"):
             return
         self.load_hole(path)
-        # Invalidate cache when loading new hole
-        self.invalidate_terrain_validation_cache()
 
     def _on_save(self):
         """Save the current hole."""
@@ -552,27 +492,11 @@ class EditorApplication:
 
     def _get_canvas_rect(self) -> Rect:
         """Get the canvas drawing area."""
-        return Rect(
-            CANVAS_OFFSET_X,
-            CANVAS_OFFSET_Y,
-            self.screen_width - CANVAS_OFFSET_X - TOOL_PICKER_WIDTH,
-            self.screen_height - CANVAS_OFFSET_Y - STATUS_HEIGHT,
-        )
+        return canvas_rect(self.screen_width, self.screen_height)
 
     def _screen_to_tile(self, screen_pos: tuple[int, int]) -> tuple[int, int] | None:
         """Convert screen position to tile coordinates."""
-        canvas_rect = self._get_canvas_rect()
-        if not canvas_rect.collidepoint(screen_pos):
-            return None
-
-        local_x = screen_pos[0] - canvas_rect.x + self.state.canvas_offset_x
-        local_y = screen_pos[1] - canvas_rect.y + self.state.canvas_offset_y
-
-        tile_size = TILE_SIZE * self.state.canvas_scale
-        tile_col = local_x // tile_size
-        tile_row = local_y // tile_size
-
-        return (tile_row, tile_col)
+        return self.event_handler.tool_context.view_state.screen_to_tile(screen_pos)
 
     def run(self):
         """Main loop."""
@@ -659,20 +583,6 @@ class EditorApplication:
             self.state.canvas_offset_y,
             self.state.canvas_scale,
         )
-
-        # Update highlight state
-        self.highlight_state.show_invalid_tiles = self.state.show_invalid_tiles
-        if self.state.mode == "terrain":
-            self.highlight_state.invalid_terrain_tiles = (
-                self.get_invalid_terrain_tiles()
-            )
-        else:
-            self.highlight_state.invalid_terrain_tiles = None
-
-        # Get transform state from transform tool
-        transform_tool = self.tool_manager.get_tool("transform")
-        if transform_tool:
-            self.highlight_state.transform_state = transform_tool.state
 
         # Get measure points from measure tool
         measure_tool = self.tool_manager.get_tool("measure")

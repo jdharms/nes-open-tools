@@ -14,6 +14,7 @@ from golf.algorithms.feature_fit import (
     style_table_text,
 )
 from golf.algorithms.features import find_features
+from golf.algorithms.green_zones import GREEN, fringe_zones
 from golf.core.palettes import TERRAIN_WIDTH
 from golf.formats.hole_data import HoleData
 from golf.randomizer.catalog import Catalog, HoleStore, RomSource
@@ -94,6 +95,57 @@ def test_a_shape_moved_off_the_grid_fits_in_the_vanilla_style(holes, name):
     assert blocks > 300
     assert seen / blocks >= 0.9
     assert wrong / border <= 13
+
+
+def test_a_vanilla_green_fits_back_from_its_putting_surface_alone(holes):
+    """The fringe is the band round the putting surface: fitted to that band, the
+    vanilla greens come back in their own tiles."""
+    fitter = load_fitters()["green"]
+    family = fitter.family
+    same = total = blocks = seen = 0
+    for hole in holes[::6]:
+        grid = style_grid(family, hole)
+        pick = fitter.fit(fringe_zones(family.render(grid) == GREEN))
+        border = (grid != pick) | ((grid != family.full) & (grid != family.empty))
+        total += int(border.sum())
+        same += int((grid == pick)[border].sum())
+        for block, count in grid_blocks(family, pick).items():
+            blocks += count
+            seen += count * bool(fitter.seen[block])
+    assert total > 1500
+    assert same / total >= 0.95
+    assert seen / blocks >= 0.98
+
+
+def test_a_vanilla_green_moved_off_the_grid_fits_in_the_vanilla_style(holes):
+    fitter = load_fitters()["green"]
+    family = fitter.family
+    blocks = seen = odd = cells = 0
+    for hole in holes[::6]:
+        green = family.render(style_grid(family, hole)) == GREEN
+        moved = np.zeros_like(green)
+        moved[5:, 3:] = green[:-5, :-3]
+        if on_edge(moved):
+            continue
+        pick = fitter.fit(fringe_zones(moved))
+        for block, count in grid_blocks(family, pick).items():
+            blocks += count
+            seen += count * bool(fitter.seen[block])
+        # a ring: nearly every fringe cell sits between two others
+        fringe = np.pad((pick != family.full) & (pick != family.empty), 1)
+        beside = (
+            fringe[:-2, 1:-1].astype(int)
+            + fringe[2:, 1:-1]
+            + fringe[1:-1, :-2]
+            + fringe[1:-1, 2:]
+        )[fringe[1:-1, 1:-1]]
+        cells += len(beside)
+        odd += int((beside != 2).sum())
+        drawn = family.render(pick) == GREEN
+        assert (drawn != moved).sum() <= 0.06 * moved.sum()
+    assert blocks > 1500
+    assert seen / blocks >= 0.95
+    assert odd / cells <= 0.06
 
 
 def test_a_vanilla_fairway_in_a_pocket_can_be_erased_and_painted_back(

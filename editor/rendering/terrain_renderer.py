@@ -17,15 +17,14 @@ from golf.formats.hole_data import HoleData
 
 from .font_cache import get_font
 from .grid_renderer import GridRenderer
-from .highlight_utils import INVALID_NEIGHBOR_COLOR, draw_dashed_line, draw_tile_border
+from .highlight_utils import (
+    draw_dashed_line,
+    draw_tile_border,
+    render_feature_brush,
+)
 from .render_context import RenderContext
 from .selection_renderer import SelectionRenderer
 from .sprite_renderer import SpriteRenderer
-
-# Feature brush overlay colors (RGBA)
-FEATURE_BRUSH_PAINT_COLOR = (255, 255, 255, 110)
-FEATURE_BRUSH_ERASE_COLOR = (255, 80, 80, 110)
-FEATURE_BRUSH_CURSOR_COLOR = (255, 255, 255, 220)
 
 
 class TerrainRenderer:
@@ -58,10 +57,7 @@ class TerrainRenderer:
         sprites = render_ctx.sprites
         grid_mode = render_ctx.grid_mode
         selected_flag_index = render_ctx.selected_flag_index
-        transform_state = highlight_state.transform_state
         shift_hover_tile = highlight_state.shift_hover_tile
-        show_invalid_tiles = highlight_state.show_invalid_tiles
-        invalid_terrain_tiles = highlight_state.invalid_terrain_tiles
 
         # Render terrain tiles (only visible ones)
         visible_height = hole_data.get_terrain_height()
@@ -91,39 +87,13 @@ class TerrainRenderer:
                     tile_surf = tileset.render_tile(tile_idx, palette_idx, canvas_scale)
                 screen.blit(tile_surf, (x, y))
 
-        # Render shift-hover highlights (AFTER base tiles, BEFORE transform preview)
+        # Render shift-hover highlights (AFTER base tiles)
         if shift_hover_tile is not None:
             TerrainRenderer._render_shift_hover_highlights(
                 screen,
                 canvas_rect,
                 hole_data,
                 shift_hover_tile,
-                canvas_scale,
-                canvas_offset_x,
-                canvas_offset_y,
-            )
-
-        # Render invalid neighbor highlights (red borders)
-        if show_invalid_tiles and invalid_terrain_tiles:
-            TerrainRenderer._render_invalid_neighbor_highlights(
-                screen,
-                canvas_rect,
-                hole_data,
-                invalid_terrain_tiles,
-                canvas_scale,
-                canvas_offset_x,
-                canvas_offset_y,
-            )
-
-        # Render transform preview with gold borders (ON TOP of tiles)
-        if transform_state is not None and transform_state.is_active:
-            TerrainRenderer._render_transform_preview(
-                screen,
-                canvas_rect,
-                hole_data,
-                tileset,
-                transform_state.preview_changes,
-                transform_state.origin_tile,
                 canvas_scale,
                 canvas_offset_x,
                 canvas_offset_y,
@@ -159,7 +129,7 @@ class TerrainRenderer:
 
         # Render feature brush stroke and cursor
         if highlight_state.feature_brush_cursor or highlight_state.feature_brush_points:
-            TerrainRenderer._render_feature_brush(screen, view_state, highlight_state)
+            render_feature_brush(screen, view_state, highlight_state)
 
         # Render selection rectangle
         if (
@@ -213,60 +183,6 @@ class TerrainRenderer:
         )
 
     @staticmethod
-    def _render_transform_preview(
-        screen,
-        canvas_rect,
-        hole_data,
-        tileset,
-        preview_changes,
-        origin_tile,
-        canvas_scale,
-        canvas_offset_x,
-        canvas_offset_y,
-    ):
-        """Render preview tiles with their transformed values and gold borders."""
-        tile_size = TILE_SIZE * canvas_scale
-
-        # Render preview tiles with their transformed values
-        for (row, col), transformed_tile_idx in preview_changes.items():
-            x = canvas_rect.x + col * tile_size - canvas_offset_x
-            y = canvas_rect.y + row * tile_size - canvas_offset_y
-
-            # Cull off-screen tiles
-            if x + tile_size < canvas_rect.x or x > canvas_rect.right:
-                continue
-            if y + tile_size < canvas_rect.y or y > canvas_rect.bottom:
-                continue
-
-            # Render the transformed tile - use special rendering for placeholder (0x100)
-            if transformed_tile_idx == 0x100:
-                tile_surf = render_placeholder_tile(tile_size)
-            else:
-                palette_idx = hole_data.get_attribute(row, col)
-                tile_surf = tileset.render_tile(
-                    transformed_tile_idx, palette_idx, canvas_scale
-                )
-            screen.blit(tile_surf, (x, y))
-
-            # Draw gold border around tile
-            draw_tile_border(screen, x, y, tile_size)
-
-        # Render border around origin tile
-        if origin_tile:
-            row, col = origin_tile
-            x = canvas_rect.x + col * tile_size - canvas_offset_x
-            y = canvas_rect.y + row * tile_size - canvas_offset_y
-
-            # Only render if on-screen
-            if not (
-                x + tile_size < canvas_rect.x
-                or x > canvas_rect.right
-                or y + tile_size < canvas_rect.y
-                or y > canvas_rect.bottom
-            ):
-                draw_tile_border(screen, x, y, tile_size)
-
-    @staticmethod
     def _render_shift_hover_highlights(
         screen,
         canvas_rect,
@@ -299,65 +215,6 @@ class TerrainRenderer:
 
                 # Draw gold border
                 draw_tile_border(screen, x, y, tile_size)
-
-    @staticmethod
-    def _render_invalid_neighbor_highlights(
-        screen,
-        canvas_rect,
-        hole_data,
-        invalid_tiles,
-        canvas_scale,
-        canvas_offset_x,
-        canvas_offset_y,
-    ):
-        """Render red borders around tiles with invalid neighbor relationships."""
-        tile_size = TILE_SIZE * canvas_scale
-
-        for row_idx, col_idx in invalid_tiles:
-            x = canvas_rect.x + col_idx * tile_size - canvas_offset_x
-            y = canvas_rect.y + row_idx * tile_size - canvas_offset_y
-
-            # Cull off-screen tiles
-            if x + tile_size < canvas_rect.x or x > canvas_rect.right:
-                continue
-            if y + tile_size < canvas_rect.y or y > canvas_rect.bottom:
-                continue
-
-            # Draw red border
-            draw_tile_border(screen, x, y, tile_size, color=INVALID_NEIGHBOR_COLOR)
-
-    @staticmethod
-    def _render_feature_brush(
-        screen: Surface, view_state: ViewState, highlight_state: HighlightState
-    ):
-        """Render the feature brush's stroke in progress and its cursor outline."""
-        canvas_rect = view_state.canvas_rect
-        scale = view_state.scale
-        # Game pixel (x, y) covers a scale-sized square; the brush is centered on it
-        radius = max(1, round((highlight_state.feature_brush_radius + 0.5) * scale))
-        color = (
-            FEATURE_BRUSH_ERASE_COLOR
-            if highlight_state.feature_brush_erasing
-            else FEATURE_BRUSH_PAINT_COLOR
-        )
-
-        def center(point: tuple[int, int]) -> tuple[int, int]:
-            x, y = view_state.game_pixels_to_screen(point)
-            return (x + scale // 2 - canvas_rect.x, y + scale // 2 - canvas_rect.y)
-
-        overlay = Surface(canvas_rect.size, pygame.SRCALPHA)
-        if highlight_state.feature_brush_points:
-            for point in set(highlight_state.feature_brush_points):
-                pygame.draw.circle(overlay, color, center(point), radius)
-        if highlight_state.feature_brush_cursor:
-            pygame.draw.circle(
-                overlay,
-                FEATURE_BRUSH_CURSOR_COLOR,
-                center(highlight_state.feature_brush_cursor),
-                radius,
-                1,
-            )
-        screen.blit(overlay, canvas_rect.topleft)
 
     @staticmethod
     def _render_measurement_overlay(

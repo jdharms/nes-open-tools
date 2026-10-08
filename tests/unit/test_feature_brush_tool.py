@@ -14,8 +14,10 @@ from editor.tools.feature_brush_tool import (
     MIN_RADIUS,
     BoundaryBrushTool,
     FeatureBrushTool,
+    GreenBrushTool,
 )
 from golf.algorithms.boundary import LINE_TILES, PLACEHOLDER
+from golf.algorithms.green_zones import FLAT_TILE, FRINGE_TILES
 from golf.core.palettes import TERRAIN_WIDTH
 from tests.synthetic_holes import synthetic_hole
 
@@ -44,7 +46,6 @@ def context(hole):
         state=state,
         terrain_picker=Mock(),
         greens_picker=Mock(),
-        transform_logic=Mock(),
         forest_filler=Mock(),
         screen_width=1280,
         screen_height=1200,
@@ -80,7 +81,7 @@ def test_a_drag_paints_on_release_and_pushes_undo_once(hole, context):
     context.state.undo_manager.push_state.assert_not_called()
 
     result = tool.handle_mouse_up(screen(100, 110), 1, context)
-    assert result.terrain_modified
+    assert "Painted" in (result.message or "")
     assert placed(hole) > 0
     context.state.undo_manager.push_state.assert_called_once_with(hole)
 
@@ -103,14 +104,14 @@ def test_right_drag_erases(hole, context):
     drag(tool, context, [(60, 100), (100, 110)])
     tool.radius = MAX_RADIUS
     result = drag(tool, context, [(50, 95), (110, 115)], button=3)
-    assert result.terrain_modified
+    assert "Erased" in (result.message or "")
     assert placed(hole) == 0
     assert context.state.undo_manager.push_state.call_count == 2
 
 
 def test_a_stroke_that_changes_nothing_pushes_no_undo(hole, context):
     result = drag(FeatureBrushTool(), context, [(60, 100), (100, 110)], button=3)
-    assert result.is_handled and not result.terrain_modified
+    assert result.is_handled and "Nothing to change" in (result.message or "")
     context.state.undo_manager.push_state.assert_not_called()
 
 
@@ -203,9 +204,47 @@ def test_the_out_of_bounds_brush_is_on_o():
 def test_the_out_of_bounds_brush_draws_a_line_round_placeholder(hole, context):
     context.state.selected_palette = 2  # the palette makes no difference to it
     result = drag(BoundaryBrushTool(), context, [(40, 100), (120, 110)])
-    assert result.terrain_modified
-    assert "Out of Bounds Brush" in (result.message or "")
+    assert "Out of Bounds Brush: Painted" in (result.message or "")
     tiles = {tile for row in hole.terrain for tile in row}
     assert PLACEHOLDER in tiles
     assert tiles - {ROUGH, PLACEHOLDER} <= set(LINE_TILES)
     context.state.undo_manager.push_state.assert_called_once_with(hole)
+
+
+def test_the_green_brush_is_on_n():
+    assert GreenBrushTool().get_hotkey() == pygame.K_n
+
+
+def test_the_green_brush_paints_the_green_in_greens_mode(hole, context):
+    context.state.mode = "greens"
+    terrain = [row[:] for row in hole.terrain]
+    tool = GreenBrushTool()
+    tool.radius = MAX_RADIUS
+    result = drag(tool, context, [(70, 96), (120, 96)])
+    assert result.is_handled
+    assert "Green Brush: Painted" in (result.message or "")
+    tiles = {tile for row in hole.greens for tile in row}
+    assert FLAT_TILE in tiles and tiles & set(FRINGE_TILES)
+    assert hole.terrain == terrain
+    context.state.undo_manager.push_state.assert_called_once_with(hole)
+
+    tool.radius = MAX_RADIUS
+    result = drag(tool, context, [(60, 96), (130, 96)], button=3)
+    assert "Green Brush: Erased" in (result.message or "")
+    assert FLAT_TILE not in {tile for row in hole.greens for tile in row}
+
+
+def test_the_green_brush_is_refused_in_terrain_mode(hole, context):
+    tool = GreenBrushTool()
+    result = tool.handle_mouse_down(screen(60, 100), 1, 0, context)
+    assert result.is_handled and "greens" in (result.message or "")
+    assert tool.stroke_button is None
+
+
+def test_a_brush_in_the_other_mode_drops_its_cursor(context):
+    tool = FeatureBrushTool()
+    tool.handle_mouse_motion(screen(60, 100), context)
+    assert context.highlight_state.feature_brush_cursor == (60, 100)
+    context.state.mode = "greens"
+    assert not tool.handle_mouse_motion(screen(64, 100), context).is_handled
+    assert context.highlight_state.feature_brush_cursor is None

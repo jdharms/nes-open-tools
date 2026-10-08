@@ -67,7 +67,6 @@ Editor Todos:
 * F1 through F4 keys should send us to flag 1 through flag 4
 * Greens writeup
 * release bundling
-* Fringe gen logging upon failure
 * Ugh, CI/CD? notably around rangefinder deployment
 * linter/validator of some sort
 * Investigate assigning corners to multiple banks

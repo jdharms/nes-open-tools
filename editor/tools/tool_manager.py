@@ -14,7 +14,6 @@ from .paint_tool import PaintTool
 from .remove_row_tool import RemoveRowTool
 from .row_operations_tool import RowOperationsTool
 from .stamp_tool import StampTool
-from .transform_tool import TransformTool
 
 
 class ToolManager:
@@ -44,9 +43,6 @@ class ToolManager:
 
     @overload
     def get_tool(self, name: Literal["paint"]) -> PaintTool | None: ...
-
-    @overload
-    def get_tool(self, name: Literal["transform"]) -> TransformTool | None: ...
 
     @overload
     def get_tool(self, name: Literal["eyedropper"]) -> EyedropperTool | None: ...

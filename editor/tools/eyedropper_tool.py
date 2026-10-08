@@ -2,14 +2,8 @@
 Eyedropper tool for sampling tiles from the canvas.
 """
 
-from pygame import Rect
-
-from editor.controllers.view_state import ViewState
 from editor.core.constants import (
-    CANVAS_OFFSET_X,
-    CANVAS_OFFSET_Y,
     GREENS_WIDTH,
-    STATUS_HEIGHT,
     TERRAIN_WIDTH,
 )
 
@@ -50,19 +44,7 @@ class EyedropperTool:
 
     def _sample_at(self, pos, context) -> ToolResult:
         """Sample tile/palette at position."""
-        # Create view state for coordinate conversion
-        canvas_rect = Rect(
-            CANVAS_OFFSET_X,
-            CANVAS_OFFSET_Y,
-            context.screen_width - CANVAS_OFFSET_X,
-            context.screen_height - CANVAS_OFFSET_Y - STATUS_HEIGHT,
-        )
-        view_state = ViewState(
-            canvas_rect,
-            context.state.canvas_offset_x,
-            context.state.canvas_offset_y,
-            context.state.canvas_scale,
-        )
+        view_state = context.view_state
 
         mode = context.state.mode
 

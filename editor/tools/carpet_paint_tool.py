@@ -6,15 +6,10 @@ accidental modification. When active, protected tiles are visually dimmed.
 """
 
 import pygame
-from pygame import Rect
 
-from editor.controllers.view_state import ViewState
 from editor.core.constants import (
-    CANVAS_OFFSET_X,
-    CANVAS_OFFSET_Y,
     GREENS_HEIGHT,
     GREENS_WIDTH,
-    STATUS_HEIGHT,
 )
 
 from .base_tool import ToolContext, ToolResult
@@ -125,19 +120,7 @@ class CarpetPaintTool:
         if context.state.mode != "greens":
             return ToolResult.not_handled()
 
-        # Create view state for coordinate conversion
-        canvas_rect = Rect(
-            CANVAS_OFFSET_X,
-            CANVAS_OFFSET_Y,
-            context.screen_width - CANVAS_OFFSET_X,
-            context.screen_height - CANVAS_OFFSET_Y - STATUS_HEIGHT,
-        )
-        view_state = ViewState(
-            canvas_rect,
-            context.state.canvas_offset_x,
-            context.state.canvas_offset_y,
-            context.state.canvas_scale,
-        )
+        view_state = context.view_state
 
         tile = view_state.screen_to_tile(pos)
         if tile and tile != self.last_paint_pos:
@@ -162,7 +145,7 @@ class CarpetPaintTool:
 
                     context.hole_data.set_greens_tile(row, col, selected_tile)
                     self.last_paint_pos = tile
-                    return ToolResult.modified(terrain=False)
+                    return ToolResult.modified()
 
                 # Clicked on same value - update position but don't modify
                 self.last_paint_pos = tile

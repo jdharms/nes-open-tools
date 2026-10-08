@@ -14,6 +14,11 @@ Out of bounds (`boundary_change`) is the same with the out-of-bounds line
 (`golf.algorithms.boundary`) as the border. It writes over bare ground, the line, forest
 and bare out-of-bounds ground, and leaves the cells inside the line as the placeholder,
 for the forest fill.
+
+A green (`green_change`) is painted as its putting surface, in the pixels of the green's
+own 24x24 tiles. The fringe is the band round whatever the putting surface becomes
+(`golf.algorithms.green_zones`), and nothing on a green is left alone: new putting
+surface is flat, and a slope the fringe moves onto is lost.
 """
 
 from collections import Counter
@@ -22,7 +27,7 @@ from dataclasses import dataclass
 
 import numpy as np
 
-from golf.core.palettes import TERRAIN_WIDTH
+from golf.core.palettes import GREENS_HEIGHT, GREENS_WIDTH, TERRAIN_WIDTH
 from golf.formats.hole_data import HoleData
 
 from .boundary import FOREST_TILES, PLACEHOLDER, cell_palettes
@@ -32,11 +37,22 @@ from .feature_fit import (
     LOCKED_FULL,
     TREES_IN_FEATURE,
     FeatureFitter,
+    green_grid,
     load_fitters,
     tile_grid,
     tile_pixels,
 )
 from .features import KIND_OF_PALETTE, Kind
+from .green_zones import (
+    FLAT_TILE,
+    FRINGE_WIDTH,
+    GREEN,
+    ROUGH_FAMILIES,
+    ROUGH_TILES,
+    fringe_zones,
+    rough_phase,
+    rough_tile,
+)
 
 #: the family that draws each kind
 FAMILY_OF_KIND = {Kind.FAIRWAY: "fairway", Kind.SAND: "hazard", Kind.WATER: "hazard"}
@@ -55,6 +71,9 @@ WATER_PALETTE = 3
 #: how near, in pixels, to cells it ran into but may not write a painted stroke is left
 #: to the fit
 LOCKED_MARGIN = 3
+#: how near, in pixels, to the edge of the green's grid putting surface may be painted:
+#: room for the fringe
+GREEN_MARGIN = 5
 
 
 def fitter_for(palette: int) -> FeatureFitter:
@@ -66,7 +85,17 @@ def stroke_mask(
     points: Iterable[tuple[int, int]], radius: float, hole: HoleData
 ) -> np.ndarray:
     """The pixels within `radius` of any point, (x, y) in course pixels, in the hole."""
-    height, width = hole.terrain_height * 8, TERRAIN_WIDTH * 8
+    return _discs(points, radius, hole.terrain_height * 8, TERRAIN_WIDTH * 8)
+
+
+def green_stroke_mask(points: Iterable[tuple[int, int]], radius: float) -> np.ndarray:
+    """The pixels within `radius` of any point, (x, y) in the green's pixels."""
+    return _discs(points, radius, GREENS_HEIGHT * 8, GREENS_WIDTH * 8)
+
+
+def _discs(
+    points: Iterable[tuple[int, int]], radius: float, height: int, width: int
+) -> np.ndarray:
     mask = np.zeros((height, width), bool)
     reach = int(radius) + 1
     for x, y in set(points):
@@ -364,6 +393,107 @@ def boundary_change(
     )
 
 
+@dataclass(frozen=True)
+class GreenChange:
+    """What a stroke does to a hole's green."""
+
+    #: (row, column, tile) for every greens tile that changes
+    tiles: tuple[tuple[int, int, int], ...] = ()
+
+    def __bool__(self) -> bool:
+        return bool(self.tiles)
+
+    def apply(self, hole: HoleData) -> None:
+        for row, col, tile in self.tiles:
+            hole.set_greens_tile(row, col, tile)
+
+
+def green_change(
+    hole: HoleData, stroke: np.ndarray, erase: bool = False
+) -> GreenChange:
+    """What adding `stroke` to the putting surface of the hole's green, or cutting it
+    out, changes.
+
+    `stroke` is a pixel mask of the green (`green_stroke_mask`). Putting surface is not
+    painted within `GREEN_MARGIN` of the grid's edge, so that the fringe closes round
+    it. The fringe is fitted round the new putting surface, as far as the stroke moved
+    it. Cells that become
+    putting surface are flat, and cells that become rough take their place in the
+    rough's checkerboard; rough beside a changed cell gains or loses its strip of
+    fringe to suit.
+    """
+    fitter = load_fitters()["green"]
+    family = fitter.family
+    grid = green_grid(family, hole)
+    rows, cols = grid.shape
+    drawn = family.render(grid)
+    green = drawn == GREEN
+    inside = np.zeros_like(stroke)
+    inside[GREEN_MARGIN:-GREEN_MARGIN, GREEN_MARGIN:-GREEN_MARGIN] = True
+    wanted = green & ~stroke if erase else green | (stroke & inside)
+
+    def near(pixels: np.ndarray) -> np.ndarray:
+        """Everywhere the fringe of these pixels of putting surface could reach."""
+        for _ in range(int(FRINGE_WIDTH) + 2):
+            pixels = _spread(pixels, False)
+        return pixels
+
+    wanted &= ~(wanted & ~_opened(wanted) & near(wanted != green))
+    moved = near(wanted != green)
+    target = np.where(moved, fringe_zones(wanted), drawn)
+    if (target == drawn).all():
+        return GreenChange()
+
+    # The cells that may change, and the window of them and their context the fit sees
+    ys, xs = np.nonzero(target != drawn)
+    top = max(0, int(ys.min()) // 8 - REACH)
+    bottom = min(rows, int(ys.max()) // 8 + REACH + 1)
+    left = max(0, int(xs.min()) // 8 - REACH)
+    right = min(cols, int(xs.max()) // 8 + REACH + 1)
+    w_top, w_bottom = max(0, top - CONTEXT), min(rows, bottom + CONTEXT)
+    w_left, w_right = max(0, left - CONTEXT), min(cols, right + CONTEXT)
+    window = grid[w_top:w_bottom, w_left:w_right]
+    pixels = np.s_[w_top * 8 : w_bottom * 8, w_left * 8 : w_right * 8]
+    changed = _cells(target[pixels] != drawn[pixels])
+    free = _cells(_spread(_pixels(changed), False))
+    fitted = fitter.fit(
+        target[pixels], start=window, free=free, settled=free & ~changed
+    )
+
+    after = [list(row) for row in hole.greens]
+    rough = []
+    for row, col in zip(*np.nonzero(fitted != window), strict=True):
+        cell = (int(row) + w_top, int(col) + w_left)
+        index = int(fitted[row, col])
+        if index == family.empty:
+            rough.append(cell)
+        else:
+            tile = FLAT_TILE if index == family.full else family.tiles[index]
+            after[cell[0]][cell[1]] = tile
+    # The rough last, since its strips follow the fringe beside it: the new rough, and
+    # the rough there already beside any cell that changed
+    phase = rough_phase(hole.greens)
+    phases = dict.fromkeys(rough, phase)
+    for row, col in zip(*np.nonzero(fitted != window), strict=True):
+        for dy, dx in ((-1, 0), (1, 0), (0, -1), (0, 1)):
+            cell = (int(row) + w_top + dy, int(col) + w_left + dx)
+            if not (0 <= cell[0] < rows and 0 <= cell[1] < cols) or cell in phases:
+                continue
+            tile = after[cell[0]][cell[1]]
+            if tile in ROUGH_TILES:
+                phases[cell] = (sum(cell) + (tile in ROUGH_FAMILIES[1])) % 2
+    for (row, col), cell_phase in phases.items():
+        after[row][col] = rough_tile(after, row, col, cell_phase)
+    return GreenChange(
+        tuple(
+            (row, col, after[row][col])
+            for row in range(rows)
+            for col in range(cols)
+            if after[row][col] != hole.greens[row][col]
+        )
+    )
+
+
 def paint_feature(
     hole: HoleData, palette: int, stroke: np.ndarray, erase: bool = False
 ) -> int:
@@ -376,5 +506,12 @@ def paint_feature(
 def paint_boundary(hole: HoleData, stroke: np.ndarray, erase: bool = False) -> int:
     """Apply `boundary_change` to the hole; returns how many tiles changed."""
     change = boundary_change(hole, stroke, erase)
+    change.apply(hole)
+    return len(change.tiles)
+
+
+def paint_green(hole: HoleData, stroke: np.ndarray, erase: bool = False) -> int:
+    """Apply `green_change` to the hole; returns how many tiles changed."""
+    change = green_change(hole, stroke, erase)
     change.apply(hole)
     return len(change.tiles)

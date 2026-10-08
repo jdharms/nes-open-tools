@@ -7,6 +7,7 @@ import pytest
 
 from editor.controllers.editor_state import EditorState, GridMode
 from editor.controllers.event_handler import EventHandler
+from editor.core.constants import STATUS_HEIGHT
 from editor.tools.forest_fill_tool import ForestFillTool
 from editor.tools.paint_tool import PaintTool
 from editor.tools.tool_manager import ToolManager
@@ -63,7 +64,6 @@ def event_handler(editor_state, hole_data, tool_manager):
     mock_on_select_flag = Mock()
     mock_on_resize = Mock()
     mock_on_tool_change = Mock()
-    mock_on_terrain_modified = Mock()
 
     handler = EventHandler(
         state=editor_state,
@@ -83,11 +83,9 @@ def event_handler(editor_state, hole_data, tool_manager):
         on_select_flag=mock_on_select_flag,
         on_resize=mock_on_resize,
         on_tool_change=mock_on_tool_change,
-        on_terrain_modified=mock_on_terrain_modified,
     )
 
     # Set tool context properties (normally done by Application)
-    handler.tool_context.transform_logic = None
 
     # Mock forest filler with proper return values
     mock_filler = Mock()
@@ -276,3 +274,15 @@ class TestEventHandlerDelegation:
         event = MockEvent(pygame.QUIT)
         running = event_handler.handle_events([event])
         assert running is False, "QUIT event should return False to stop application"
+
+
+def test_update_screen_size_reaches_tool_context(event_handler):
+    """Tools read the screen size from the context, so a resize must update it."""
+    event_handler.update_screen_size(1500, 900)
+
+    assert event_handler.screen_width == 1500
+    assert event_handler.tool_context.screen_width == 1500
+    assert event_handler.tool_context.screen_height == 900
+    assert (
+        event_handler.tool_context.view_state.canvas_rect.bottom == 900 - STATUS_HEIGHT
+    )
