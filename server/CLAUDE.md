@@ -185,6 +185,18 @@ in this package.
   `apple-touch-icon.png` (180) beside it are Lanczos reductions of it; make them again
   from the logo if it changes. `base.html` links both on every page, and `/favicon.ico`
   serves the first to whatever asks without reading a page.
+- Every page carries a link preview card, the Open Graph tags in `base.html` that Discord
+  and other chats draw under a pasted link: the site's name, the page's address without
+  its query, a title, a description and the logo, with `theme-color` (the logo's fairway
+  green) for the stripe down the card's side. `og:url` and `og:image` are full URLs,
+  built from `Config.base_url` by the `site_url` template global. A page's title
+  defaults to its `<title>` and its description to `site.card_description`; a page with
+  more to say overrides the `card_title` and `card_description` blocks, as the seed page,
+  the round page and the yardage book do, with `plain:` strings under a `.card` key.
+- A card never holds a score, on a round's page or a seed's: it shows to a whole channel,
+  some of whom have yet to play the seed, where a page's scores wait for someone to open
+  it. Nor does it hold anything that changes after the page is first shared, such as
+  a count of rounds, since a chat keeps the card it first drew.
 - The rangefinder page and a seed's yardage book share one viewer: the macros in
   `server/templates/_rangefinder.html` and the modules in `server/static/rangefinder/`.
   A change to either shows on both pages.

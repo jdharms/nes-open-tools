@@ -17,6 +17,9 @@ from starlette.types import Scope
 
 #: the site's own static files, mounted at `/static`
 STATIC_DIR = Path(__file__).resolve().parent / "static"
+#: the site's logo, which a page's preview card shows, and its width and height in pixels
+LOGO = "logo.png"
+LOGO_SIZE = 1000
 #: the icon a browser asks for at `/favicon.ico` when a response names none
 FAVICON = "favicon.ico"
 #: the query parameter holding a static file's version

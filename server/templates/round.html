@@ -1,6 +1,13 @@
 {% extends "base.html" %}
 {% import "_scorecard.html" as scorecard %}
 {% block title %}{{ t_plain("round.page_title", words=round.magic_words|join(" ")) }}{% endblock %}
+{# who played which seed, and never the score: a card shows to a whole channel, some of whom
+   have yet to play it #}
+{% block card_title %}{{ t_plain("round.card.title", words=round.magic_words|join(" ")) }}{% endblock %}
+{% block card_description %}
+  {%- if round.slot == 1 %}{{ t_plain("round.card.player_two", name=round.player_name) }}
+{%- else %}{{ t_plain("round.card.player_one", name=round.player_name) }}{% endif -%}
+{% endblock %}
 {% block content %}
   {# one nine as a table of its own; the back nine's also carries the round's totals. A
      round from a ROM that records fairways (protocol version 2) has a fairway column. #}

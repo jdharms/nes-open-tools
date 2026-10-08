@@ -256,7 +256,7 @@ rangefinder's metadata.
 `GOLF_DATABASE`, the server's vanilla ROM directory `GOLF_ROM_DIR` holding the ROMs under
 the file names in `golf/randomizer/roms.py` (`nes_open_us.nes`, `mario_open_jp.nes`), the holes directory
 `GOLF_HOLES_DIR` that `golf-rehydrate` fills from them, the rangefinder render directory
-`GOLF_RANGEFINDER_DIR` it renders into and the yardage books' renders are cached in, the public base URL `GOLF_BASE_URL` (also the OAuth redirect
+`GOLF_RANGEFINDER_DIR` it renders into and the yardage books' renders are cached in, the public base URL `GOLF_BASE_URL` (also the address in link preview cards and the OAuth redirect
 base; the QR URL prefix is assembled into the port and fixed before the first public seed
 ships), the Discord client id and secret `GOLF_DISCORD_CLIENT_ID` and
 `GOLF_DISCORD_CLIENT_SECRET`, the session secret `GOLF_SESSION_SECRET`, the admin users

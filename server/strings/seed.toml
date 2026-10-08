@@ -9,6 +9,20 @@ text = "{words} - NES Open Randomizer"
 note = "line under the magic words h1; same words show on the game's title menu and scorecard; {id} the seed's id, {created} its creation time, shown in the viewer's local time"
 text = "Created: {created}"
 
+# The seed page's link preview card, which a chat such as Discord draws under a pasted link.
+# It is kept by the chat for good, and shows to players who have not played the seed.
+
+[seed.card.title]
+note = "plain: title of the seed page's link preview card; {words} the seed's three magic words"
+text = "Seed: {words}"
+
+[seed.card.description]
+note = "plain: body of the seed page's link preview card; what following the link gets a player; {par} the course's par, {yards} its length in yards"
+text = """
+Par: {par}
+Distance: {yards}
+"""
+
 # Download form. The downloaded file's name is data, not a string (server/views.py).
 
 [seed.download.heading]

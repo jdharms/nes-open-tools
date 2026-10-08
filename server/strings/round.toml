@@ -6,6 +6,21 @@
 note = "plain: browser tab title, a recorded round's page; {words} the seed's three magic words"
 text = "Completed Round - NES Open Randomizer"
 
+# The round page's link preview card, which a chat such as Discord draws under a pasted
+# link. It never receives the score: the card shows to players who have yet to play the seed.
+
+[round.card.title]
+note = "plain: title of a round page's link preview card; {words} the seed's three magic words"
+text = "{words}"
+
+[round.card.player_one]
+note = "plain: body of a round page's link preview card, round played as player 1; {name} the player's Discord display name"
+text = "{name}'s scorecard"
+
+[round.card.player_two]
+note = "plain: body of a round page's link preview card, round played as player 2 on the player's ROM; {name} the ROM owner's Discord display name"
+text = "{name}'s scorecard"
+
 [round.heading_recorded]
 note = "h1, shown only when the visitor arrived from the scan that just recorded this round; every other way in shows round.heading"
 text = "Round successfully recorded!"

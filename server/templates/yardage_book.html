@@ -3,6 +3,9 @@
 
 {% block title %}{{ t_plain("yardage_book.title", words=magic_words|join(" ")) }}{% endblock %}
 
+{% block card_title %}{{ t_plain("yardage_book.card.title", words=magic_words|join(" ")) }}{% endblock %}
+{% block card_description %}{{ t_plain("yardage_book.card.description") }}{% endblock %}
+
 {% block styles %}{{ viewer.styles() }}{% endblock %}
 
 {% block content %}

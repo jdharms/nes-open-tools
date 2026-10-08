@@ -12,6 +12,9 @@
         data-off="{{ t_plain('seed.download.bgm.off') }}">{{ controls.bgm_label(on) }}</span>
 {%- endmacro %}
 {% block title %}{{ t_plain("seed.page_title", words=seed.magic_words|join(" ")) }}{% endblock %}
+{# the course and never its rounds: scores are a spoiler, and a chat keeps a card long after #}
+{% block card_title %}{{ t_plain("seed.card.title", words=seed.magic_words|join(" ")) }}{% endblock %}
+{% block card_description %}{{ t_plain("seed.card.description", par=seed.total_par, yards=seed.total_distance) }}{% endblock %}
 {% block content %}
   <hgroup>
     <h1 class="magic-words">{{ seed.magic_words|join(" ") }}</h1>

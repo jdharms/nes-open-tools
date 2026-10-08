@@ -33,7 +33,13 @@ from .routes.admin_pages import admin_router
 from .routes.round_pages import round_router
 from .routes.seed_pages import seed_router
 from .routes.site import RANGEFINDER_DATA_URL, site_router
-from .static_files import STATIC_DIR, CachedStaticFiles, StaticVersions
+from .static_files import (
+    LOGO,
+    LOGO_SIZE,
+    STATIC_DIR,
+    CachedStaticFiles,
+    StaticVersions,
+)
 from .strings import Strings
 from .timings import EXCEPTION, Sample, TimingSink, flush_periodically
 from .version import site_version as read_site_version
@@ -210,8 +216,13 @@ def create_app(
         finally:
             request_id.reset(token)
 
+    def site_url(path: str) -> str:
+        """`path` as a full URL on the public site, which a preview card's tags must hold."""
+        return config.base_url.rstrip("/") + path
+
     def sign_in_context(request: Request) -> dict:
-        """What base.html's header needs on every page: the player, and where to come back to."""
+        """What base.html needs on every page: the player, where to come back to, and the
+        page's own address for its preview card."""
         path = request.url.path
         here = path + (f"?{request.url.query}" if request.url.query else "")
         return {
@@ -220,6 +231,8 @@ def create_app(
             "return_path": "/" if path.startswith("/auth/") else here,
             "content_pages": pages.listed,
             "site_version": site_version,
+            # without the query: a round's card names its permalink, not `?recorded`
+            "page_url": site_url(path),
         }
 
     templates = Jinja2Templates(
@@ -228,6 +241,9 @@ def create_app(
     templates.env.globals["t"] = strings.html
     templates.env.globals["t_plain"] = strings.plain
     templates.env.globals["static_url"] = StaticVersions(STATIC_DIR).url
+    templates.env.globals["site_url"] = site_url
+    templates.env.globals["logo"] = LOGO
+    templates.env.globals["logo_size"] = LOGO_SIZE
     templates.env.filters["timestamp"] = timestamp
     templates.env.filters["calendar_date"] = calendar_date
     app.mount("/static", CachedStaticFiles(directory=STATIC_DIR), name="static")

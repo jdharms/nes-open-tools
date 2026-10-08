@@ -1,5 +1,6 @@
 {% extends "base.html" %}
 {% block title %}{{ content_page.title }} — {{ t_plain("site.title") }}{% endblock %}
+{% block card_title %}{{ content_page.title }}{% endblock %}
 {% block metadata %}
   {% if not content_page.listed %}
     <meta name="robots" content="noindex, nofollow">

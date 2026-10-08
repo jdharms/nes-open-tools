@@ -6,6 +6,14 @@
 note = "plain: browser tab title, a seed's yardage book; {words} the seed's three magic words"
 text = "Yardage Book | {words}"
 
+[yardage_book.card.title]
+note = "plain: title of a yardage book's link preview card (the box Discord and other chats draw under a pasted link); {words} the seed's three magic words"
+text = "Yardage Book: {words}"
+
+[yardage_book.card.description]
+note = "plain: body of a yardage book's link preview card; what the book is: this seed's 18 holes to measure, each at its pin, with the wind of its tee shot"
+text = "Images of this seed's 18 holes for ease of measuring."
+
 [yardage_book.intro]
 note = "line under the magic words h1; this is the seed's own course: holes in playing order, as the seed changed them, each at its pin for this seed, with the wind of its tee shot"
 text = "Rangefinder/Yardage book for this seed's course"

@@ -14,6 +14,14 @@
 note = "plain: browser tab title; default for pages without their own"
 text = "NES Open Randomizer"
 
+[site.card_name]
+note = "plain: the site's name, shown small above the title of every page's link preview card (the box Discord and other chats draw under a pasted link)"
+text = "NES Open Randomizer"
+
+[site.card_description]
+note = "plain: the body of a link preview card for a page without one of its own (home, ROM setup, the generate form, the rangefinder, the Markdown pages); what the site is, in a sentence or two"
+text = "Play a new 18 holes every time you step onto the course."
+
 [nav.brand]
 note = "site name; left end of the nav bar, every page; also the link to the home page"
 text = "NES Open Tournament Golf Randomizer"
