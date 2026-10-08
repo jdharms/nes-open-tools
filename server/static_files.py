@@ -15,6 +15,10 @@ from starlette.responses import Response
 from starlette.staticfiles import StaticFiles
 from starlette.types import Scope
 
+#: the site's own static files, mounted at `/static`
+STATIC_DIR = Path(__file__).resolve().parent / "static"
+#: the icon a browser asks for at `/favicon.ico` when a response names none
+FAVICON = "favicon.ico"
 #: the query parameter holding a static file's version
 VERSION_PARAM = "v"
 IMMUTABLE = "public, max-age=31536000, immutable"

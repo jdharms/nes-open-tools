@@ -8,6 +8,9 @@
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>{% block title %}{{ t_plain("site.title") }}{% endblock %}</title>
     {% block metadata %}{% endblock %}
+    <link rel="icon" href="{{ static_url('favicon.ico') }}" sizes="any">
+    <link rel="apple-touch-icon"
+          href="{{ static_url('apple-touch-icon.png') }}">
     <link rel="stylesheet" href="{{ static_url('pico.green.min.css') }}">
     <link rel="stylesheet" href="{{ static_url('site.css') }}">
     {% block styles %}{% endblock %}

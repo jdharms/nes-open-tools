@@ -1,14 +1,15 @@
-"""The pages that stand alone: home, ROM setup, the rangefinder, the Markdown pages, and
-the health check."""
+"""The pages that stand alone: home, ROM setup, the rangefinder, the Markdown pages, the
+favicon and the health check."""
 
 from fastapi import APIRouter, Request
-from fastapi.responses import HTMLResponse
+from fastapi.responses import FileResponse, HTMLResponse
 from fastapi.templating import Jinja2Templates
 
 from golf.randomizer.roms import VANILLA_ROMS
 from golf.rendering.rangefinder import METADATA
 
 from ..pages import ContentPage, PageCatalog
+from ..static_files import FAVICON, REVALIDATE, STATIC_DIR
 from ..strings import Strings
 
 #: the catalog prefix whose strings the ROM setup page embeds for rom.js
@@ -70,6 +71,16 @@ def site_router(templates: Jinja2Templates, pages: PageCatalog) -> APIRouter:
                 "metadata_url": f"{RANGEFINDER_DATA_URL}/{METADATA}",
                 "rangefinder_strings": strings.for_script(RANGEFINDER_SCRIPT_STRINGS),
             },
+        )
+
+    # Pages link the icon by its versioned static URL. This is for what cannot: a browser
+    # showing a manifest or an image, and a crawler that asks without reading the page.
+    @router.get("/favicon.ico")
+    def favicon():
+        return FileResponse(
+            STATIC_DIR / FAVICON,
+            media_type="image/x-icon",
+            headers={"Cache-Control": REVALIDATE},
         )
 
     # UptimeRobot's free plan checks with HEAD, which a GET route would refuse with a 405.

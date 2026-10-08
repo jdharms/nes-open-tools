@@ -22,7 +22,7 @@ in this package.
   function that takes the app's `templates` and builds the `APIRouter` `create_app`
   includes:
   - `server/routes/site.py` (`site_router`): `/`, `/rom`, `/rangefinder`, the Markdown
-    pages under `/pages/` and `/healthz`
+    pages under `/pages/`, `/favicon.ico` and `/healthz`
   - `server/routes/seed_pages.py` (`seed_router`): `/generate` and `/h/<id>`, with its
     manifest, its IPS download and its yardage book
   - `server/routes/round_pages.py` (`round_router`): `/s/<scan>` and `/r/<id>`
@@ -180,6 +180,11 @@ in this package.
   (`Config.rangefinder_dir`), is served `no-cache`, so a browser revalidates it. A
   yardage book's renders are versioned: their paths hold a content hash and their URLs
   the renderer's version.
+- `server/static/logo.png` is the site's logo as drawn: 200 by 200 pixel art at five
+  times its size, on a transparent ground. `favicon.ico` (16, 32 and 48 pixels) and
+  `apple-touch-icon.png` (180) beside it are Lanczos reductions of it; make them again
+  from the logo if it changes. `base.html` links both on every page, and `/favicon.ico`
+  serves the first to whatever asks without reading a page.
 - The rangefinder page and a seed's yardage book share one viewer: the macros in
   `server/templates/_rangefinder.html` and the modules in `server/static/rangefinder/`.
   A change to either shows on both pages.

@@ -33,14 +33,13 @@ from .routes.admin_pages import admin_router
 from .routes.round_pages import round_router
 from .routes.seed_pages import seed_router
 from .routes.site import RANGEFINDER_DATA_URL, site_router
-from .static_files import CachedStaticFiles, StaticVersions
+from .static_files import STATIC_DIR, CachedStaticFiles, StaticVersions
 from .strings import Strings
 from .timings import EXCEPTION, Sample, TimingSink, flush_periodically
 from .version import site_version as read_site_version
 from .views import calendar_date, timestamp
 
 HERE = Path(__file__).resolve().parent
-STATIC_DIR = HERE / "static"
 TEMPLATES_DIR = HERE / "templates"
 
 #: the route of a request that matched nothing, which would otherwise be every 404 path

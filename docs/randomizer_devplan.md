@@ -246,6 +246,7 @@ qr_seed_id INTEGER NOT NULL UNIQUE CHECK (qr_seed_id BETWEEN 1 AND 8392993658683
 | `GET /admin/...` | Counts, seeds, rounds (flagged filter), users, voided rounds, admin activity, and each seed, round and user. Admins only |
 | `POST /admin/rounds/<id>/flag`, `.../unflag`, `.../void`, `.../restore` | Flag with a note, clear the flag, void with a note, restore into an empty slot. `<id>` is the round's `public_id` |
 | `POST /admin/seeds/<id>/withdraw`, `.../restore` | Refuse or restore downloads without changing the seed's manifest, unfinished IPS, entries or rounds; withdrawal takes an admin-only note |
+| `GET /favicon.ico` | The site's icon, for a browser or crawler that asks without reading a page's `<link>` |
 | `GET /healthz`, `HEAD /healthz` | For the reverse proxy and the uptime monitor, which checks with HEAD |
 
 Everything is a form or a link. The only fetches from JavaScript are the IPS and the

@@ -81,7 +81,7 @@ def test_pages_link_versioned_static_files():
     with TestClient(create_app(Config(database=":memory:"))) as client:
         page = client.get("/rom").text
         links = re.findall(r'(?:href|src)="(/static/[^"]+)"', page)
-        assert len(links) == 5
+        assert len(links) == 7
         for link in links:
             assert re.search(r"\?v=[0-9a-f]{12}$", link), link
             response = client.get(link)

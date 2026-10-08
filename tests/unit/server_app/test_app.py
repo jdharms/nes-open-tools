@@ -76,6 +76,9 @@ def test_the_footer_shows_the_site_version(fake_builder):
         "/static/romstore.js",
         "/static/rom.js",
         "/static/download.js",
+        "/static/favicon.ico",
+        "/static/apple-touch-icon.png",
+        "/static/logo.png",
     ],
 )
 def test_static_files_are_served(client, path):
@@ -88,6 +91,23 @@ def test_pages_use_the_vendored_and_site_stylesheets(client):
     page = client.get("/").text
     assert 'href="/static/pico.green.min.css?v=' in page
     assert 'href="/static/site.css?v=' in page
+
+
+def test_pages_link_the_site_icons(client):
+    page = client.get("/").text
+    assert re.search(
+        r'<link rel="icon" href="/static/favicon\.ico\?v=[0-9a-f]{12}"', page
+    )
+    assert re.search(r'href="/static/apple-touch-icon\.png\?v=[0-9a-f]{12}"', page)
+
+
+def test_the_favicon_is_served_at_the_root(client):
+    """For a browser showing a manifest, or a crawler that reads no page."""
+    response = client.get("/favicon.ico")
+    assert response.status_code == 200
+    assert response.headers["content-type"] == "image/x-icon"
+    assert response.headers["cache-control"] == "no-cache"
+    assert response.content == client.get("/static/favicon.ico").content
 
 
 def test_api_docs_are_not_exposed(client):
