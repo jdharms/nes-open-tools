@@ -58,7 +58,10 @@ With the hole list trimmed to one of its 18 slots:
 
 After checking the build and finish-ABI versions, an unfinished build reads only `course`,
 and nothing in `course` needs interpreting: hole ids rather than filters, a music slug
-rather than "random", wind seeds rather than the string they were derived from. Loading
+rather than "random", wind seeds rather than the string they were derived from. A slot's
+`transforms` are the exception. They name code whose output is fixed only within one
+build version (ADR 0015), so the site stores each transformed hole beside the seed
+(ADR 0021) rather than working it out again. Loading
 is strict: a missing or unknown field is an error. `golf/randomizer/build.py` turns
 `course` into the seed's unfinished ROM, and finishes that ROM per player
 (`docs/randomizer_devplan.md`).

@@ -11,6 +11,7 @@ SCHEMA_TABLES = {
     "admin_actions",
     "download_settings",
     "entries",
+    "hole_data",
     "round_holes",
     "rounds",
     "seed_holes",
@@ -283,7 +284,7 @@ def test_seed_holes_need_their_seed(db):
     db.migrate()
     with pytest.raises(sqlite3.IntegrityError), db.transaction() as conn:
         conn.execute(
-            "INSERT INTO seed_holes VALUES ('0000000001', 1, 'nes_us/01', '[]', 4, 1, 0, 0, 0)"
+            "INSERT INTO seed_holes VALUES ('0000000001', 1, 'nes_us/01', '[]', 4, 1, 0, 0, 0, NULL)"
         )
 
 
@@ -292,11 +293,11 @@ def test_seed_hole_positions_run_1_to_18(db):
     insert_seed(db)
     with db.transaction() as conn:
         conn.execute(
-            "INSERT INTO seed_holes VALUES ('0000000001', 18, 'nes_us/18', '[]', 4, 1, 0, 0, 0)"
+            "INSERT INTO seed_holes VALUES ('0000000001', 18, 'nes_us/18', '[]', 4, 1, 0, 0, 0, NULL)"
         )
     with pytest.raises(sqlite3.IntegrityError), db.transaction() as conn:
         conn.execute(
-            "INSERT INTO seed_holes VALUES ('0000000001', 19, 'nes_us/01', '[]', 4, 1, 0, 0, 0)"
+            "INSERT INTO seed_holes VALUES ('0000000001', 19, 'nes_us/01', '[]', 4, 1, 0, 0, 0, NULL)"
         )
 
 

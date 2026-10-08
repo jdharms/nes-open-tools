@@ -8,6 +8,9 @@ export class UIController {
     this.courseSelect = document.getElementById("course-select");
     this.holeSelect = document.getElementById("hole-select");
     this.holeInfo = document.getElementById("hole-info");
+    // only a yardage book has these, and only its holes carry a wind
+    this.holeWindArrow = document.getElementById("hole-wind-arrow");
+    this.holeWindText = document.getElementById("hole-wind-text");
     this.distanceDisplay = document.getElementById("distance-display");
     this.viewer = document.querySelector(".rangefinder-viewer");
     this.holeImage = document.getElementById("hole-image");
@@ -81,9 +84,17 @@ export class UIController {
       this.currentHole.par,
       this.currentHole.distance,
     );
+    this.showWind(hole.wind);
     this.updateDisplay();
     this.locationChanged(courseId, holeNumber);
     return true;
+  }
+
+  showWind(wind) {
+    if (!wind || !this.holeWindArrow) return;
+    // A direction is an angle byte, clockwise from straight up the map.
+    this.holeWindArrow.style.rotate = `${(wind.direction * 360) / 256}deg`;
+    this.holeWindText.textContent = this.text.teeWind(wind.speed, wind.compass);
   }
 
   populateHoles(courseId) {

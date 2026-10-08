@@ -226,4 +226,17 @@ MIGRATIONS: list[str] = [
     DROP TABLE voided_rounds_before_v5;
     CREATE INDEX voided_rounds_by_entry ON voided_rounds (entry_id, slot);
     """,
+    # 6: a seed's transformed holes, as built (ADR 0021). `data` is the zlib-compressed
+    # canonical JSON its content hash is taken over, and a hole two seeds share is stored
+    # once. A slot whose `data_hash` is NULL has no transforms, and its hole is the
+    # catalog's.
+    """
+    CREATE TABLE hole_data (
+        content_hash TEXT PRIMARY KEY CHECK (length(content_hash) = 64),
+        data BLOB NOT NULL
+    );
+
+    ALTER TABLE seed_holes
+        ADD COLUMN data_hash TEXT REFERENCES hole_data (content_hash);
+    """,
 ]

@@ -1,14 +1,15 @@
-"""Generating a seed and what a seed serves: `/generate` and `/h/<id>`, with its manifest
-and its IPS download."""
+"""Generating a seed and what a seed serves: `/generate` and `/h/<id>`, with its manifest,
+its IPS download and its yardage book."""
 
 import logging
 
 from fastapi import APIRouter, Request
-from fastapi.responses import HTMLResponse, RedirectResponse, Response
+from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse, Response
 from fastapi.templating import Jinja2Templates
 from starlette.concurrency import run_in_threadpool
 
 from golf.randomizer.build import credentials_for
+from golf.randomizer.catalog import CatalogError
 from golf.randomizer.generate import GenerationError
 from golf.randomizer.manifest import required_roms
 
@@ -33,6 +34,7 @@ from ..seeds import insert_seed, load_seed, load_unfinished_ips
 from ..strings import Strings
 from ..timings import OK, Sample
 from ..views import download_stem, generate_options, seed_view
+from ..yardage_book import yardage_book
 from .common import (
     json_refusal,
     not_found,
@@ -40,6 +42,7 @@ from .common import (
     saved_settings,
     set_download_cookie,
 )
+from .site import RANGEFINDER_DATA_URL, RANGEFINDER_SCRIPT_STRINGS
 
 #: the catalog prefix whose strings the seed page embeds for download.js
 DOWNLOAD_SCRIPT_STRINGS = "seed.download.status"
@@ -121,9 +124,15 @@ def seed_router(templates: Jinja2Templates) -> APIRouter:
         def create() -> str:
             with sample.phase("generate"):
                 manifest = seed_builder.generate(settings)
-            unfinished_ips = seed_builder.build(manifest, sample)
+            built = seed_builder.build(manifest, sample)
             with sample.phase("insert"):
-                return insert_seed(db, manifest, unfinished_ips, creator_id=user_id)
+                return insert_seed(
+                    db,
+                    manifest,
+                    built.unfinished_ips,
+                    creator_id=user_id,
+                    holes=built.holes,
+                )
 
         try:
             seed_id = await run_in_threadpool(create)
@@ -147,6 +156,49 @@ def seed_router(templates: Jinja2Templates) -> APIRouter:
         if row is None:
             raise not_found()
         return Response(row.manifest_json, media_type="application/json")
+
+    # The book stays up for a withdrawn seed, as its page and manifest do.
+    @router.get("/h/{seed_id}/book.json")
+    def seed_book_metadata(request: Request, seed_id: str):
+        db: Database = request.app.state.db
+        row = load_seed(db, seed_id)
+        if row is None:
+            raise not_found()
+        seed_builder: SeedBuilder = request.app.state.builder
+        sample: Sample = request.state.sample
+        try:
+            with sample.phase("render"):
+                book = yardage_book(
+                    db,
+                    row,
+                    seed_builder.catalog,
+                    seed_builder.store,
+                    request.app.state.renders,
+                    RANGEFINDER_DATA_URL,
+                )
+        except CatalogError as problem:
+            log.error("cannot show the yardage book of %s: %s", seed_id, problem)
+            outcome(request, UNAVAILABLE)
+            return json_refusal(503, UNAVAILABLE)
+        return JSONResponse(book, headers={"Cache-Control": "no-cache"})
+
+    @router.get("/h/{seed_id}/book", response_class=HTMLResponse)
+    def seed_book(request: Request, seed_id: str):
+        row = load_seed(request.app.state.db, seed_id)
+        if row is None:
+            raise not_found()
+        strings: Strings = request.app.state.strings
+        return templates.TemplateResponse(
+            request,
+            "yardage_book.html",
+            {
+                "page": "seed",
+                "seed_id": row.id,
+                "magic_words": row.manifest.course.magic_words,
+                "metadata_url": f"/h/{row.id}/book.json",
+                "rangefinder_strings": strings.for_script(RANGEFINDER_SCRIPT_STRINGS),
+            },
+        )
 
     @router.get("/h/{seed_id}", response_class=HTMLResponse)
     def seed_page(request: Request, seed_id: str):

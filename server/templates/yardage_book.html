@@ -1,0 +1,18 @@
+{% extends "base.html" %}
+{% import "_rangefinder.html" as viewer %}
+
+{% block title %}{{ t_plain("yardage_book.title", words=magic_words|join(" ")) }}{% endblock %}
+
+{% block styles %}{{ viewer.styles() }}{% endblock %}
+
+{% block content %}
+  {% call viewer.viewer(metadata_url, book=true) %}
+    <hgroup>
+      <h1 class="magic-words">{{ magic_words|join(" ") }}</h1>
+      <p>{{ t("yardage_book.intro") }}</p>
+    </hgroup>
+    <p><a href="/h/{{ seed_id }}">{{ t("yardage_book.seed_link") }}</a></p>
+  {% endcall %}
+{% endblock %}
+
+{% block scripts %}{{ viewer.scripts(rangefinder_strings) }}{% endblock %}

@@ -75,6 +75,10 @@ but a release that does not retain their buildchain refuses to rebuild them rath
 silently using the current one. It may still finish their stored artifact through a
 supported ABI; see `docs/patch_stack.md`.
 
+The one thing upstream of the IPS the site keeps beside it is each transformed hole, as
+built, in `hole_data` (ADR 0021): a later release's transforms may give another hole
+(ADR 0015), and the seed's yardage book shows the one in the ROM (`docs/yardage_book.md`).
+
 ### ROM gating
 
 The ROM never leaves the browser. The ROM setup page reads the file, hashes it with
@@ -133,7 +137,8 @@ cannot submit.
 |---|---|
 | `users` | Internal id, Discord id (`dev:<name>` for bypass users), Discord `username` and `global_name` (pages show `global_name`, falling back to `username`), avatar hash, a random unique nonzero uint32 `player_id` drawn at first sign-in, created_at, last_login. Names and avatar are refreshed on every sign-in |
 | `seeds` | A 10-character base62 id for URLs and the same value as an integer, `qr_seed_id`, both unique; manifest JSON, generator, unfinished-build, finish-ABI and catalog versions, curation stamp, the immutable unfinished IPS blob, nullable creator, created_at and nullable withdrawn_at |
-| `seed_holes` | seed, position 1-18, catalog hole id, transforms, par, wind seed, pin index, wind direction anchor, wind speed anchor. Pure denormalization of the manifest for SQL stats; a migration can always backfill it |
+| `seed_holes` | seed, position 1-18, catalog hole id, transforms, par, wind seed, pin index, wind direction anchor, wind speed anchor, and `data_hash`, the `hole_data` row holding the hole when it has transforms. All but `data_hash` is denormalization of the manifest for SQL stats, which a migration can always backfill; `data_hash` and its row are not, since only the seed's build could make them |
+| `hole_data` | A transformed hole as its seed's build made it: its content hash, and the zlib-compressed canonical JSON the hash is taken over. Written once, with the first seed that holds it, and shared by any other (ADR 0021) |
 | `entries` | One per (seed, user), unique. The player's choices at their latest download (name, clubs), one MAC key per slot, created_at, updated_at |
 | `download_settings` | One per user: the player's saved download settings as a JSON `SavedSettings` record, and updated_at. Written by a signed-in download under the saving rule and by `/me`; deleted by "forget my settings" (`docs/planning/download_settings.md`) |
 | `rounds` | A scan the server accepted: a unique `public_id`, the base62 id of its `/r/<id>` permalink; entry, slot, raw payload (36 bytes for QR protocol version 1, 39 for version 2), total strokes, total putts, penalty strokes (NULL for a version 1 round, which did not record them), received_at, flagged, with an admin-only flag note. Unique on (entry, slot), which is the first-submission rule |
@@ -229,6 +234,8 @@ qr_seed_id INTEGER NOT NULL UNIQUE CHECK (qr_seed_id BETWEEN 1 AND 8392993658683
 | `GET /generate`, `POST /generate` | Settings form: par target, source ROMs, music or random, and club rules in a collapsed section of their own, open when a returned form has them set. The mercy point and tag filters take their defaults. POST redirects to the seed page |
 | `GET /h/<id>` | Seed page: the magic words, hole list with source, par and yards, totals, music, settings, required ROMs, recorded rounds (collapsed until the viewer has recorded one of their own), and either the download form or a withdrawn notice |
 | `GET /h/<id>.json` | The manifest |
+| `GET /h/<id>/book` | The seed's yardage book: the rangefinder for its 18 holes as built, each at the seed's pin, with its tee-shot wind. Stays up for a withdrawn seed (`docs/yardage_book.md`) |
+| `GET /h/<id>/book.json` | The book's rangefinder metadata, uncached. Renders whatever images its holes lack before answering, and answers JSON 503 when a hole's data is not in the store |
 | `POST /h/<id>/patch.ips` | Name, clubs, BGM, swing, putt and spin, and ROM hashes in; the finished IPS out, with the saved settings in the `golf_download` cookie and, signed in, on the account. Signed in, upserts the entry and finishes with credentials; signed out, finishes as a guest. A withdrawn seed answers JSON 410 before creating an entry or finishing. The page's script intercepts the form submit, fetches this, patches the ROM from IndexedDB and triggers the download |
 | `GET /s/<52 or 48 chars>` | QR submission, protocol version 2 or 1: decode, verify MAC, record, then 303 to the round's permalink, with `?recorded` for the scan that recorded it. Uncached. A rejection has no round to point at, so it renders here |
 | `GET /r/<id>` | A round's permalink: its scorecard, or 410 and a page of its own once an admin has voided it. An ordinary cacheable page, linked from the seed page, `/me` and a scan |
@@ -241,13 +248,14 @@ qr_seed_id INTEGER NOT NULL UNIQUE CHECK (qr_seed_id BETWEEN 1 AND 8392993658683
 | `POST /admin/seeds/<id>/withdraw`, `.../restore` | Refuse or restore downloads without changing the seed's manifest, unfinished IPS, entries or rounds; withdrawal takes an admin-only note |
 | `GET /healthz`, `HEAD /healthz` | For the reverse proxy and the uptime monitor, which checks with HEAD |
 
-Everything is a form or a link. The only fetch from JavaScript is the IPS.
+Everything is a form or a link. The only fetches from JavaScript are the IPS and the
+rangefinder's metadata.
 
 **Configuration** from the environment (`server/config.py`): the database path
 `GOLF_DATABASE`, the server's vanilla ROM directory `GOLF_ROM_DIR` holding the ROMs under
 the file names in `golf/randomizer/roms.py` (`nes_open_us.nes`, `mario_open_jp.nes`), the holes directory
 `GOLF_HOLES_DIR` that `golf-rehydrate` fills from them, the rangefinder render directory
-`GOLF_RANGEFINDER_DIR` it renders into, the public base URL `GOLF_BASE_URL` (also the OAuth redirect
+`GOLF_RANGEFINDER_DIR` it renders into and the yardage books' renders are cached in, the public base URL `GOLF_BASE_URL` (also the OAuth redirect
 base; the QR URL prefix is assembled into the port and fixed before the first public seed
 ships), the Discord client id and secret `GOLF_DISCORD_CLIENT_ID` and
 `GOLF_DISCORD_CLIENT_SECRET`, the session secret `GOLF_SESSION_SECRET`, the admin users
@@ -397,7 +405,8 @@ says so, a ROM playtested. Items 1 to 6 build the library; 7 onward build the si
     checks their SHA-1s, dumps them through `golf/core/course_dump.py` into a scratch
     directory, verifies every live catalog entry sourced from them, and only then moves
     the hole files into `GOLF_HOLES_DIR`; it then renders the rangefinder through
-    `golf/rendering/rangefinder.py`. The US ROM is required and the JP ROM optional.
+    `golf/rendering/rangefinder.py`, which records its `RENDER_VERSION` in the metadata
+    for `--check` to compare and clears the yardage books' renders. The US ROM is required and the JP ROM optional.
     `--check` verifies without writing. The course JSON and rangefinder renders are out of
     the repository, with `.gitkeep` markers holding the course directories; `golf-site`
     refuses to start until `check_site_data` passes. Tests read vanilla data through the

@@ -6,7 +6,7 @@ import pytest
 
 from golf.randomizer.catalog import Catalog
 from golf.randomizer.rehydrate import RehydrateError, check_site_data
-from golf.rendering.rangefinder import METADATA
+from golf.rendering.rangefinder import METADATA, RENDER_VERSION
 from tests.synthetic_holes import write_courses
 
 
@@ -21,8 +21,13 @@ def site(tmp_path):
     return roms, holes, rangefinder
 
 
-def render_metadata(rangefinder, courses: dict[str, int]) -> None:
-    metadata = {"courses": {c: {"holes": [{}] * n} for c, n in courses.items()}}
+def render_metadata(
+    rangefinder, courses: dict[str, int], version: int | None = RENDER_VERSION
+) -> None:
+    metadata = {
+        "render_version": version,
+        "courses": {c: {"holes": [{}] * n} for c, n in courses.items()},
+    }
     (rangefinder / METADATA).write_text(json.dumps(metadata))
 
 
@@ -47,6 +52,9 @@ def test_refuses_a_missing_or_stale_rangefinder(site):
     write_courses(holes, "us")
     render_metadata(rangefinder, {"japan": 18})
     with pytest.raises(RehydrateError, match="rendered from other courses"):
+        check_site_data(Catalog(0), roms, holes, rangefinder)
+    render_metadata(rangefinder, {"us": 18}, version=RENDER_VERSION - 1)
+    with pytest.raises(RehydrateError, match="renderer version"):
         check_site_data(Catalog(0), roms, holes, rangefinder)
 
 

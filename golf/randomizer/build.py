@@ -71,6 +71,7 @@ from golf.core.patches.sram_defaults import (
     player_name_bytes,
 )
 from golf.core.rom_reader import RomReader
+from golf.formats.hole_data import HoleData
 from golf.qr import payload
 
 from .catalog import JP_ROM, REPO_ROOT, US_ROM, Catalog, HoleStore
@@ -276,6 +277,8 @@ class UnfinishedBuild:
     #: step name -> the [start, end) PRG offset ranges it wrote
     regions: dict[str, list[tuple[int, int]]]
     course_stats: CourseWriteStats
+    #: the 18 holes as built, transforms applied; the site keeps the transformed ones
+    holes: tuple[HoleData, ...]
 
 
 def _check_vanilla(vanilla: bytes) -> None:
@@ -309,6 +312,7 @@ def build_unfinished(
         ips=ips.diff(vanilla, build.rom),
         regions=build.regions,
         course_stats=course.stats,
+        holes=tuple(course.holes),
     )
 
 

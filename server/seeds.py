@@ -1,18 +1,27 @@
-"""Seed identity and the seed tables: the only code that writes `seeds` and `seed_holes`.
+"""Seed identity and the seed tables: the only code that writes `seeds`, `seed_holes` and `hole_data`.
 
 A seed's `qr_seed_id` is drawn uniformly from 1 to 62**10 - 1, and its URL id is that
 integer in base62 (`server/ids.py`), so either converts to the other. See
 docs/randomizer_devplan.md, "Generating seed ids".
+
+A slot with transforms has its hole, as built, stored in `hole_data` under its content
+hash (ADR 0021): a later release's transforms may not give the same hole
+(ADR 0015), and the yardage book has to show the one in the ROM.
 """
 
+import hashlib
 import json
 import secrets
 import sqlite3
-from collections.abc import Callable
+import zlib
+from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 from datetime import UTC, datetime
+from typing import Any
 
 from golf.core.rng import predict_hole
+from golf.formats.hole_data import HoleData
+from golf.randomizer.catalog import canonical_json
 from golf.randomizer.manifest import Manifest
 
 from . import audit
@@ -79,8 +88,42 @@ def manifest_text(manifest: Manifest) -> str:
     return json.dumps(manifest.to_json(), indent=2) + "\n"
 
 
-def hole_rows(seed_id: str, manifest: Manifest) -> list[tuple]:
-    """The seed's `seed_holes` rows: each slot with the pin its wind seed gives and its wind anchors."""
+class MissingHolesError(ValueError):
+    """A manifest with transforms was stored without the holes its build made."""
+
+
+def stored_holes(
+    manifest: Manifest, holes: Sequence[HoleData] | None
+) -> list[tuple[str, bytes] | None]:
+    """For each slot, its hole's `hole_data` row if it has transforms, else None.
+
+    `holes` are the manifest's 18 as built, in order. Raises MissingHolesError when a
+    slot has transforms and there are none.
+    """
+    slots = manifest.course.holes
+    stored: list[tuple[str, bytes] | None] = []
+    for index, slot in enumerate(slots):
+        if not slot.transforms:
+            stored.append(None)
+            continue
+        if holes is None or len(holes) != len(slots):
+            raise MissingHolesError(
+                f"hole {index + 1} ({slot.id}) has transforms, so the seed needs "
+                f"the {len(slots)} holes its build made"
+            )
+        data = canonical_json(holes[index])
+        stored.append((hashlib.sha256(data).hexdigest(), zlib.compress(data, 9)))
+    return stored
+
+
+def hole_rows(
+    seed_id: str, manifest: Manifest, data_hashes: Sequence[str | None] | None = None
+) -> list[tuple]:
+    """The seed's `seed_holes` rows: each slot with the pin its wind seed gives and its wind anchors.
+
+    `data_hashes` has, for each slot, the `hole_data` row holding its hole, or None for a
+    slot with no transforms.
+    """
     rows = []
     for position, slot in enumerate(manifest.course.holes, start=1):
         forecast = predict_hole(slot.wind_seed, swings=0)
@@ -95,6 +138,7 @@ def hole_rows(seed_id: str, manifest: Manifest) -> list[tuple]:
                 forecast.pin_index,
                 slot.wind_direction,
                 slot.wind_speed,
+                None if data_hashes is None else data_hashes[position - 1],
             )
         )
     return rows
@@ -114,13 +158,18 @@ def insert_seed(
     creator_id: int | None = None,
     now: str | None = None,
     draw: Callable[[], int] = new_qr_seed_id,
+    holes: Sequence[HoleData] | None = None,
 ) -> str:
     """Store a seed and its holes in one transaction, and return its URL id.
 
-    A drawn id that is already taken is drawn again, up to INSERT_ATTEMPTS times.
+    `holes` are the 18 the build made (`UnfinishedBuild.holes`); the ones with transforms
+    are stored, and a manifest with none needs no holes. A drawn id that is already taken
+    is drawn again, up to INSERT_ATTEMPTS times.
     """
     created_at = now if now is not None else utc_now()
     text = manifest_text(manifest)
+    stored = stored_holes(manifest, holes)
+    data_hashes = [None if hole is None else hole[0] for hole in stored]
     for _ in range(INSERT_ATTEMPTS):
         qr_seed_id = draw()
         seed_id = encode_seed_id(qr_seed_id)
@@ -148,8 +197,12 @@ def insert_seed(
                     ),
                 )
                 conn.executemany(
-                    "INSERT INTO seed_holes VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
-                    hole_rows(seed_id, manifest),
+                    "INSERT OR IGNORE INTO hole_data VALUES (?, ?)",
+                    [hole for hole in stored if hole is not None],
+                )
+                conn.executemany(
+                    "INSERT INTO seed_holes VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                    hole_rows(seed_id, manifest, data_hashes),
                 )
         except sqlite3.IntegrityError as problem:
             if _is_id_collision(problem):
@@ -216,6 +269,55 @@ def load_seed(db: Database, seed_id: str) -> SeedRow | None:
         created_at=row["created_at"],
         withdrawn_at=row["withdrawn_at"],
     )
+
+
+@dataclass(frozen=True)
+class SeedHole:
+    """A seed's hole as `seed_holes` has it, for showing rather than building."""
+
+    position: int
+    hole_id: str
+    par: int
+    pin_index: int
+    #: the `hole_data` row holding the hole, None when it is the catalog's
+    data_hash: str | None
+
+
+def load_seed_holes(db: Database, seed_id: str) -> list[SeedHole]:
+    """The seed's holes in playing order; none when there is no such seed."""
+    with db.transaction() as conn:
+        rows = conn.execute(
+            """
+            SELECT position, hole_id, par, pin_index, data_hash
+            FROM seed_holes WHERE seed_id = ? ORDER BY position
+            """,
+            (seed_id,),
+        ).fetchall()
+    return [
+        SeedHole(
+            position=row["position"],
+            hole_id=row["hole_id"],
+            par=row["par"],
+            pin_index=row["pin_index"],
+            data_hash=row["data_hash"],
+        )
+        for row in rows
+    ]
+
+
+def load_hole_data(db: Database, content_hash: str) -> dict[str, Any]:
+    """A stored hole, as the dict its canonical JSON holds, checked against its hash."""
+    with db.transaction() as conn:
+        row = conn.execute(
+            "SELECT data FROM hole_data WHERE content_hash = ?", (content_hash,)
+        ).fetchone()
+    if row is None:
+        raise LookupError(f"no stored hole {content_hash}")
+    data = zlib.decompress(row["data"])
+    actual = hashlib.sha256(data).hexdigest()
+    if actual != content_hash:
+        raise RuntimeError(f"stored hole {content_hash} has content hash {actual}")
+    return json.loads(data)
 
 
 def load_unfinished_ips(db: Database, seed_id: str) -> bytes | None:

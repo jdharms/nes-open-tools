@@ -1,11 +1,14 @@
 """Seed ids and the seed tables: base62 ids, inserting a seed with its holes, loading it back."""
 
+import hashlib
 import json
+import zlib
+from dataclasses import replace
 
 import pytest
 
 from golf.core.rng import predict_hole
-from golf.randomizer.catalog import Catalog
+from golf.randomizer.catalog import Catalog, canonical_json, content_hash
 from golf.randomizer.curation import CurationSnapshot
 from golf.randomizer.generate import generate
 from golf.randomizer.manifest import Manifest, Settings
@@ -14,6 +17,7 @@ from server.seeds import (
     ID_LENGTH,
     INSERT_ATTEMPTS,
     MAX_QR_SEED_ID,
+    MissingHolesError,
     SeedAlreadyWithdrawnError,
     SeedIdError,
     SeedIdExhaustedError,
@@ -22,7 +26,9 @@ from server.seeds import (
     decode_seed_id,
     encode_seed_id,
     insert_seed,
+    load_hole_data,
     load_seed,
+    load_seed_holes,
     load_unfinished_ips,
     manifest_text,
     new_qr_seed_id,
@@ -30,6 +36,7 @@ from server.seeds import (
     withdraw_seed,
 )
 from server.users import sign_in
+from tests.synthetic_holes import synthetic_hole
 
 IPS = b"PATCH\x00\x00\x10\x00\x01\xeaEOF"
 
@@ -276,3 +283,85 @@ def test_invalid_withdrawal_transitions_write_no_audit_rows(db, manifest):
         withdraw_seed(db, "0000000001", user.id)
     with db.transaction() as conn:
         assert conn.execute("SELECT count(*) FROM admin_actions").fetchone()[0] == 1
+
+
+# -- Transformed holes ------------------------------------------------------------------------
+
+
+def with_transforms(manifest: Manifest, transforms: dict[int, tuple[str, ...]]):
+    """`manifest` with the transforms given for each hole index."""
+    slots = tuple(
+        replace(slot, transforms=transforms.get(index, ()))
+        for index, slot in enumerate(manifest.course.holes)
+    )
+    return replace(manifest, course=replace(manifest.course, holes=slots))
+
+
+def stored_hashes(db: Database) -> set[str]:
+    with db.transaction() as conn:
+        return {row[0] for row in conn.execute("SELECT content_hash FROM hole_data")}
+
+
+#: what a build would hand over; any 18 holes do, since storing does not transform
+HOLES = [synthetic_hole(number) for number in range(1, 19)]
+
+
+def test_a_seed_without_transforms_stores_no_holes(db, manifest):
+    seed_id = insert_seed(db, manifest, IPS, holes=HOLES)
+    assert stored_hashes(db) == set()
+    holes = load_seed_holes(db, seed_id)
+    assert [hole.position for hole in holes] == list(range(1, 19))
+    assert all(hole.data_hash is None for hole in holes)
+    for hole, slot in zip(holes, manifest.course.holes, strict=True):
+        assert (hole.hole_id, hole.par) == (str(slot.id), slot.par)
+        assert hole.pin_index == predict_hole(slot.wind_seed).pin_index
+
+
+def test_a_transformed_hole_is_stored_as_built(db, manifest):
+    changed = with_transforms(manifest, {0: ("mirror@1",), 4: ("hazards@1:7",)})
+    seed_id = insert_seed(db, changed, IPS, holes=HOLES)
+    holes = load_seed_holes(db, seed_id)
+    assert [hole.position for hole in holes if hole.data_hash] == [1, 5]
+    assert holes[0].data_hash == content_hash(HOLES[0])
+    assert holes[4].data_hash == content_hash(HOLES[4])
+    assert stored_hashes(db) == {holes[0].data_hash, holes[4].data_hash}
+    assert load_hole_data(db, content_hash(HOLES[4])) == json.loads(
+        canonical_json(HOLES[4])
+    )
+
+
+def test_a_hole_two_seeds_share_is_stored_once(db, manifest):
+    changed = with_transforms(manifest, {0: ("mirror@1",)})
+    first = insert_seed(db, changed, IPS, holes=HOLES)
+    second = insert_seed(db, changed, IPS, holes=HOLES)
+    assert len(stored_hashes(db)) == 1
+    assert (
+        load_seed_holes(db, first)[0].data_hash
+        == load_seed_holes(db, second)[0].data_hash
+    )
+
+
+@pytest.mark.parametrize("holes", [None, HOLES[:17]])
+def test_transforms_need_the_holes_the_build_made(db, manifest, holes):
+    changed = with_transforms(manifest, {17: ("mirror@1",)})
+    with pytest.raises(MissingHolesError, match="hole 18"):
+        insert_seed(db, changed, IPS, holes=holes)
+    assert counts(db) == (0, 0)
+
+
+def test_a_stored_hole_is_checked_against_its_hash(db, manifest):
+    changed = with_transforms(manifest, {0: ("mirror@1",)})
+    seed_id = insert_seed(db, changed, IPS, holes=HOLES)
+    digest = load_seed_holes(db, seed_id)[0].data_hash
+    assert digest is not None
+    other = zlib.compress(canonical_json(HOLES[1]))
+    with db.transaction() as conn:
+        conn.execute("UPDATE hole_data SET data = ?", (other,))
+    with pytest.raises(RuntimeError, match="has content hash"):
+        load_hole_data(db, digest)
+    with pytest.raises(LookupError, match="no stored hole"):
+        load_hole_data(db, hashlib.sha256(b"").hexdigest())
+
+
+def test_a_seed_that_does_not_exist_has_no_holes(db):
+    assert load_seed_holes(db, "0000000001") == []

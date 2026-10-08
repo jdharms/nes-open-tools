@@ -9,9 +9,11 @@ can stand one in that never reads a ROM.
 
 import hashlib
 import threading
+from dataclasses import dataclass
 from pathlib import Path
 
 from golf.core.patches import QrCredentials
+from golf.formats.hole_data import HoleData
 from golf.randomizer.build import (
     PlayerOptions,
     build_unfinished,
@@ -31,6 +33,15 @@ from .timings import Sample, phase
 
 class BuilderUnavailableError(Exception):
     """The server cannot build seeds: its vanilla ROM is missing or not the vanilla ROM."""
+
+
+@dataclass(frozen=True)
+class BuiltSeed:
+    """What a build leaves for the seed's row."""
+
+    unfinished_ips: bytes
+    #: the 18 holes as built, transforms applied
+    holes: tuple[HoleData, ...]
 
 
 class SeedBuilder:
@@ -89,8 +100,8 @@ class SeedBuilder:
     def generate(self, settings: Settings) -> Manifest:
         return generate(self.catalog, self.curation, settings)
 
-    def build(self, manifest: Manifest, sample: Sample | None = None) -> bytes:
-        """The seed's unfinished IPS, what the seed row stores.
+    def build(self, manifest: Manifest, sample: Sample | None = None) -> BuiltSeed:
+        """The seed's unfinished IPS and built holes, what `insert_seed` stores.
 
         With a sample, the wait for the build semaphore is timed apart from the build
         itself: a burst of requests queues here, and it is the queue that grows.
@@ -100,7 +111,8 @@ class SeedBuilder:
             self._builds.acquire()
         try:
             with phase(sample, "build"):
-                return build_unfinished(manifest, self.catalog, self.store, vanilla).ips
+                built = build_unfinished(manifest, self.catalog, self.store, vanilla)
+                return BuiltSeed(built.ips, built.holes)
         finally:
             self._builds.release()
 

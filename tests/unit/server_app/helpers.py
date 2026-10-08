@@ -9,7 +9,7 @@ from golf.randomizer.catalog import US_ROM
 from golf.randomizer.manifest import Manifest
 from golf.randomizer.roms import VANILLA_ROMS
 from server.app import create_app
-from server.builder import SeedBuilder
+from server.builder import BuiltSeed, SeedBuilder
 from server.config import Config
 from server.forms import FormState
 from server.strings import Entry, Strings
@@ -23,9 +23,9 @@ SEED_URL = re.compile(r"^/h/([0-9A-Za-z]{10})$")
 class FakeBuilder(SeedBuilder):
     """Generates for real and stores a fixed IPS instead of building, so no ROM is needed."""
 
-    def build(self, manifest: Manifest, sample=None) -> bytes:
+    def build(self, manifest: Manifest, sample=None) -> BuiltSeed:
         self.built = manifest
-        return IPS
+        return BuiltSeed(IPS, ())
 
     def finish(self, manifest, unfinished_ips, options, credentials=None):
         self.finished = (manifest, unfinished_ips, options)

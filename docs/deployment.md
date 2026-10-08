@@ -28,12 +28,14 @@ On the server:
 | `/var/lib/golf-site/golf_site.db` | The database (`GOLF_DATABASE`) | `golf` |
 | `/var/lib/golf-site/roms` | The vanilla ROMs (`GOLF_ROM_DIR`), mode 0700 | `golf` |
 | `/var/lib/golf-site/courses` | The hole store (`GOLF_HOLES_DIR`) | `golf` |
-| `/var/lib/golf-site/rangefinder` | The rangefinder's renders (`GOLF_RANGEFINDER_DIR`) | `golf` |
+| `/var/lib/golf-site/rangefinder` | The rangefinder's renders (`GOLF_RANGEFINDER_DIR`), and under `variants/` the yardage books', which the site renders on first view | `golf` |
 
 The service can write only `/var/lib/golf-site`; the checkout and the rest of the system
 are read-only to it. Before each start it runs `golf-rehydrate --check`, and a full
 `golf-rehydrate` only when that fails, so it always serves holes and renders verified
-against the catalog.
+against the catalog. The check fails after a release that changes the renderer's
+`RENDER_VERSION`, so that release's first start renders the rangefinder again and
+clears the yardage books' renders, which are made again as books are opened.
 
 Run exactly one uvicorn worker. The rate limiter and the database lock live in the
 process, and a second worker would split both.

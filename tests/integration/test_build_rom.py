@@ -222,6 +222,9 @@ def test_a_seed_with_transforms_builds_its_transformed_holes(
         assert hole.to_dict() == expected.to_dict()
     build = build_unfinished(manifest, catalog, store, vanilla)
     assert build.ips != build_unfinished(nes_manifest, catalog, store, vanilla).ips
+    assert [hole.to_dict() for hole in build.holes] == [
+        hole.to_dict() for hole in course.holes
+    ]
 
 
 def club_house(steps) -> list[str]:

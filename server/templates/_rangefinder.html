@@ -1,0 +1,122 @@
+{# The rangefinder's viewer, shared by the rangefinder page and a seed's yardage book.
+   The caller's body goes at the top of the section, for the page's heading. A book shows
+   one course at each hole's own pin, so it has no course selector and no pin to change,
+   and it shows each hole's tee-shot wind. The modules in static/rangefinder/ read the
+   metadata at `metadata_url`; `scripts` takes the catalog's `rangefinder.script` entries. #}
+{% macro viewer(metadata_url, book=false) %}
+  <section id="rangefinder"
+           class="rangefinder"
+           data-state="loading"
+           data-kind="{{ 'book' if book else 'catalog' }}"
+           data-metadata-url="{{ metadata_url }}">
+    {{ caller() }}
+
+    <article class="rangefinder-controls">
+      <div class="rangefinder-selectors">
+        <label class="rangefinder-course">
+          {{ t("rangefinder.course") }}
+          <select id="course-select"></select>
+        </label>
+        <label>
+          {{ t("rangefinder.hole") }}
+          <select id="hole-select"></select>
+        </label>
+        <span id="hole-info"></span>
+        {% if book %}
+          <span id="hole-wind" class="rangefinder-wind">
+            <span id="hole-wind-arrow" aria-hidden="true">↑</span>
+            <span id="hole-wind-text"></span>
+          </span>
+        {% endif %}
+        <button id="copy-permalink"
+                type="button"
+                class="secondary">{{ t("rangefinder.copy_permalink") }}</button>
+        <small id="permalink-status" role="status" aria-live="polite"></small>
+      </div>
+
+      <div class="rangefinder-actions">
+        <!-- <span id="hole-info"></span> -->
+        <span>{{ t("rangefinder.zoom") }}</span>
+        <div role="group" aria-label="{{ t_plain('rangefinder.zoom_controls') }}">
+          <button id="zoom-out"
+                  type="button"
+                  class="secondary"
+                  aria-label="{{ t_plain('rangefinder.zoom_out') }}">−</button>
+          <output id="zoom-display"></output>
+          <button id="zoom-in"
+                  type="button"
+                  class="secondary"
+                  aria-label="{{ t_plain('rangefinder.zoom_in') }}">+</button>
+        </div>
+        <button id="zoom-reset"
+                type="button"
+                class="secondary">{{ t("rangefinder.zoom_reset") }}</button>
+        <button id="green-view"
+                type="button"
+                class="secondary">{{ t("rangefinder.green_view") }}</button>
+        <button id="clear-waypoints"
+                type="button"
+                class="secondary">{{ t("rangefinder.clear") }}</button>
+        <strong id="distance-display"></strong>
+      </div>
+    </article>
+
+    <article class="rangefinder-error"
+             role="alert">{{ t("rangefinder.load_error") }}</article>
+
+    <div class="rangefinder-viewer">
+      <div class="rangefinder-image-container">
+        {# djlint:off H056 - the script sets src #}
+        <img id="hole-image"
+             src=""
+             alt="{{ t_plain('rangefinder.hole_image_alt') }}">
+        {# djlint:on #}
+        <canvas id="overlay-canvas"></canvas>
+      </div>
+    </div>
+
+    <p class="rangefinder-instructions">{{ t("rangefinder.instructions") }}</p>
+
+    <dialog id="green-modal">
+      <article>
+        <header>
+          <button type="button"
+                  class="close modal-close"
+                  aria-label="{{ t_plain('rangefinder.close_green') }}"></button>
+          <h2>{{ t("rangefinder.green_heading") }}</h2>
+          {% if not book %}<strong id="flag-indicator"></strong>{% endif %}
+        </header>
+        <div class="green-viewer">
+          <div class="green-container">
+            {# djlint:off H056 - the script sets src #}
+            <img id="green-image"
+                 src=""
+                 alt="{{ t_plain('rangefinder.green_image_alt') }}">
+            <img id="flag-overlay"
+                 src=""
+                 alt="{{ t_plain('rangefinder.flag_image_alt') }}">
+            {# djlint:on #}
+          </div>
+        </div>
+        <footer>
+          {% if book %}
+            {{ t("yardage_book.green_instructions") }}
+          {% else %}
+            {{ t("rangefinder.green_instructions") }}
+          {% endif %}
+        </footer>
+      </article>
+    </dialog>
+  </section>
+{% endmacro %}
+
+{% macro scripts(strings) %}
+  <script id="rangefinder-strings"
+          type="application/json">{{ strings | tojson }}</script>
+  <script type="module" src="{{ static_url('rangefinder/app.js') }}"></script>
+{% endmacro %}
+
+{% macro styles() %}
+  <link rel="stylesheet"
+        href="{{ static_url('rangefinder/rangefinder.css') }}">
+{% endmacro %}

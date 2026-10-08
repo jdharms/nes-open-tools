@@ -21,6 +21,23 @@
   margin-bottom: 0;
 }
 
+.rangefinder[data-kind="book"] .rangefinder-course {
+  display: none;
+}
+
+.rangefinder-wind {
+  display: inline-flex;
+  align-items: center;
+  gap: calc(var(--pico-spacing) * 0.25);
+  font-variant-numeric: tabular-nums;
+}
+
+#hole-wind-arrow {
+  display: inline-block;
+  color: var(--pico-primary);
+  font-weight: 700;
+}
+
 #permalink-status {
   color: var(--pico-primary);
 }

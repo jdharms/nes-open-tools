@@ -22,7 +22,7 @@ from pathlib import Path
 from golf.core.course_dump import dump_jp_courses, dump_us_courses
 from golf.core.rom_reader import RomReader
 from golf.rendering.rangefinder import COURSES as RANGEFINDER_COURSES
-from golf.rendering.rangefinder import METADATA, render_rangefinder
+from golf.rendering.rangefinder import METADATA, RENDER_VERSION, render_rangefinder
 
 from .catalog import JP_ROM, US_ROM, Catalog, CatalogError, HoleStore, RomSource
 from .roms import VANILLA_ROMS, VanillaRom
@@ -110,17 +110,22 @@ def verify_holes(catalog: Catalog, store: HoleStore, rom_ids: Iterable[str]) -> 
 def check_rangefinder(holes_root: Path, rangefinder_dir: Path) -> None:
     """Check the rangefinder was rendered from the courses under `holes_root`.
 
-    Raises RehydrateError if its metadata is missing or lists different courses or hole
-    counts than the store holds.
+    Raises RehydrateError if its metadata is missing, was written by another version of
+    the renderer, or lists different courses or hole counts than the store holds.
     """
     metadata_path = rangefinder_dir / METADATA
     if not metadata_path.is_file():
         raise RehydrateError(f"rangefinder metadata not found at {metadata_path}")
+    metadata = json.loads(metadata_path.read_text())
+    version = metadata.get("render_version")
+    if version != RENDER_VERSION:
+        raise RehydrateError(
+            f"rangefinder at {rangefinder_dir} was rendered by renderer version "
+            f"{version}, not {RENDER_VERSION}"
+        )
     rendered = {
         course_id: len(course["holes"])
-        for course_id, course in json.loads(metadata_path.read_text())[
-            "courses"
-        ].items()
+        for course_id, course in metadata["courses"].items()
     }
     expected = {
         course_id: count

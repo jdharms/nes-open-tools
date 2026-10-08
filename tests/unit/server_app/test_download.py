@@ -9,7 +9,7 @@ from golf.core.patches.extended_sram_defaults import BallSpin, SwingSpeed
 from golf.core.patches.sram_defaults import Club
 from golf.randomizer.catalog import JP_ROM, US_ROM, HoleStore
 from golf.randomizer.roms import vanilla_rom
-from server.builder import SeedBuilder
+from server.builder import BuiltSeed, SeedBuilder
 from tests.app_state import app_state
 from tests.unit.server_app.helpers import (
     FINISHED,
@@ -109,7 +109,7 @@ def test_downloading_without_the_servers_rom_is_unavailable(
 ):
     class NoRom(SeedBuilder):
         def build(self, manifest, sample=None):
-            return IPS
+            return BuiltSeed(IPS, ())
 
     with app_client(
         builder=NoRom(catalog, curation, HoleStore(), tmp_path / "missing.nes")
@@ -222,7 +222,7 @@ def test_a_missing_server_rom_is_logged_when_a_download_finishes(
 ):
     class NoRom(SeedBuilder):
         def build(self, manifest, sample=None):
-            return IPS
+            return BuiltSeed(IPS, ())
 
     builder = NoRom(catalog, curation, HoleStore(), tmp_path / "missing.nes")
     with app_client(strings=UNWRITTEN, builder=builder) as test_client:

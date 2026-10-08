@@ -81,16 +81,24 @@ class HoleId:
         return self.lineage if self.version == 1 else f"{self.lineage}@{self.version}"
 
 
-def content_hash(hole: HoleData) -> str:
-    """SHA-256 over the canonical form of everything about a hole that reaches the ROM."""
+def canonical_json(hole: HoleData) -> bytes:
+    """Everything about a hole that reaches the ROM, as the JSON `content_hash` hashes.
+
+    The site stores a transformed hole in this form (`server/seeds.py`), which the
+    renderers read as they do a hole file.
+    """
     data = hole.to_dict()
     canonical = {key: data[key] for key in ROM_BOUND_KEYS}
     canonical["terrain"] = {
         **data["terrain"],
         "rows": data["terrain"]["rows"][: hole.terrain_height],
     }
-    encoded = json.dumps(canonical, sort_keys=True, separators=(",", ":"))
-    return hashlib.sha256(encoded.encode()).hexdigest()
+    return json.dumps(canonical, sort_keys=True, separators=(",", ":")).encode()
+
+
+def content_hash(hole: HoleData) -> str:
+    """SHA-256 over the canonical form of everything about a hole that reaches the ROM."""
+    return hashlib.sha256(canonical_json(hole)).hexdigest()
 
 
 @dataclass(frozen=True)
@@ -264,8 +272,13 @@ class HoleStore:
             return self.root / "jp" / source.course / f"hole_{source.hole:02d}.json"
         raise CatalogError(f"{entry.id}: unknown source ROM {source.rom!r}")
 
-    def load(self, entry: CatalogEntry) -> HoleData:
-        if entry.withdrawn:
+    def load(self, entry: CatalogEntry, *, even_withdrawn: bool = False) -> HoleData:
+        """The entry's hole, checked against its hash.
+
+        A withdrawn entry is refused unless `even_withdrawn`, which is for showing a hole
+        a seed already holds, never for building with it.
+        """
+        if entry.withdrawn and not even_withdrawn:
             raise CatalogError(f"{entry.id} is withdrawn")
         path = self.path_for(entry)
         if not path.exists():

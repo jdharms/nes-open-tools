@@ -4,16 +4,23 @@ The rangefinder reads `metadata.json` and the PNGs under `images/<course id>/` f
 static directory. `render_rangefinder` rebuilds both from a courses root, taking the
 courses whose directories hold holes, so a root with only the NES Open courses dumped
 gives a rangefinder of those three.
+
+The same directory holds `variants/`, the renders a seed's yardage book asks for
+(`golf/rendering/hole_renders.py`). They are made on demand, so `render_rangefinder` only
+clears them.
 """
 
 import json
 import shutil
 from collections.abc import Callable
 from pathlib import Path
+from typing import Any
+
+from PIL import Image
 
 from golf.core.chr_tile import TilesetData
 from golf.rendering.pil_renderer import (
-    render_all_flags_to_images,
+    render_flag_to_image,
     render_greens_to_image,
     render_hole_to_image,
 )
@@ -46,6 +53,55 @@ COURSES = [
 
 METADATA = "metadata.json"
 IMAGES = "images"
+#: the yardage books' renders, beside the rangefinder's own
+VARIANTS = "variants"
+#: how many pins a hole has
+PINS = 4
+
+#: Names what a hole renders as. Bump it when a change to the renderer, the tilesets, the
+#: palettes or the sprites alters any image: `metadata.json` records it, so
+#: `golf-rehydrate --check` fails on renders an older renderer made, and the yardage
+#: books' image URLs carry it.
+RENDER_VERSION = 1
+
+
+class HoleRenderer:
+    """Renders a hole's rangefinder images from its data, as a hole file's JSON holds it."""
+
+    def __init__(
+        self,
+        tileset_path: Path = DEFAULT_TILESET,
+        greens_tileset_path: Path = DEFAULT_GREENS_TILESET,
+    ):
+        self.tileset = TilesetData(str(tileset_path))
+        self.greens_tileset = TilesetData(str(greens_tileset_path))
+        self.sprites = load_sprites()
+
+    @property
+    def has_flags(self) -> bool:
+        return "green-flag" in self.sprites
+
+    def main(self, hole: dict[str, Any], pin: int) -> Image.Image:
+        """The whole hole, with its tee, ball and the flag at `pin`."""
+        return render_hole_to_image(
+            hole,
+            self.tileset,
+            sprites=self.sprites or None,
+            render_sprites=True,
+            selected_flag_index=pin,
+        )
+
+    def green(self, hole: dict[str, Any]) -> Image.Image:
+        return render_greens_to_image(hole, self.greens_tileset)
+
+    def flag(self, hole: dict[str, Any], pin: int) -> Image.Image:
+        """The flag and cup at `pin`, transparent elsewhere, to lay over `green`."""
+        return render_flag_to_image(
+            hole,
+            self.sprites["green-flag"],
+            pin,
+            cup_sprite=self.sprites.get("green-cup"),
+        )
 
 
 def render_rangefinder(
@@ -59,15 +115,14 @@ def render_rangefinder(
     """Replace the rangefinder's images and metadata with renders of `courses_root`.
 
     Returns the metadata written. Images left from an earlier render are removed first,
-    so a course that is no longer dumped does not linger.
+    so a course that is no longer dumped does not linger, and so are the yardage books'
+    renders, which an earlier renderer may have made.
     """
-    tileset = TilesetData(str(tileset_path))
-    greens_tileset = TilesetData(str(greens_tileset_path))
-    sprites = load_sprites()
-    green_flag = sprites.get("green-flag")
+    renderer = HoleRenderer(tileset_path, greens_tileset_path)
 
     shutil.rmtree(output_dir / IMAGES, ignore_errors=True)
-    metadata = {"courses": {}}
+    shutil.rmtree(output_dir / VARIANTS, ignore_errors=True)
+    metadata = {"render_version": RENDER_VERSION, "courses": {}}
 
     for course_id, course_subpath, group in COURSES:
         course_dir = courses_root / course_subpath
@@ -94,29 +149,18 @@ def render_rangefinder(
             hole_name = hole_file.stem
             hole_data = json.loads(hole_file.read_text())
 
-            img = render_hole_to_image(
-                hole_data,
-                tileset,
-                sprites=sprites or None,
-                render_sprites=True,
-                selected_flag_index=flag_index,
-            )
+            img = renderer.main(hole_data, flag_index)
             image_filename = f"{hole_name}.png"
             img.save(course_output_dir / image_filename)
 
             green_filename = f"{hole_name}_green.png"
-            render_greens_to_image(hole_data, greens_tileset).save(
-                course_output_dir / green_filename
-            )
+            renderer.green(hole_data).save(course_output_dir / green_filename)
 
             flag_images = []
-            if green_flag:
-                flag_overlays = render_all_flags_to_images(
-                    hole_data, green_flag, cup_sprite=sprites.get("green-cup")
-                )
-                for i, flag_img in enumerate(flag_overlays):
+            if renderer.has_flags:
+                for i in range(PINS):
                     flag_filename = f"{hole_name}_flag_{i}.png"
-                    flag_img.save(course_output_dir / flag_filename)
+                    renderer.flag(hole_data, i).save(course_output_dir / flag_filename)
                     flag_images.append(f"{IMAGES}/{course_id}/{flag_filename}")
 
             holes.append(

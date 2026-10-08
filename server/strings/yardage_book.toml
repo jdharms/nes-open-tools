@@ -1,0 +1,19 @@
+# A seed's yardage book (yardage_book.html): the rangefinder for the seed's 18 holes.
+# The viewer's own strings are in rangefinder.toml.
+# Format: see common.toml, and server/CLAUDE.md "Player-facing text".
+
+[yardage_book.title]
+note = "plain: browser tab title, a seed's yardage book; {words} the seed's three magic words"
+text = "Yardage Book | {words}"
+
+[yardage_book.intro]
+note = "line under the magic words h1; this is the seed's own course: holes in playing order, as the seed changed them, each at its pin for this seed, with the wind of its tee shot"
+text = "Rangefinder/Yardage book for this seed's course"
+
+[yardage_book.seed_link]
+note = "link from the yardage book back to the seed's page"
+text = "seed permalink"
+
+[yardage_book.green_instructions]
+note = "keyboard instructions under the green view in a yardage book; Escape closes; the pin shown is this seed's and cannot be changed"
+text = "The pin shown is the pin for this seed.  Esc to close."

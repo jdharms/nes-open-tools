@@ -56,7 +56,8 @@ Guarantees, enforced by `tests/meta/test_catalog_frozen.py` and the loader:
    history, and the index version never decreases.
 3. **Withdrawal is the one permitted mutation.** `"withdrawn": true` retires an entry for
    a takedown. Its id stays reserved, and seeds that used it remain downloadable from
-   their stored unfinished IPS. A lineage whose highest version is withdrawn has nothing
+   their stored unfinished IPS. `HoleStore.load` refuses a withdrawn entry unless asked
+   with `even_withdrawn`, which is for showing such a seed's hole in its yardage book. A lineage whose highest version is withdrawn has nothing
    drawable.
 
 ## The content hash

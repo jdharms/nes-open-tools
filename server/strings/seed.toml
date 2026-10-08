@@ -421,6 +421,10 @@ text = "None (default)"
 note = "settings row label; ROMs a player needs set up to download this seed (ROM titles follow)"
 text = "Required ROMs"
 
+[seed.yardage_book_link]
+note = "link from the seed page to its yardage book: the rangefinder for this seed's 18 holes"
+text = "Yardage Book"
+
 [seed.manifest_link]
 note = "link to the seed's manifest JSON; for the curious and for tools"
 text = "manifest"

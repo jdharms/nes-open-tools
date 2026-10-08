@@ -16,6 +16,7 @@ const text = {
   segment: (distance) =>
     t("rangefinder.script.segment", { distance: distance.toFixed(1) }),
   flag: (current, total) => t("rangefinder.script.flag", { current, total }),
+  teeWind: (speed, direction) => t("rangefinder.script.tee_wind", { speed, direction }),
   permalinkCopied: () => t("rangefinder.script.permalink_copied"),
   permalinkFailed: () => t("rangefinder.script.permalink_failed"),
 };
@@ -55,9 +56,12 @@ function locationFromUrl(metadata) {
   return { courseId, holeNumber };
 }
 
+// A yardage book is one course, which its path already names.
+const isBook = root.dataset.kind === "book";
+
 function updatePermalink(courseId, holeNumber) {
   const url = new URL(window.location.href);
-  url.searchParams.set("course", courseId);
+  if (!isBook) url.searchParams.set("course", courseId);
   url.searchParams.set("hole", String(holeNumber));
   window.history.replaceState(window.history.state, "", url);
   document.getElementById("permalink-status").textContent = "";

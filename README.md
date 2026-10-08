@@ -211,7 +211,7 @@ variables:
 | `GOLF_DATABASE` | `golf_site.db` | SQLite database path, created and migrated at startup |
 | `GOLF_ROM_DIR` | the repository root | Directory holding the server's vanilla ROMs as `nes_open_us.nes` and `mario_open_jp.nes`; generating a seed needs the first |
 | `GOLF_HOLES_DIR` | `courses/` | Hole store root, which `golf-rehydrate` writes |
-| `GOLF_RANGEFINDER_DIR` | `rangefinder/` | The rangefinder's renders, which `golf-rehydrate` writes and the site serves at `/rangefinder-data/` |
+| `GOLF_RANGEFINDER_DIR` | `rangefinder/` | The rangefinder's renders, which `golf-rehydrate` writes and the site serves at `/rangefinder-data/`, and the yardage books' renders the site adds under `variants/` |
 | `GOLF_BASE_URL` | `http://127.0.0.1:8000` | Public base URL, also the OAuth redirect base |
 | `GOLF_DISCORD_CLIENT_ID`, `GOLF_DISCORD_CLIENT_SECRET` | unset | Discord sign-in |
 | `GOLF_SESSION_SECRET` | unset | Signs the session cookie |

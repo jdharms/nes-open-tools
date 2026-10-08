@@ -15,8 +15,8 @@ in this package.
 
 - `server/app.py` has `create_app(config)`, a factory: the lifespan, the middleware, the
   templates, the static mounts and the error pages. Shared objects live on `app.state`:
-  `config`, `strings`, `pages`, `discord` and `rate_limiter`, and `db`, `builder` and
-  `timings` once the lifespan has started. Nothing is module-level state, so each test
+  `config`, `strings`, `pages`, `discord`, `rate_limiter` and `renders` (the yardage
+  books' render cache), and `db`, `builder` and `timings` once the lifespan has started. Nothing is module-level state, so each test
   builds its own app.
 - The routes are in `server/routes/`, one module per part of the URL space, each with a
   function that takes the app's `templates` and builds the `APIRouter` `create_app`
@@ -24,7 +24,7 @@ in this package.
   - `server/routes/site.py` (`site_router`): `/`, `/rom`, `/rangefinder`, the Markdown
     pages under `/pages/` and `/healthz`
   - `server/routes/seed_pages.py` (`seed_router`): `/generate` and `/h/<id>`, with its
-    manifest and its IPS download
+    manifest, its IPS download and its yardage book
   - `server/routes/round_pages.py` (`round_router`): `/s/<scan>` and `/r/<id>`
   - `server/routes/account.py` (`account_router`): `/me` and `/auth/`
   - `server/routes/admin_pages.py` (`admin_router`): `/admin/` (see "Admin" below)
@@ -49,8 +49,9 @@ in this package.
   form to `Settings`, the download form to `PlayerOptions` and ROM hashes, and a player's
   `SavedSettings`, with `fit` to start a seed's form from them and `to_save` for what a
   download remembers),
-  `server/views.py` (what a page shows, as dataclasses, and the download file name) and
-  `server/ratelimit.py`.
+  `server/views.py` (what a page shows, as dataclasses, and the download file name),
+  `server/yardage_book.py` (a seed's yardage book as rangefinder metadata;
+  `docs/yardage_book.md`) and `server/ratelimit.py`.
 - `server/auth.py` holds sign-in: `DiscordClient` (the two OAuth2 calls), `safe_next` for
   return paths, and `current_user(request)`, the one way a route gets the signed-in
   `User`. Templates get `user`, `sign_in_enabled` and `return_path` from the context
@@ -104,8 +105,10 @@ in this package.
   `application_id` to `GOLF`, and startup rejects unmarked pre-baseline databases.
 - `server/ids.py` holds the base62 alphabet and codec every public id shares. A seed's is
   the encoding of its `qr_seed_id`; a round's permalink id is drawn as text.
-- `server/seeds.py` is the only code that writes `seeds` and `seed_holes`, and the only
-  place seed ids are drawn or converted. It owns withdrawal and restoration: each changes
+- `server/seeds.py` is the only code that writes `seeds`, `seed_holes` and `hole_data`,
+  and the only place seed ids are drawn or converted. `insert_seed` takes the holes the
+  build made and stores those with transforms in `hole_data`, compressed, under their
+  content hash (ADR 0021); a manifest with transforms and no holes is refused. It owns withdrawal and restoration: each changes
   only `withdrawn_at` and records an audit action in the same transaction. The seed's
   manifest and unfinished IPS are never changed. The row repeats the manifest's build and
   finish-ABI versions for operations, and loading verifies that the copies agree.
@@ -174,7 +177,12 @@ in this package.
   `/static/` path (a test checks): `server/static_files.py` adds a hash of the file's
   contents as `?v=`, and serves a versioned URL as immutable. What carries no version,
   such as the rangefinder's module imports and its renders at `/rangefinder-data/`
-  (`Config.rangefinder_dir`), is served `no-cache`, so a browser revalidates it.
+  (`Config.rangefinder_dir`), is served `no-cache`, so a browser revalidates it. A
+  yardage book's renders are versioned: their paths hold a content hash and their URLs
+  the renderer's version.
+- The rangefinder page and a seed's yardage book share one viewer: the macros in
+  `server/templates/_rangefinder.html` and the modules in `server/static/rangefinder/`.
+  A change to either shows on both pages.
 - Pico's file is minified onto one line; to read it, pretty-print it into the scratchpad
   with `uv run golf-biome format --stdin-file-path=pico.css < server/static/pico.green.min.css`.
 - `server/static/site.css` holds only rules Pico has no class for, and takes its colors
@@ -274,7 +282,7 @@ strings catalog.
 - The catalog is the TOML files under `server/strings/`: `common.toml` for the elements on
   every page (`base.html`), and one file per template named for it - `home.toml`,
   `rom.toml`, `generate.toml`, `seed.toml`, `me.toml`, `not_found.toml`, `server_error.toml`, `sign_in_failed.toml`,
-  `round.toml`, `scan_rejected.toml`, `round_voided.toml`, and `wind.toml` for the profile
+  `round.toml`, `scan_rejected.toml`, `round_voided.toml`, `yardage_book.toml`, and `wind.toml` for the profile
   names `_wind.html`'s macros give both the generate form and the seed page. Every file under the
   directory is loaded and merged, subdirectories included. Entries carry their full dotted
   key (`[home.about]`), so a file name is organization only and a key still greps to its

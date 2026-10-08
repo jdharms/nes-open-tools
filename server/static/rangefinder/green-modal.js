@@ -53,7 +53,12 @@ export class GreenModal {
   updateFlag() {
     const images = this.currentHole.flag_images;
     this.flagOverlay.src = images[this.flagIndex];
-    this.flagIndicator.textContent = this.flagLabel(this.flagIndex + 1, images.length);
+    // A yardage book shows one pin and has no indicator.
+    if (this.flagIndicator)
+      this.flagIndicator.textContent = this.flagLabel(
+        this.flagIndex + 1,
+        images.length,
+      );
   }
 
   applyZoom(zoomLevel) {

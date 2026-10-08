@@ -19,6 +19,7 @@ from starlette.middleware.sessions import SessionMiddleware
 from starlette.routing import Mount
 
 from golf.randomizer.catalog import REPO_ROOT
+from golf.rendering.hole_renders import HoleRenders
 
 from .auth import DiscordClient, current_user
 from .builder import BuilderUnavailableError, SeedBuilder
@@ -155,6 +156,7 @@ def create_app(
         else RateLimiter(GENERATE_CAPACITY, GENERATE_REFILL_SECONDS)
     )
     app.state.discord = discord
+    app.state.renders = HoleRenders(config.rangefinder_dir)
     # Without a configured secret (development and tests; validate() insists on one for
     # Discord) sessions are signed with a secret that lasts as long as the process.
     app.add_middleware(

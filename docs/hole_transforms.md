@@ -33,7 +33,8 @@ Each transform's output for every vanilla hole is pinned by a golden test
 and the digests updated; the transform's own version is bumped only if what it means
 changed, for example a hazard style's probabilities. A version stays in the registry
 after a newer one ships, because the site still loads manifests naming it. ADR 0015 has
-the reasoning.
+the reasoning. Since a later release may transform a hole differently, the site stores
+each transformed hole with its seed when the seed is built (ADR 0021).
 
 Order matters: `mirror@1` then `hazards@1:N` is a different hole from the reverse,
 because the hazard rolls follow reading order. The manifest records the order, so builds
@@ -71,8 +72,8 @@ reproduce; choosing a canonical order is generation's job.
     pixel of the exact mirror. Vanilla offsets run 36-144.
   - `y` values, distance, scroll limit and the rest of the metadata are unchanged.
 - **Not mirrored.** Only what `HoleData` carries is mirrored, which covers every
-  per-hole table at `$DD05`-`$E02F`. The rangefinder's renders and any thumbnails show
-  the unmirrored hole.
+  per-hole table at `$DD05`-`$E02F`. The rangefinder's renders show the unmirrored
+  hole; a seed's yardage book shows the hole as transformed (`docs/yardage_book.md`).
 
 ## Hazards
 

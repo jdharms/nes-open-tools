@@ -92,6 +92,10 @@ text = "Hole {number}"
 note = "plain: current hole summary; receives par and distance in yards"
 text = "Par {par} • {distance}y"
 
+[rangefinder.script.tee_wind]
+note = "plain: wind of the hole's tee shot, in a yardage book, beside an arrow pointing the way it blows; receives speed (0-9, as the game shows it) and direction (a compass point such as NNE, north being up the map)"
+text = "{speed} mph"
+
 [rangefinder.script.distance_empty]
 note = "plain: measurement total before two waypoints have been placed"
 text = "--"
