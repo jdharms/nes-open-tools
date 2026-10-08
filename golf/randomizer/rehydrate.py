@@ -24,7 +24,7 @@ from golf.core.rom_reader import RomReader
 from golf.rendering.rangefinder import COURSES as RANGEFINDER_COURSES
 from golf.rendering.rangefinder import METADATA, RENDER_VERSION, render_rangefinder
 
-from .catalog import JP_ROM, US_ROM, Catalog, CatalogError, HoleStore, RomSource
+from .catalog import JP_ROM, US_ROM, Catalog, CatalogError, HoleStore
 from .roms import VANILLA_ROMS, VanillaRom
 
 REQUIRED_ROMS = frozenset({US_ROM})
@@ -75,6 +75,9 @@ def check_rom(rom: VanillaRom, path: Path) -> bytes:
 def verify_holes(catalog: Catalog, store: HoleStore, rom_ids: Iterable[str]) -> int:
     """Check every live catalog entry sourced from these ROMs against the store.
 
+    That is their vanilla holes and the holes derived from them, each of which is built
+    from its base and its delta to be checked.
+
     Returns the number of holes checked. Raises RehydrateError listing every hole that is
     missing or whose content hash differs.
     """
@@ -82,10 +85,7 @@ def verify_holes(catalog: Catalog, store: HoleStore, rom_ids: Iterable[str]) -> 
     problems = []
     checked = 0
     for entry in catalog:
-        source = entry.source
-        if entry.withdrawn or not isinstance(source, RomSource):
-            continue
-        if source.rom not in rom_ids:
+        if not entry.live or entry.rom not in rom_ids:
             continue
         try:
             store.load(entry)

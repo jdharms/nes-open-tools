@@ -39,6 +39,7 @@ from golf.randomizer.layout import COUNTS
 from golf.randomizer.manifest import (
     DRAW_RULES,
     EXPERT_CAP,
+    INCLUDABLE,
     SOURCES,
     ClubRules,
     DrawRule,
@@ -123,6 +124,7 @@ def settings_from_args(args: argparse.Namespace) -> Settings:
         sources=frozenset(comma_list(args.sources))
         if args.sources
         else defaults.sources,
+        include=frozenset(comma_list(args.include)) if args.include else frozenset(),
         exclude_tags=frozenset(comma_list(args.exclude_tags))
         if args.exclude_tags
         else frozenset(),
@@ -296,6 +298,11 @@ def build_parser() -> argparse.ArgumentParser:
     )
     gen.add_argument(
         "--sources", help=f"comma-separated source ROMs (default: {','.join(SOURCES)})"
+    )
+    gen.add_argument(
+        "--include",
+        help="comma-separated kinds of hole to add to the pool beside the vanilla "
+        f"ones: {', '.join(INCLUDABLE)} (default: none)",
     )
     gen.add_argument(
         "--exclude-tags", help="comma-separated curation tags to keep out of the pool"

@@ -24,7 +24,8 @@ Version 1 is written without a suffix, and `nes_uk/01@1` parses to the same id.
 - **Vanilla lineages** are `nes_<course>/<hole>` for NES Open (`nes_us`, `nes_uk`,
   `nes_japan`) and the Mario Open dump names for Mario Open (`jp_japan`, `jp_australia`,
   `jp_france`, `jp_hawaii`, `jp_uk`).
-- **Community lineages** are `<author>/<slug>`.
+- **Every other lineage** is `<owner>/<slug>`, where the owner is `community` or one
+  author's name. The entry's `author` field holds the credit either way.
 - **A changed hole is a new version.** This applies to vanilla holes too: a corrected
   extraction of `nes_uk/01` is `nes_uk/01@2`.
 - **Only the highest version of a lineage is drawable.** Supersession never rolls back:
@@ -44,9 +45,19 @@ Each entry holds its source, content hash, par, distance and author:
 }
 ```
 
-A source is either a vanilla ROM location or, for a community hole, `{"file": "<path>"}`
-relative to the hole store root. Par and distance are copies for the pool builder and the
-seed page; the hash covers them.
+A source is one of three things, and it gives the hole its **kind**:
+
+| Kind | Source | The hole's data |
+|---|---|---|
+| `vanilla` | `{"rom": …, "course": …, "hole": …}` | Dumped from the ROM by `golf-rehydrate` |
+| `derived` | `{"base": "<id>", "delta": "<path>"}` | The base, a vanilla hole, with a checked-in delta applied ([derived_holes.md](derived_holes.md)) |
+| `community` | `{"file": "<path>"}` | A hole file, relative to the hole store root |
+
+Only vanilla holes are in every pool. A seed's settings ask for the other kinds by name
+([manifest.md](manifest.md), `include`), so adding a hole to the index puts it in no pool
+that did not ask for its kind (ADR 0023).
+
+Par and distance are copies for the pool builder and the seed page; the hash covers them.
 
 Guarantees, enforced by `tests/meta/test_catalog_frozen.py` and the loader:
 
@@ -58,7 +69,7 @@ Guarantees, enforced by `tests/meta/test_catalog_frozen.py` and the loader:
    a takedown. Its id stays reserved, and seeds that used it remain downloadable from
    their stored unfinished IPS. `HoleStore.load` refuses a withdrawn entry unless asked
    with `even_withdrawn`, which is for showing such a seed's hole in its yardage book. A lineage whose highest version is withdrawn has nothing
-   drawable.
+   drawable, and nor has a hole derived from a withdrawn base.
 
 ## The content hash
 
@@ -100,7 +111,8 @@ nothing until a person edits the tag. Like any tag it can also go in `exclude_ta
 
 **Families** are a person's judgment, never a computed one. Every lineage with the same
 label is in the same family, and a lineage is in at most one. Examples are a vanilla hole
-and its Mario Open twin, or a par 5 and its forward-tee par 3. The label is a plain
+and its Mario Open twin, or a par 5 and its forward-tee par 3: `golf-derive` puts a
+derived hole in its base's family. The label is a plain
 string; by convention a family containing an NES Open hole is named after it, as in
 `nes_uk_01`. Whether two holes from one family may share a course is the
 `allow_family_repeats` generation setting ([manifest.md](manifest.md)).
@@ -157,6 +169,7 @@ the conventional way — `nes_uk/01` and `jp_japan/01` become `nes_uk_01`.
 The hole data is not in the repository. `golf-rehydrate` dumps it from the vanilla ROMs
 into `courses/` (Mario Open under `courses/jp/`) and installs it only if every hole matches
 its entry here, so the index's content hashes are what make a rehydration trustworthy. The
+holes derived from a ROM's holes are built and checked with them. The
 site runs the same check before it starts. See `golf/randomizer/rehydrate.py`.
 
 `golf-catalog-sync` walks the dumped course directories and, for each hole:

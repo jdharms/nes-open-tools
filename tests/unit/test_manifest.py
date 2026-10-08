@@ -14,6 +14,8 @@ from golf.randomizer.catalog import (
     US_ROM,
     Catalog,
     CatalogEntry,
+    DerivedSource,
+    FileSource,
     HoleId,
     RomSource,
 )
@@ -472,6 +474,83 @@ def test_rejects_other_schemas_before_reading_fields():
 def test_a_manifest_records_its_prng_seed():
     with pytest.raises(ManifestError, match="prng_seed"):
         manifest(settings=Settings())
+
+
+def test_include_round_trips_and_is_written_in_a_fixed_order():
+    value = manifest(
+        settings=Settings(prng_seed="abc", include=frozenset({"community", "derived"}))
+    )
+    assert value.to_json()["settings"]["include"] == ["derived", "community"]
+    assert round_trip(value) == value
+    assert manifest().to_json()["settings"]["include"] == []
+
+
+@pytest.mark.parametrize("include", [{"vanilla"}, {"derived", "other"}, {""}])
+def test_settings_refuse_a_kind_that_cannot_be_included(include):
+    with pytest.raises(ManifestError, match="include"):
+        Settings(include=frozenset(include))
+
+
+def test_the_current_schema_requires_include():
+    data = manifest().to_json()
+    del data["settings"]["include"]
+    with pytest.raises(ManifestError, match="include"):
+        Manifest.from_json(data)
+
+
+def test_schema_three_loads_with_a_vanilla_pool_and_keeps_its_shape():
+    data = as_schema(manifest().to_json(), 3)
+    assert "include" not in data["settings"]
+    loaded = Manifest.from_json(data)
+    assert loaded.schema == 3
+    assert loaded.settings.include == frozenset()
+    assert loaded.settings.draw_rule == manifest().settings.draw_rule
+    assert loaded.to_json() == data
+
+
+@pytest.mark.parametrize("schema", [1, 2, 3])
+def test_a_schema_before_include_refuses_one(schema):
+    settings = Settings(
+        prng_seed="abc", draw_rule=DrawRule(), include=frozenset({"derived"})
+    )
+    with pytest.raises(ManifestError, match="has no include"):
+        manifest(schema=schema, build_version=1, settings=settings)
+    data = as_schema(manifest(settings=UNIFORM_SETTINGS).to_json(), schema)
+    data["settings"]["include"] = []
+    with pytest.raises(ManifestError, match="unknown"):
+        Manifest.from_json(data)
+
+
+def test_required_roms_follow_a_derived_hole_to_its_base():
+    entries = {
+        slot.id: CatalogEntry(
+            slot.id, RomSource(US_ROM, "us", number), "0" * 64, slot.par, 400, "N"
+        )
+        for number, slot in enumerate(slots(), start=1)
+    }
+    base = CatalogEntry(
+        HoleId("jp_uk/03"), RomSource(JP_ROM, "jp_uk", 3), "0" * 64, 5, 500, "N"
+    )
+    first = slots()[0]
+    short = HoleId("jdharms/jp_uk_03_short")
+    entries[short] = CatalogEntry(
+        short, DerivedSource(base, "derived/a.json"), "1" * 64, first.par, 190, "j"
+    )
+    entries[HoleId("dharms/cliffside")] = CatalogEntry(
+        HoleId("dharms/cliffside"), FileSource("a.json"), "2" * 64, 4, 400, "d"
+    )
+    holes = Catalog(1, entries)
+    with_short = course(holes=(Slot(short, first.par, 1), *slots()[1:]))
+    assert required_roms(manifest(course=with_short), holes) == (US_ROM, JP_ROM)
+    second = slots()[1]
+    with_file = course(
+        holes=(
+            slots()[0],
+            Slot(HoleId("dharms/cliffside"), second.par, 2),
+            *slots()[2:],
+        )
+    )
+    assert required_roms(manifest(course=with_file), holes) == (US_ROM,)
 
 
 def test_required_roms_count_holes_and_music():

@@ -31,7 +31,18 @@ class HoleData:
         """Load hole data from JSON file."""
         with open(path) as f:
             data = json.load(f)
+        self.load_dict(data)
+        self.filepath = os.fspath(path)
 
+    @classmethod
+    def from_dict(cls, data: dict[str, Any]) -> "HoleData":
+        """A hole from the dict `to_dict` returns, or any dict with its hole fields."""
+        hole = cls()
+        hole.load_dict(data)
+        return hole
+
+    def load_dict(self, data: dict[str, Any]):
+        """Load hole data from the dict a hole file holds."""
         # Parse terrain using shared hex utility
         self.terrain = []
         for row_str in data["terrain"]["rows"]:
@@ -66,7 +77,6 @@ class HoleData:
             "_debug": data.get("_debug", {}),
         }
 
-        self.filepath = os.fspath(path)
         self.modified = False
 
     def save(self, path: str | None = None):

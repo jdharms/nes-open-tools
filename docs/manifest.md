@@ -15,7 +15,7 @@ With the hole list trimmed to one of its 18 slots:
 
 ```json
 {
-  "schema": 3,
+  "schema": 4,
   "generator_version": 2,
   "build_version": 6,
   "finish_abi_version": 2,
@@ -25,6 +25,7 @@ With the hole list trimmed to one of its 18 slots:
     "prng_seed": "3f9a0c61d2e84b07",
     "par": 72,
     "sources": ["nes_open_us", "mario_open_jp"],
+    "include": [],
     "exclude_tags": [],
     "allow_family_repeats": false,
     "draw_rule": {"rule": "expert_cap", "per_nine": 1},
@@ -96,14 +97,17 @@ is strict: a missing or unknown field is an error. `golf/randomizer/build.py` tu
 | 2 | 4 | 2 | The unfinished stack adds `extended_sram_defaults`, a table the finisher fills with the BGM, swing, putt and spin defaults, and a seed with club rules leaves CHOOSE CLUBS out of the club house. Current code finishes its stored artifact through ABI 2, but does not rebuild it. |
 | 2 | 5 | 2 | The unfinished stack adds `round_stats`, which counts fairways hit and penalty strokes, and its scorecard QR sends them in payload protocol version 2. Current code finishes its stored artifact through ABI 2, but does not rebuild it. |
 | 2 | 6 | 2 | The unfinished stack adds `wind_fix`, which makes the wind push the ball the way its arrow points on all 16 directions (`docs/wind.md`, **The crosswind bug**). Schema 2 is the last without a draw rule: its seeds were drawn uniformly. |
-| 3 | 6 | 2 | `settings` gains `draw_rule`, `wind_speed_profile` and `wind_direction_profile`, and each hole gains `wind_direction` and `wind_speed`, which the unfinished stack's `wind_anchors` patch writes into the ROM (ADR 0017). This is the current schema and unfinished buildchain. |
+| 3 | 6 | 2 | `settings` gains `draw_rule`, `wind_speed_profile` and `wind_direction_profile`, and each hole gains `wind_direction` and `wind_speed`, which the unfinished stack's `wind_anchors` patch writes into the ROM (ADR 0017). Schema 3 is the last without `include`: its pools held vanilla holes only. |
+| 4 | 6 | 2 | `settings` gains `include`, the kinds of hole added to the pool beside the vanilla ones (ADR 0023). The unfinished buildchain is unchanged. This is the current schema and unfinished buildchain. |
 
 Loading schema 1 supplies `build_version = 1` and `finish_abi_version = 1` in memory and
 serializes it back in its original shape without adding either field. Loading schema 1
 or 2 supplies the `uniform` draw rule the same way: their `settings` have no `draw_rule`,
 refuse one, and serialize back without it. The same goes for the wind: their settings
 have no wind profiles and their holes no anchors, so both profiles load as `vanilla` and
-each hole with the anchors its wind seed deals, which is the wind those ROMs play. The website stores
+each hole with the anchors its wind seed deals, which is the wind those ROMs play. Loading
+schema 1, 2 or 3 supplies an empty `include`, which they refuse and serialize back
+without. The website stores
 and serves the original JSON text as well as the unfinished IPS, so neither artifact of an
 existing seed is rewritten by a schema update. Reading an old manifest and rebuilding it
 are deliberately separate: the site needs the former to keep seed and round pages
@@ -116,6 +120,7 @@ working, while its stored IPS makes the latter unnecessary.
 | `prng_seed` | drawn | The string every random choice comes from |
 | `par` | 72 | Course par: 72, 71 or 70 |
 | `sources` | both ROMs | Which vanilla ROMs' holes the pool draws from |
+| `include` | none | Kinds of hole added to the pool beside the vanilla ones: `derived`, `community` |
 | `exclude_tags` | none | Curation tags that keep a hole out of the pool |
 | `allow_family_repeats` | false | Whether two holes of one family may share the course |
 | `draw_rule` | at most 1 expert hole a nine | How the holes are drawn from the pool, below |
@@ -126,9 +131,16 @@ working, while its stored IPS makes the latter unnecessary.
 | `clubs` | no limits | Club rules, below |
 
 Generation draws a `prng_seed` of 16 hex characters when the settings have none, and
-records it. The web UI offers neither the PRNG seed, the mercy point nor excluded tags,
-so a seed from the site has a drawn seed, the default mercy point and no excluded tags;
-the CLI sets all three.
+records it. The web UI offers neither the PRNG seed, the mercy point, included kinds nor
+excluded tags, so a seed from the site has a drawn seed, the default mercy point, vanilla
+holes only and no excluded tags; the CLI sets all four.
+
+`include` adds to the pool where `exclude_tags` takes away. A hole's kind is read from its
+catalog source (`docs/catalog.md`): a vanilla hole is always in the pool, and a derived
+hole ([derived_holes.md](derived_holes.md)) or a community hole only when its kind is
+included. A new hole in the catalog is therefore in no pool that did not ask for its
+kind, without a tag anyone has to remember (ADR 0023). Tags then narrow what was added:
+`--include derived --exclude-tags short` draws derived holes other than the short ones.
 
 ### Draw rules
 
@@ -218,16 +230,18 @@ data is already in the ROM, and imports a Mario Open theme from its dump (`music
 - **Download-time choices.** Player names, bags, player IDs and MAC keys belong to the
   player's entry and the finishing stage.
 - **Required ROMs.** `required_roms` computes them from the holes and the music: the US
-  ROM always, and the Mario Open ROM when any hole or the theme comes from it.
+  ROM always, and the Mario Open ROM when any hole, the base of any derived hole or the
+  theme comes from it.
 
 ## Generation
 
 `generate(catalog, curation, settings)`:
 
 1. **PRNG seed.** The settings' seed, or a fresh one.
-2. **Pool.** Each lineage's newest version that is not withdrawn, is drawable, comes from
-   one of the `sources` and has no excluded tag. Community holes have no source ROM and
-   are not drawn. Holes sharing a curation family form one family; every other hole is a
+2. **Pool.** Each lineage's newest version that is not withdrawn, is drawable, is vanilla
+   or of an included kind, comes from one of the `sources` and has no excluded tag. A
+   derived hole comes from its base's ROM; a community hole comes from none and needs
+   none. Holes sharing a curation family form one family; every other hole is a
    family of its own, as is every hole when `allow_family_repeats` is on.
 3. **Layout.** A uniform draw from the layouts for the par (`golf/randomizer/layout.py`).
 4. **Holes.** Slot by slot: shuffle the unused families that have a member of the slot's
@@ -285,7 +299,7 @@ golf-randomize show demo.json
 ```
 
 - `generate` has one flag per settings field, each defaulting to the field's default:
-  `--seed`, `--par`, `--sources`, `--exclude-tags`, `--allow-family-repeats`, `--music`,
+  `--seed`, `--par`, `--sources`, `--include`, `--exclude-tags`, `--allow-family-repeats`, `--music`,
   `--mercy-point` (a stroke or `none`), and `--clubs-max`, `--banned` and `--required-bag`
   for the club rules. The draw rule is `--draw-rule` (`uniform` or `expert_cap`) and
   `--experts-per-nine`, which alone means the expert cap. The wind profiles are

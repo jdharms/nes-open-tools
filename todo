@@ -12,6 +12,8 @@ Derived holes, something like:
 }
 ```
 
+> Note: need to run difficulty sims for all derived holes eventually.
+
 Used for par 5 -> par 4/3, par 4 -> par 3, and maybe some alternate tee boxes without
 changing par value.  Changing the angle on doglegs, making bunkers or hazards
 more or less in play, making a par 4 drivable.
@@ -62,15 +64,9 @@ Eventually:
 * deploy from github actions
 
 Editor Todos:
-* Invalid neighbor indicator should be a single border per pairing
-  * Invalid neighbor indicator should probably just go away as a feature?
-* F1 through F4 keys should send us to flag 1 through flag 4
-* Greens writeup
 * release bundling
-* Ugh, CI/CD? notably around rangefinder deployment
 * linter/validator of some sort
-* Investigate assigning corners to multiple banks
-  * Most of the complexity here is with the cycle tool
+* Crop from top for making short hole variants
 
 
 

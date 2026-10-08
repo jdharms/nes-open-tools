@@ -24,6 +24,7 @@ from golf.randomizer.catalog import (
     Catalog,
     CatalogEntry,
     CatalogError,
+    DerivedSource,
     HoleStore,
     RomSource,
 )
@@ -48,7 +49,7 @@ RANGEFINDER = "/rangefinder?"
 
 
 def rangefinder_link(entry: CatalogEntry) -> str:
-    """The rangefinder page's deep link for a vanilla hole; a community hole has none.
+    """The rangefinder page's deep link for a vanilla hole; no other hole has one.
 
     A catalog `RomSource`'s course and hole are already the rangefinder's course id and
     hole number, so nothing has to be translated.
@@ -100,11 +101,12 @@ def cmd_show(args: argparse.Namespace) -> int:
     lineage = entry.id.lineage
     record = curation.for_hole(entry.id)
     source = entry.source
-    where = (
-        f"{source.rom} {source.course} hole {source.hole}"
-        if isinstance(source, RomSource)
-        else source.file
-    )
+    if isinstance(source, RomSource):
+        where = f"{source.rom} {source.course} hole {source.hole}"
+    elif isinstance(source, DerivedSource):
+        where = f"{source.base.id} with {source.delta}"
+    else:
+        where = source.file
     print(lineage)
     print(f"  catalog      par {entry.par}, {entry.distance} yards, {entry.author}")
     print(f"  source       {where}")

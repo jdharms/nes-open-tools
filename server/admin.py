@@ -371,7 +371,8 @@ def seed_detail(db: Database, seed_id: str, catalog: Catalog) -> SeedDetail | No
     holes = []
     for number, slot in enumerate(seed.manifest.course.holes, start=1):
         try:
-            withdrawn = catalog[slot.id].withdrawn
+            # a hole derived from a withdrawn base is as gone as one withdrawn itself
+            withdrawn = not catalog[slot.id].live
         except CatalogError:  # pragma: no cover - the catalog never loses an id
             withdrawn = True
         direction, speed = slot.wind
