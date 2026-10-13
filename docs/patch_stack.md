@@ -236,6 +236,7 @@ three requirements and the `course` step.
 | `qr_disable` | none; reverts the round-end splice for a guest ROM, expecting the splice `scorecard_qr` wrote | |
 | `course_theme` | `music` (`$02` US, `$03` Japan or `$04` UK); plays that US ROM theme on every course | |
 | `music_import` | `dump`, `track` (optional; one dump music ID, imported as `$03` and made every course's theme), `transpose_adjust` (default from the dump) | |
+| `famistudio_music` | `blob` (a `golf-famistudio-build` file) | `menu_trim`; proof of concept (`docs/famistudio_music.md`) |
 | `sram_defaults` | `player_name` (A-Z, `.` and space, at most 10), `clubs` (up to 14 of `1W`-`4W`, `1I`-`9I`, `PW`, `SW`, `PT`; the putter is added), `bgm` (default true), `sram_magic` (default `0x3553`, "5S"; neither byte `$00` or `$FF`). To use the extended table, supply all three of `swing` and `putt` (`off`, `slow`, `medium`, `fast`) and `spin` (`off`, `top2`, `top1`, `normal`, `back1`, `back2`). Without them, BGM off uses the vanilla loop edit and cannot follow `extended_sram_defaults`. Only a save being initialized gets these values | `extended_sram_defaults` when swing, putt and spin are supplied |
 | `extended_sram_defaults` | none; installs the SRAM defaults routine and table at vanilla values in PLAYER STATS' code space | `menu_trim` |
 | `peach_dress` | `color` (one of the curated NES colors in `DRESS_COLOR_FAMILIES`, `golf/core/patches/peach_dress.py`); recolors Peach's dress in the putting view | |

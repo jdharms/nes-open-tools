@@ -231,6 +231,8 @@ Free-space budget in `$CA40`-`$CAFF` (192 bytes): the table above accounts for
 stats-display zero source (`STAT_ZERO_SOURCE_PATCH` - not a relocated game table, just
 data this effort introduced, so it's not a row above, but it's carved from the same
 pool). Total used: 164 bytes. **28 bytes remain** (`$CAE4`-`$CAFF`), contiguous.
+The `famistudio_music` proof of concept (`docs/famistudio_music.md`) puts 16 bytes at
+`$CAE4`-`$CAF3` when it is applied.
 
 `TerrainBottomYLo`/`Hi` is the one pair that costs this block nothing: `Hi` went
 into the `$E4F9` region instead (17 of its 30 bytes) and `Lo` grew into the 7

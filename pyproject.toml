@@ -76,6 +76,7 @@ golf-intro-sky = "tools.art.intro_sky:main"
 
 # Music
 golf-export-music = "tools.music.export:main"
+golf-famistudio-build = "tools.music.famistudio_build:main"
 
 # Scorecard QR
 golf-qr-preview = "tools.qr.preview:main"

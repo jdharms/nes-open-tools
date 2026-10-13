@@ -160,6 +160,7 @@ Build a standalone editor executable with `uv run pyinstaller run_editor.spec`.
 | Command | Description |
 |---------|-------------|
 | `golf-export-music <rom>` | Export music as NSF, the DPCM drum kit, or a relocatable JSON dump; works on the US and JP ROMs |
+| `golf-famistudio-build --engine <dir> <song.s> -o <blob>` | Proof of concept: assemble the FamiStudio sound engine and one exported song into a blob for the `famistudio_music` patch; see `docs/famistudio_music.md` |
 
 ### Scorecard QR
 

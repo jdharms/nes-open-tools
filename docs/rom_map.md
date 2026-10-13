@@ -157,8 +157,9 @@ Byte-level layout of the course data banks: the `nes-open-golf-rom-layout` skill
 |---|---|---|---|
 | Engine | 14 | `$8000` `AudioEngineMain`; requests `MusicRequest` (`$F4`), `SfxRequest` (`$F0`) | `music_format.md` |
 | Music sequencer and data | 14 | `$8899` `MusicSequencerTick`, `MusicPatternHeaderTable` (`$8F2E`), `MusicStreamData` (`$913E`) | `music_format.md`, `composing.md` |
-| Sound effects | 14 | `$8578` `UpdateSfxSlot2`, `$8784` `UpdateSfxSlot3` | |
+| Sound effects | 14 | `$83C1` `UpdateSfxSlot1` (request `$F0`, playing `$F5`, pulse 1), `$8578` `UpdateSfxSlot2` (`$F1`, `$F6`, pulse 2), `$8784` `UpdateSfxSlot3` (`$F2`, `$F7`, noise); the sequencer skips a channel while its slot's playing byte is non-zero | `famistudio_music.md` |
 | DPCM samples | 15 | `DmcDrum2Data` (`$C000`), `DmcDrumData`, `DmcUnknownData` (to `$CA3F`) | `music_format.md` |
+| MMC1 register writes | 15 | `$D318` `WriteMMC1Control`, `$D33C` `SetChrBank0` (written once, `$00`, at reset `$CD57`), `$D35A` `SetPrgBank`; nothing disables WRAM | |
 
 ## Save RAM
 
@@ -166,6 +167,7 @@ Byte-level layout of the course data banks: the `nes-open-golf-rom-layout` skill
 |---|---|---|---|
 | SRAM init and magic | 9 | `$ACBC` `InitializeSram` (via `$D932` `CallInitializeSram`); `SramMagic` "5S" at `$6001` | |
 | Saved state | SRAM | `PlayerName` (`$6004`), `TotalMoney` (`$600E`), `CurrentWager` (`$6014`), `Player1ClubBag` (`$6027`) | `prize_money.md` |
+| Round save slots | 15, 9 | `$D962` `LD962` picks one of 27 slots (mode slot + 9 x `CurrCourse`); save `$D94C` -> bank 9 `$AE31`, restore `$D95B` -> `$AEEC`; in-use flags `$61AF`+slot, 50-byte headers `$61CA`+50 x slot (`$AF9C`), score records through `ModeCourseSramRecordPtrTable` (`$AFF1`, `$6710`-`$6C0D`); tournament records through `TournamentSramRecordPtrTable` (`$B04B`, from `$6C20`) | `scorecard_qr.md` (Save and continue) |
 
 ## Commonly read RAM
 

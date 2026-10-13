@@ -41,6 +41,7 @@ from .extended_sram_defaults import (
     BallSpin,
     SwingSpeed,
 )
+from .famistudio_music import famistudio_music_patch, load_blob
 from .green_shortcut import green_shortcut_patch
 from .green_slope_physics import (
     DEFAULT_FRICTION,
@@ -218,6 +219,12 @@ class MusicImportParams:
 
 
 @dataclass(frozen=True)
+class FamiStudioMusicParams:
+    #: a golf-famistudio-build blob
+    blob: Path
+
+
+@dataclass(frozen=True)
 class CourseIntroSkyParams:
     #: a 256-pixel-wide image whose top 64 rows are the sky; Mario Open's when omitted
     image: Path = MARIO_OPEN_SKY_IMAGE
@@ -359,6 +366,12 @@ def _build_music(ctx: BuildContext, params: MusicImportParams) -> ROMPatch:
     return music_import_patch(
         dump, track=params.track, transpose_adjust=params.transpose_adjust
     )
+
+
+def _build_famistudio_music(
+    ctx: BuildContext, params: FamiStudioMusicParams
+) -> ROMPatch:
+    return famistudio_music_patch(load_blob(params.blob))
 
 
 def _report_music(params: MusicImportParams, patch) -> list[str]:
@@ -554,6 +567,12 @@ PATCH_SPECS: dict[str, PatchSpec[Any, Any]] = {
             MusicImportParams,
             _build_music,
             _report_music,
+        ),
+        PatchSpec(
+            "famistudio_music",
+            "Proof of concept: play the course theme with the FamiStudio sound engine; needs menu_trim (docs/famistudio_music.md)",
+            FamiStudioMusicParams,
+            _build_famistudio_music,
         ),
         PatchSpec(
             "sram_defaults",

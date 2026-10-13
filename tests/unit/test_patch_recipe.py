@@ -40,6 +40,8 @@ class TestRegistry:
         self, credentials_file, tmp_path
     ):
         courses = write_courses(tmp_path / "courses", "japan")
+        blob = tmp_path / "song.fsblob"
+        blob.write_bytes(b"\x60")
         params = {
             "course": {"course": str(courses / "japan")},
             "course_theme": {"music": 2},
@@ -51,6 +53,7 @@ class TestRegistry:
             "wind_anchors": {"anchors": " ".join(["80/7"] * 18)},
             "qr_credentials": {"credentials": str(credentials_file)},
             "music_import": {"dump": "data/music/music_jp_courses.json"},
+            "famistudio_music": {"blob": str(blob)},
         }
         for spec_id in PATCH_SPECS:
             if spec_id == "signpost_random_banner":

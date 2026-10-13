@@ -43,6 +43,7 @@ One line per document. Command-line tools are indexed in the top-level `README.m
 | [perspective_scene.md](perspective_scene.md) | The behind-the-golfer scene in bank 9: course probes, neighbor tile passes and drawing the ball in |
 | [hud_course_abbrev.md](hud_course_abbrev.md) | The course abbreviation in the in-game HUD |
 | [music_format.md](music_format.md) | The audio engine and track format, including inserting tracks |
+| [famistudio_music.md](famistudio_music.md) | Proof of concept: the FamiStudio sound engine beside the game's, playing the course theme |
 | [topspin.md](topspin.md) | Why the TOP 1 / TOP 2 spin settings have no effect on play |
 | [opponent_shots.md](opponent_shots.md) | How CPU opponents play: recorded shot lists replayed per hole, chosen by level and chance |
 | [wind.md](wind.md) | Wind anchors, per-swing speed, flight physics and the crosswind bug |
