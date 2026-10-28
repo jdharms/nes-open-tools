@@ -21,6 +21,7 @@ from golf.randomizer.catalog import (
     content_hash,
     sync_vanilla,
 )
+from golf.randomizer.community import check_community
 from golf.randomizer.rehydrate import check_rehydrated
 from tests.synthetic_holes import synthetic_hole, write_courses
 
@@ -253,3 +254,6 @@ class TestCheckedInIndex:
 
     def test_every_mario_open_hole_matches_its_data(self, vanilla_jp_courses):
         assert check_rehydrated(Catalog.load(), vanilla_jp_courses, [JP_ROM]) == 90
+
+    def test_every_community_hole_is_where_it_was_published_and_builds(self):
+        assert check_community(Catalog.load()) == []

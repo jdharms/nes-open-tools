@@ -21,7 +21,7 @@ from .catalog import (
     COMMUNITY,
     DERIVED,
     VANILLA,
-    VANILLA_COURSES,
+    VANILLA_OWNERS,
     Catalog,
     CatalogEntry,
     CatalogError,
@@ -30,7 +30,6 @@ from .catalog import (
     HoleStore,
     canonical_dict,
     content_hash,
-    vanilla_lineage,
 )
 from .curation import CurationSnapshot, HoleCuration
 from .manifest import HOLE_PARS
@@ -56,11 +55,6 @@ GREENS_HEIGHT = 24
 ATTRIBUTE_PALETTES = range(4)
 TILES = range(0x100)
 PINS = 4
-
-#: the lineage owners that name a vanilla course, which no derived hole may take
-VANILLA_OWNERS = frozenset(
-    vanilla_lineage(rom, course, 1).split("/")[0] for rom, course, _ in VANILLA_COURSES
-)
 
 
 class DeriveError(CatalogError):
@@ -393,7 +387,11 @@ def derive(
         distance=published.metadata["distance"],
         author=author,
     )
-    new_catalog = Catalog(catalog.version + 1, {**catalog.entries, hole_id: entry})
+    new_catalog = replace(
+        catalog,
+        version=catalog.version + 1,
+        entries={**catalog.entries, hole_id: entry},
+    )
 
     first = hole_id.version == 1
     record = curation.holes.get(lineage, HoleCuration())

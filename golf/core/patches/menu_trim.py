@@ -66,7 +66,8 @@ inline `LookupInlineByteTable` table at $89EA: 1 -> 1 (US), 2 -> 0 (JAPAN),
 3 -> 2 (UK). With one option the key is always 1, so its value at $89EB
 becomes 0 and `CurrCourse` is 0. The handler then calls $D939 as usual, which
 goes to CONTINUE/NEW GAME only when a saved stroke-play game exists for that
-slot.
+slot. With `course_select=False` none of this is written, for a patch that
+brings its own course select, as `tournament_days` does.
 
 Other wrinkles
 --------------
@@ -198,6 +199,16 @@ _CLUB_HOUSE_CODES = {
 }
 
 RANDOM_COURSE_TEXT = "RANDOM COURSE"
+#: the patches `course_select=False` leaves out
+_COURSE_SELECT_PATCHES = frozenset(
+    {
+        "menu_trim_course_options",
+        "menu_trim_course_option_text",
+        "menu_trim_course_select_japan",
+    }
+)
+#: the main menu's options list once trimmed: two entries, STROKE PLAY and CLUB HOUSE
+_TRIMMED_MAIN_OPTIONS = bytes([0x02, 0xA9, 0x8B, 0xD1, 0x8B])
 _COURSE_OPTION_ADDR = 0x8C6C
 
 # US COURSE's entry record plus the first 4 bytes of JAPAN COURSE's.
@@ -334,7 +345,9 @@ def _club_house_patches(choose_clubs: bool) -> list[BytePatch]:
 
 
 def menu_trim_patches(
-    words: str | Sequence[str] | None = None, choose_clubs: bool = True
+    words: str | Sequence[str] | None = None,
+    choose_clubs: bool = True,
+    course_select: bool = True,
 ) -> list[BytePatch]:
     """
     Build the menu trim patch set.
@@ -342,6 +355,8 @@ def menu_trim_patches(
     Args:
         words: the header's three words; see normalize_words.
         choose_clubs: false leaves CHOOSE CLUBS out of the club house.
+        course_select: false leaves the course select's options and
+            ApplyCourseSelection as they are, for a patch that brings its own.
 
     Returns:
         The patches in application order.
@@ -368,7 +383,7 @@ def menu_trim_patches(
 
     header_ptr = bytes([_HEADER_LIST_ADDR & 0xFF, _HEADER_LIST_ADDR >> 8])
 
-    return [
+    patches = [
         BytePatch(
             name="menu_trim_header_list",
             description=f"Shared header list for menus $00-$02, with line 1 {line1!r}, in the space freed by the removed main-menu entries",
@@ -409,7 +424,7 @@ def menu_trim_patches(
             description="Main menu options: 2 entries (STROKE PLAY, CLUB HOUSE) instead of 4",
             prg_offset=_prg(0x8BA0),
             original=bytes([0x04, 0xA9, 0x8B, 0xB7, 0x8B]),
-            patched=bytes([0x02, 0xA9, 0x8B, 0xD1, 0x8B]),
+            patched=_TRIMMED_MAIN_OPTIONS,
         ),
         BytePatch(
             name="menu_trim_main_destinations",
@@ -455,23 +470,60 @@ def menu_trim_patches(
         ),
         *_club_house_patches(choose_clubs),
     ]
+    if not course_select:
+        patches = [p for p in patches if p.name not in _COURSE_SELECT_PATCHES]
+    return patches
 
 
 def menu_trim_patch(
-    words: str | Sequence[str] | None = None, choose_clubs: bool = True
+    words: str | Sequence[str] | None = None,
+    choose_clubs: bool = True,
+    course_select: bool = True,
 ) -> CompositePatch[BytePatch]:
     """Build the menu trim patch set as a single named CompositePatch."""
-    patches = menu_trim_patches(words, choose_clubs)
+    patches = menu_trim_patches(words, choose_clubs, course_select)
     entries = 5 if choose_clubs else 4
+    course = (
+        "course select to RANDOM COURSE"
+        if course_select
+        else "course select left alone"
+    )
     return CompositePatch(
         name="menu_trim",
         description=(
-            "Trim the title menu to STROKE PLAY + CLUB HOUSE, course select to "
-            f"RANDOM COURSE and the club house to {entries} entries, under a "
-            "three-word header"
+            f"Trim the title menu to STROKE PLAY + CLUB HOUSE, {course} and the "
+            f"club house to {entries} entries, under a three-word header"
         ),
         patches=patches,
     )
+
+
+class _MenuTrimmed(ROMPatch):
+    """
+    A requirement, not a patch: the title menu offers only STROKE PLAY and CLUB
+    HOUSE, so no other game mode is reached.
+
+    It is named `menu_trim`, the patch that satisfies it. It writes nothing.
+    """
+
+    name = "menu_trim"
+    description = "The title menu offers only STROKE PLAY and CLUB HOUSE"
+
+    def can_apply(self, rom_writer: "RomWriter") -> bool:
+        return False
+
+    def is_applied(self, rom_writer: "RomWriter") -> bool:
+        return rom_writer.read_prg(_prg(0x8BA0), len(_TRIMMED_MAIN_OPTIONS)) == (
+            _TRIMMED_MAIN_OPTIONS
+        )
+
+    def apply(self, rom_writer: "RomWriter") -> None:
+        raise PatchError(f"{self.description} is a requirement, not a patch")
+
+
+#: The game modes past stroke play are out of reach, so patches that would only
+#: be right in stroke play can require this.
+MENU_TRIMMED = _MenuTrimmed()
 
 
 class _ClubHouseOmits(ROMPatch):

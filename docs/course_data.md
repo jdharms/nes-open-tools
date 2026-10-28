@@ -10,6 +10,11 @@ the ROM, see `golf/core/compression.md` and the `nes-open-golf-rom-layout` skill
 - **18 holes per course** (54 total holes)
 - **Course files**: `courses/{country}/hole_{01-18}.json` and `courses/{country}/course.json`
 - **JP courses** (Mario Open Golf): `courses/jp/jp_{course}/`
+- **Community holes**: working copies under `courses/community/`, committed: a course in
+  `courses/community/{course}/` with the `golf-patch` recipe that builds it (e.g.
+  `courses/community/georgia_pines/georgia_pines.json`), loose holes in
+  `courses/community/{author}/`. The randomizer reads only the frozen copies `golf-community`
+  publishes under `data/catalog/community/` (`docs/community_holes.md`)
 - **Where they come from**: the vanilla courses are not committed. `golf-rehydrate` dumps
   both ROMs through `golf/core/course_dump.py` and checks them against the catalog;
   `golf-dump` and `golf-dump-jp` dump one ROM each, with compression statistics in

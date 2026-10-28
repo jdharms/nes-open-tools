@@ -76,6 +76,9 @@ class HoleData:
             "flag_positions": data.get("flag_positions", []),
             "_debug": data.get("_debug", {}),
         }
+        # Who made the hole, for a community hole's credit; it never reaches the ROM
+        if "author" in data:
+            self.metadata["author"] = data["author"]
 
         self.modified = False
 
@@ -106,8 +109,12 @@ class HoleData:
             row_str = hex_utils.format_hex_row(row)
             greens_rows.append(row_str)
 
+        author = (
+            {"author": self.metadata["author"]} if "author" in self.metadata else {}
+        )
         return {
             "hole": self.metadata.get("hole", 1),
+            **author,
             "par": self.metadata.get("par", 4),
             "distance": self.metadata.get("distance", 400),
             "handicap": self.metadata.get("handicap", 1),

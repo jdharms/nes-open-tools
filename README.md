@@ -68,7 +68,9 @@ full reference for its options.
 - **docs/** - design and reverse-engineering notes; start at `docs/README.md` and `docs/documentation.md`.
 - **data/** - checked-in tables, tilesets, sprites and exports the tools and editor load
 - **courses/** - course JSON: the vanilla courses `golf-rehydrate` dumps (not committed;
-  the directories are kept with `.gitkeep` markers) and any of your own
+  the directories are kept with `.gitkeep` markers), the community's working copies in
+  `courses/community/` (committed; a course with its build recipe, loose holes under their
+  author) and any of your own
 
 ## Commands
 
@@ -101,6 +103,7 @@ Build a standalone editor executable with `uv run pyinstaller run_editor.spec`.
 | `golf-catalog-sync [courses_root] [--check]` | Add dumped vanilla holes to the randomizer catalog and verify the rest -> `data/catalog/holes.json`; see `docs/catalog.md` |
 | `golf-curate list/show/family/suggest/check` | Read and edit hole curation -> `data/catalog/curation.json`; `suggest` proposes families from the hole data; see `docs/catalog.md` |
 | `golf-derive new/export/show/check` | Publish an edited vanilla hole as a derived hole: a delta under `data/catalog/derived/`, a catalog entry and a curation record; see `docs/derived_holes.md` |
+| `golf-community hole/course/check` | Publish a community hole, or a community course's 18 holes, as frozen copies beside the catalog index, with their entries; see `docs/community_holes.md` |
 | `golf-hazard-stamps [courses_root] [--check]` | Regenerate the editor's built-in hazard stamps from every enclosed bunker and water hazard in the vanilla courses -> `data/stamps/built-in/hazard/` |
 | `golf-feature-style [courses_root] [--check]` | Regenerate the tile statistics the editor's feature, out-of-bounds and green brushes fit with, from the vanilla courses -> `data/tables/feature_style.json`; see `docs/feature_brush.md` |
 

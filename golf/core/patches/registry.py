@@ -79,6 +79,7 @@ from .sram_defaults import (
     magic_bytes,
     sram_defaults_patch,
 )
+from .tournament_days import tournament_days_patch
 from .wind_anchors import wind_anchors_patch
 from .wind_fix import WIND_FIX_PATCH
 from .wram_expansion import WRAM_EXPANSION_PATCH
@@ -151,6 +152,9 @@ class MenuTrimParams:
     words: list[str] | None = None
     #: false leaves CHOOSE CLUBS out of the club house, so the new-save bag stays
     choose_clubs: bool = True
+    #: false leaves the course select alone, for a patch that brings its own
+    #: (tournament_days)
+    course_select: bool = True
 
 
 @dataclass(frozen=True)
@@ -199,6 +203,13 @@ class ScorecardCourseNameParams:
     name: str = DEFAULT_COURSE_NAME
     #: replaces "18H STROKE PLAY": A-Z, 0-9 and space, at most 26 characters
     title: str | None = None
+
+
+@dataclass(frozen=True)
+class TournamentDaysParams:
+    #: the four day names the course select offers; A-Z, 0-9 and space, at most 9
+    #: characters each; default THURSDAY-SUNDAY
+    days: list[str] | None = None
 
 
 @dataclass(frozen=True)
@@ -464,7 +475,9 @@ PATCH_SPECS: dict[str, PatchSpec[Any, Any]] = {
             "menu_trim",
             "Trim the title, course select and club house menus, under a three-word header (docs/menu_system.md)",
             MenuTrimParams,
-            lambda ctx, params: menu_trim_patch(params.words, params.choose_clubs),
+            lambda ctx, params: menu_trim_patch(
+                params.words, params.choose_clubs, params.course_select
+            ),
         ),
         PatchSpec(
             "remove_course_banner",
@@ -521,6 +534,12 @@ PATCH_SPECS: dict[str, PatchSpec[Any, Any]] = {
             "Show one course name on the scorecard for every course slot (docs/scorecard.md)",
             ScorecardCourseNameParams,
             lambda ctx, params: scorecard_course_name_patch(params.name, params.title),
+        ),
+        PatchSpec(
+            "tournament_days",
+            "A day select in place of the course select; pins, save slots and the scorecard title follow the day (docs/tournament_days.md)",
+            TournamentDaysParams,
+            lambda ctx, params: tournament_days_patch(params.days),
         ),
         PatchSpec(
             "round_stats",

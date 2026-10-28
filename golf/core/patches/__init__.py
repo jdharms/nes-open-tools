@@ -102,6 +102,11 @@ from .signpost_color import (
 from .signpost_random_banner import random_banner_patches
 from .sram_defaults import Club, sram_defaults_patch, sram_defaults_patches
 from .stack import PatchStack, StackBuild, StackError
+from .tournament_days import (
+    DEFAULT_DAYS,
+    tournament_days_patch,
+    tournament_days_patches,
+)
 from .wind_anchors import wind_anchors_patch
 from .wind_fix import WIND_FIX_PATCH
 from .wram_expansion import WRAM_EXPANSION_PATCH
@@ -147,6 +152,9 @@ __all__ = [
     "DEFAULT_HOLD_FRAMES",
     "menu_trim_patch",
     "menu_trim_patches",
+    "tournament_days_patch",
+    "tournament_days_patches",
+    "DEFAULT_DAYS",
     "DEFAULT_WORDS",
     "RENDERABLE_CHARS",
     "seeded_wind_patch",

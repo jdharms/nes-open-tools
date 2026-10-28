@@ -108,8 +108,9 @@ afterwards).
 
 Mock-ups come from `golf/rendering/pil_renderer.py`: overwrite `PALETTES` and
 `GREENS_PALETTE` in `golf/core/palettes.py` in place, then call
-`render_hole_to_image` and `render_greens_to_image`. Drop the hole's `greens` key first:
-the renderer's green overlay is an editor convention, not game art.
+`render_hole_to_image` and `render_greens_to_image`. The renderer's green overlay stands
+in for the game's: the overhead view draws the green as a sprite on top of the terrain
+tiles, so a season's mock-up keeps it.
 
 ## Unknowns
 

@@ -259,7 +259,9 @@ HOUSE, cuts course select to a single RANDOM COURSE option that picks course 0,
 and cuts the club house to five entries, or four without CHOOSE CLUBS
 (`choose_clubs=False`, which a randomizer seed with club rules uses so the bag
 cannot change in the game). Every `BytePatch` is length-preserving and inside
-bank 12, and no instruction changes except one compare operand.
+bank 12, and no instruction changes except one compare operand. With
+`course_select=False` it leaves the course select alone, for a patch that brings
+its own: `tournament_days` (`docs/tournament_days.md`) offers four days there.
 
 Either way PLAYER STATS is gone, and nothing else reaches its code in bank 9
 (`$B519` on). `PLAYER_STATS_REMOVED` in the same module is a requirement other

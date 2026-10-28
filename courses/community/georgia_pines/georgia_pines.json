@@ -1,0 +1,13 @@
+{
+  "steps": [
+    {"patch": "wram_expansion"},
+    {"patch": "multi_bank_lookup"},
+    {"patch": "course_mirrors"},
+    {"patch": "course", "course": "."},
+    {"patch": "wind_fix"},
+    {"patch": "green_shortcut"},
+    {"patch": "scorecard_course_name", "name": "GEORGIA PINES"},
+    {"patch": "menu_trim", "words": ["PINES", "OPEN", "GOLF"], "course_select": false},
+    {"patch": "tournament_days", "days": ["THURSDAY", "FRIDAY", "SATURDAY", "SUNDAY"]}
+  ]
+}

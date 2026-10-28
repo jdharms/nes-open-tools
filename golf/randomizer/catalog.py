@@ -9,7 +9,9 @@ place, since a seed keeps the holes it was built with (ADR 0024). See docs/catal
 
 A hole has one of three kinds, read from its source: a vanilla hole is dumped from a ROM,
 a derived hole is a vanilla hole with a delta applied (`golf.randomizer.delta`,
-docs/derived_holes.md), and a community hole is a hole file.
+docs/derived_holes.md), and a community hole is a frozen hole file beside the index
+(`golf.randomizer.community`, ADR 0027). A community course owns the lineages
+`<course>/01`-`<course>/18`; every other owner is an author.
 """
 
 import hashlib
@@ -40,13 +42,14 @@ COMMUNITY = "community"
 KINDS = (VANILLA, DERIVED, COMMUNITY)
 
 _SEGMENT = r"[a-z0-9_]+"
+OWNER_PATTERN = re.compile(_SEGMENT)
 LINEAGE_PATTERN = re.compile(rf"{_SEGMENT}/{_SEGMENT}")
 _ID_PATTERN = re.compile(
     rf"(?P<lineage>{_SEGMENT}/{_SEGMENT})(?:@(?P<version>[1-9][0-9]*))?"
 )
 
-# HoleData.to_dict() keys whose values reach the ROM (see CoursePatch). `hole` and
-# `_debug` do not; nor do terrain rows past `terrain.height`.
+# HoleData.to_dict() keys whose values reach the ROM (see CoursePatch). `hole`, `author`
+# and `_debug` do not; nor do terrain rows past `terrain.height`.
 ROM_BOUND_KEYS = (
     "par",
     "distance",
@@ -136,9 +139,15 @@ class RomSource:
 
 @dataclass(frozen=True)
 class FileSource:
-    """A community hole: a hole JSON file, relative to the hole store root."""
+    """A community hole: a frozen hole JSON file, relative to `root`, the directory the
+    catalog index is in, as a derived hole's delta is (ADR 0027)."""
 
     file: str
+    root: Path = field(default=DEFAULT_INDEX.parent, compare=False, repr=False)
+
+    @property
+    def path(self) -> Path:
+        return self.root / self.file
 
     def to_json(self) -> dict:
         return {"file": self.file}
@@ -170,27 +179,27 @@ Source = RomSource | FileSource | DerivedSource
 _DERIVED_KEYS = {"base", "delta"}
 
 
-def _source_from_json(hole_id: str, data: dict) -> RomSource | FileSource:
+def _source_from_json(hole_id: str, data: dict, root: Path) -> RomSource | FileSource:
     if set(data) == {"rom", "course", "hole"}:
         return RomSource(data["rom"], data["course"], data["hole"])
     if set(data) == {"file"}:
-        return FileSource(data["file"])
+        return FileSource(check_index_path(hole_id, data["file"], "file"), root)
     raise CatalogError(f"{hole_id}: unrecognized source {data!r}")
 
 
-def check_delta_path(hole_id: object, delta: object) -> str:
-    """A delta's path as an index may write it: relative, and inside the index's directory."""
+def check_index_path(hole_id: object, path: object, what: str) -> str:
+    """A path as an index may write it: relative, and inside the index's directory."""
     if (
-        not isinstance(delta, str)
-        or not delta
-        or Path(delta).is_absolute()
-        or ".." in Path(delta).parts
-        or "\\" in delta
+        not isinstance(path, str)
+        or not path
+        or Path(path).is_absolute()
+        or ".." in Path(path).parts
+        or "\\" in path
     ):
         raise CatalogError(
-            f"{hole_id}: delta must be a path under the catalog directory, got {delta!r}"
+            f"{hole_id}: {what} must be a path under the catalog directory, got {path!r}"
         )
-    return delta
+    return path
 
 
 @dataclass(frozen=True)
@@ -262,7 +271,7 @@ def _entry_from_json(
     if isinstance(source, dict) and set(source) == _DERIVED_KEYS:
         source = _derived_source(key, source, bases, root)
     else:
-        source = _source_from_json(key, source)
+        source = _source_from_json(key, source, root)
     return CatalogEntry(
         id=hole_id,
         source=source,
@@ -296,15 +305,69 @@ def _derived_source(
             f"{key}: base {base_id} is not a vanilla hole in the catalog; a derived "
             "hole's base is a vanilla hole"
         )
-    return DerivedSource(base, check_delta_path(key, data["delta"]), root)
+    return DerivedSource(base, check_index_path(key, data["delta"], "delta"), root)
+
+
+@dataclass(frozen=True)
+class CommunityCourse:
+    """A community course: its display name and the author its holes are credited to
+    unless a hole names its own. Its holes are the lineages `<slug>/01`-`<slug>/18`."""
+
+    name: str
+    author: str
+
+    def to_json(self) -> dict:
+        return {"name": self.name, "author": self.author}
+
+
+def course_lineage(course: str, hole: int) -> str:
+    """`georgia_pines/07`, as a vanilla course's are."""
+    return f"{course}/{hole:02d}"
+
+
+def _course_from_json(slug: str, data: object) -> CommunityCourse:
+    if not OWNER_PATTERN.fullmatch(slug):
+        raise CatalogError(f"course {slug!r} must match {OWNER_PATTERN.pattern}")
+    if slug in VANILLA_OWNERS or slug == COMMUNITY:
+        raise CatalogError(f"course {slug!r} is an owner no community course may take")
+    if not (isinstance(data, dict) and set(data) == {"name", "author"}):
+        raise CatalogError(f"course {slug}: needs exactly 'name' and 'author'")
+    for key in ("name", "author"):
+        if not (isinstance(data[key], str) and data[key].strip()):
+            raise CatalogError(f"course {slug}: {key} must be a non-empty string")
+    return CommunityCourse(data["name"], data["author"])
+
+
+_COURSE_SLUG = re.compile(r"(0[1-9]|1[0-8])")
+
+
+def _check_course_holes(
+    courses: Mapping[str, CommunityCourse], entries: Mapping[HoleId, CatalogEntry]
+) -> None:
+    """A listed course's owner holds only its own community holes, 01-18."""
+    for hole_id, entry in entries.items():
+        owner, slug = hole_id.lineage.split("/")
+        if owner not in courses:
+            continue
+        if entry.kind != COMMUNITY or not _COURSE_SLUG.fullmatch(slug):
+            raise CatalogError(
+                f"{hole_id}: {owner} is a community course, which holds only its own "
+                "holes, 01-18"
+            )
 
 
 @dataclass(frozen=True)
 class Catalog:
-    """The frozen index. `version` increases whenever entries are added or withdrawn."""
+    """The frozen index. `version` increases whenever entries are added or withdrawn, or
+    a course is listed."""
 
     version: int
     entries: Mapping[HoleId, CatalogEntry] = field(default_factory=dict)
+    #: community courses by slug, the owner of their holes' lineages
+    courses: Mapping[str, CommunityCourse] = field(default_factory=dict)
+
+    def __post_init__(self):
+        _check_course_holes(self.courses, self.entries)
 
     @classmethod
     def load(cls, path: Path = DEFAULT_INDEX) -> "Catalog":
@@ -313,11 +376,16 @@ class Catalog:
 
     @classmethod
     def from_json(cls, data: dict, root: Path = DEFAULT_INDEX.parent) -> "Catalog":
-        """The index. `root` is the directory its derived holes' deltas are under."""
-        if set(data) != {"version", "holes"}:
+        """The index. `root` is the directory its deltas and community holes are under."""
+        if not {"version", "holes"} <= set(data) <= {"version", "holes", "courses"}:
             raise CatalogError(
-                f"catalog index needs exactly 'version' and 'holes', got {sorted(data)}"
+                "catalog index needs 'version' and 'holes', and may have 'courses'; "
+                f"got {sorted(data)}"
             )
+        courses = {
+            slug: _course_from_json(slug, value)
+            for slug, value in data.get("courses", {}).items()
+        }
         entries: dict[HoleId, CatalogEntry] = {}
         derived = {}
         for key, value in data["holes"].items():
@@ -334,16 +402,19 @@ class Catalog:
         for key, value in derived.items():
             entry = _entry_from_json(key, value, vanilla, root)
             entries[entry.id] = entry
-        return cls(data["version"], entries)
+        return cls(data["version"], entries, courses)
 
     def to_json(self) -> dict:
-        return {
-            "version": self.version,
-            "holes": {
-                str(hole_id): self.entries[hole_id].to_json()
-                for hole_id in sorted(self.entries)
-            },
+        data: dict = {"version": self.version}
+        if self.courses:
+            data["courses"] = {
+                slug: self.courses[slug].to_json() for slug in sorted(self.courses)
+            }
+        data["holes"] = {
+            str(hole_id): self.entries[hole_id].to_json()
+            for hole_id in sorted(self.entries)
         }
+        return data
 
     def save(self, path: Path = DEFAULT_INDEX) -> None:
         Path(path).write_text(json.dumps(self.to_json(), indent=2) + "\n")
@@ -363,6 +434,14 @@ class Catalog:
 
     def __len__(self) -> int:
         return len(self.entries)
+
+    def author_for(self, lineage: str, hole_author: str | None) -> str | None:
+        """Who a hole published under `lineage` is credited to: the hole's own author,
+        or its course's when it is a course's hole and names none."""
+        if hole_author:
+            return hole_author
+        course = self.courses.get(lineage.split("/")[0])
+        return course.author if course else None
 
     def lineages(self) -> set[str]:
         return {hole_id.lineage for hole_id in self.entries}
@@ -384,9 +463,10 @@ class HoleStore:
     """Resolves catalog entries to hole data under a root directory, verifying each hash.
 
     Vanilla holes live where the dump tools write them: `<root>/<course>/hole_NN.json` for
-    the US ROM and `<root>/jp/<course>/hole_NN.json` for Mario Open. Community holes live at
-    their file path relative to the root. A derived hole has no file here: it is its
-    base, from this store, with its delta applied, worked out on each load.
+    the US ROM and `<root>/jp/<course>/hole_NN.json` for Mario Open. Neither a community
+    hole nor a derived hole has a file here: a community hole is its frozen file beside the
+    index, and a derived hole is its base, from this store, with its delta applied, worked
+    out on each load.
     """
 
     def __init__(self, root: Path = DEFAULT_COURSES):
@@ -395,10 +475,8 @@ class HoleStore:
     def path_for(self, entry: CatalogEntry) -> Path:
         """The file an entry's own data is in: its hole file, or a derived hole's delta."""
         source = entry.source
-        if isinstance(source, DerivedSource):
+        if isinstance(source, DerivedSource | FileSource):
             return source.path
-        if isinstance(source, FileSource):
-            return self.root / source.file
         if source.rom == US_ROM:
             return self.root / source.course / f"hole_{source.hole:02d}.json"
         if source.rom == JP_ROM:
@@ -472,6 +550,12 @@ def vanilla_lineage(rom: str, course: str, hole: int) -> str:
     return f"{prefix}/{hole:02d}"
 
 
+#: the lineage owners that name a vanilla course, which no other hole may take
+VANILLA_OWNERS = frozenset(
+    vanilla_lineage(rom, course, 1).split("/")[0] for rom, course, _ in VANILLA_COURSES
+)
+
+
 def vanilla_entry(
     store: HoleStore, rom: str, course: str, hole_number: int
 ) -> CatalogEntry | None:
@@ -540,5 +624,5 @@ def sync_vanilla(catalog: Catalog, store: HoleStore) -> SyncReport:
             else:
                 report.verified.append(hole_id)
     if report.added:
-        report.catalog = Catalog(catalog.version + 1, entries)
+        report.catalog = Catalog(catalog.version + 1, entries, catalog.courses)
     return report

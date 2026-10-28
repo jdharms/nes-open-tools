@@ -38,7 +38,8 @@ Decisions: ADR 0022 (the entry and its delta) and ADR 0023 (how a seed asks for 
   disagrees with the entry is refused.
 - **The lineage** is `<owner>/<slug>`: the owner is `community` or one author's name, and
   the entry's `author` holds the credit either way. A vanilla course's owner (`nes_us`,
-  `jp_uk`) is refused. By convention the slug is the base's lineage, what moved and the
+  `jp_uk`) is refused, and so is a community course's, which holds only its own holes
+  ([community_holes.md](community_holes.md)). By convention the slug is the base's lineage, what moved and the
   par: `_forward` for a tee moved up, `_short` for a green moved down or both moved, as
   in `community/nes_us_12_forward3`. Because the slug names the par, every version of a
   lineage has its first version's par, and a hole of another par is a lineage of its

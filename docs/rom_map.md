@@ -89,6 +89,7 @@ Byte-level layout of the course data banks: the `nes-open-golf-rom-layout` skill
 | Topic | Bank | Start here | Doc |
 |---|---|---|---|
 | Hole setup | 15 | `$DA90` `InitHole`, `$DAB4` `LoadHoleParameters`, `$DB5D` `LoadTerrainAndAttrs`, `$DB3F` `CalcFlagXPosition` | `wram_expansion.md` |
+| Pin position | 15 | `$DB15` in `InitHole`: `JSR LSFR_RNG_ALGO`, `AND #$03` picks one of the hole's four flag offsets, read at `$DB21` (`$E02F,Y`) and `$DB40` (`$DF57,Y`) | `seeded_wind.md`, `tournament_days.md` |
 | Pointer and metadata tables | 15 | `$DBBB`-`$E106` (course offsets, terrain/greens pointers, par, distance, tee, green, flags) | rom-layout skill |
 | Terrain decompression | 15 | `$E107` `DecompressTerrain`; tables `$E1AC`-`$E3AB` | `golf/core/compression.md` |
 | Greens decompression | 15, 3 | `$E3AC` `DecompressGreen`; tables bank 3 `$8000`-`$81BF`, data `GreensCompressedData` | `golf/core/compression.md` |
@@ -169,6 +170,7 @@ Byte-level layout of the course data banks: the `nes-open-golf-rom-layout` skill
 |---|---|---|---|
 | SRAM init and magic | 9 | `$ACBC` `InitializeSram` (via `$D932` `CallInitializeSram`); `SramMagic` "5S" at `$6001` | |
 | Saved state | SRAM | `PlayerName` (`$6004`), `TotalMoney` (`$600E`), `CurrentWager` (`$6014`), `Player1ClubBag` (`$6027`) | `prize_money.md` |
+| Saved rounds | 15, 9 | `$D962` `SaveSlotIndex`: X = slot (`$D976[GolfGameMode]` + two-player flag + `$D97E[CurrCourse]`, nine per course), Y = its kind; `$61AF,X` saved flag (`$D939` reads it for CONTINUE); header `$61CA` + 50 X, scores from the pointer table bank 9 `$AFF1`, sizes by kind `$AFD6`/`$AFDF`/`$AFE8`; save bank 9 `$AE31` (via `$D94C`), load `$AEEC` (via `$D95B`) | `tournament_days.md`, `scorecard_qr.md` |
 | Club bags in play | 13 | `$8ADF` `RunClubSelectPanel`, `$8A47` `AutoSelectClub`: read `Player1ClubBag` + 14 × `CurrentPlayerIndex` (`$99`), so player 2 uses `Player2ClubBag` (`$6035`); `InitializeSram` fills both from `DefaultClubBagTable` (bank 9 `$AE23`) | |
 
 ## Commonly read RAM

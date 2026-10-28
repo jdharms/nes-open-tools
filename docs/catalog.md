@@ -25,6 +25,9 @@ Version 1 is written without a suffix, and `nes_uk/01@1` parses to the same id.
 - **Vanilla lineages** are `nes_<course>/<hole>` for NES Open (`nes_us`, `nes_uk`,
   `nes_japan`) and the Mario Open dump names for Mario Open (`jp_japan`, `jp_australia`,
   `jp_france`, `jp_hawaii`, `jp_uk`).
+- **A community course's lineages** are `<course>/01`-`<course>/18`, as a vanilla
+  course's are: `georgia_pines/07`. The course is listed in the index (below), which is
+  how a tool tells a course owner from an author.
 - **Every other lineage** is `<owner>/<slug>`, where the owner is `community` or one
   author's name. The entry's `author` field holds the credit either way.
 - **A change that matters to play is a new version.** This applies to vanilla holes
@@ -54,13 +57,25 @@ A source is one of three things, and it gives the hole its **kind**:
 |---|---|---|
 | `vanilla` | `{"rom": …, "course": …, "hole": …}` | Dumped from the ROM by `golf-rehydrate` |
 | `derived` | `{"base": "<id>", "delta": "<path>"}` | The base, a vanilla hole, with a checked-in delta applied ([derived_holes.md](derived_holes.md)) |
-| `community` | `{"file": "<path>"}` | A hole file, relative to the hole store root |
+| `community` | `{"file": "<path>"}` | A frozen hole file under `community/` beside the index ([community_holes.md](community_holes.md)) |
 
 Only vanilla holes are in every pool. A seed's settings ask for the other kinds by name
 ([manifest.md](manifest.md), `include`), so adding a hole to the index puts it in no pool
 that did not ask for its kind (ADR 0023).
 
 Par and distance are copies for the pool builder and the seed page; the hash covers them.
+
+The index also lists each community course, by the slug its holes' lineages start with:
+
+```json
+"courses": {
+  "georgia_pines": {"name": "Georgia Pines", "author": "<handle>"}
+}
+```
+
+An owner listed there holds only community holes `01`-`18`; any other owner is an author
+or `community`. The vanilla owners and `community` are never courses. An index with no
+community course writes no `courses` key.
 
 Guarantees, enforced by `tests/meta/test_catalog_ids.py` and the loader:
 
@@ -71,7 +86,9 @@ Guarantees, enforced by `tests/meta/test_catalog_ids.py` and the loader:
 2. **No committed id is ever removed or given another hole**, across the index's whole
    git history: its source stays the same, and the index version never decreases. Stats
    join seeds on hole ids. An entry's hash, par, distance or author may be corrected in
-   place; a change that matters to play is a new version instead.
+   place; a change that matters to play is a new version instead. A community course,
+   once listed, stays listed, since it owns its holes' lineages; its name and author may
+   be corrected in place.
 3. **Withdrawal retires an entry for a takedown.** `"withdrawn": true` is never taken
    back. Its id stays reserved, and seeds that used it remain downloadable from their
    stored unfinished IPS. `HoleStore.load` refuses a withdrawn entry unless asked with

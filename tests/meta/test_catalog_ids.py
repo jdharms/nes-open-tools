@@ -3,7 +3,8 @@
 Seeds keep the holes they were built with and what their pages show of them (ADR 0024), so
 an entry's hash, par, distance or author may be corrected in place. What must hold is
 what stats join on: every id ever committed is still in the index, with the same source,
-and once withdrawn stays withdrawn. The index version never decreases. See
+and once withdrawn stays withdrawn; every community course ever listed is still listed,
+since it owns its holes' lineages (ADR 0027). The index version never decreases. See
 docs/catalog.md.
 """
 
@@ -54,4 +55,7 @@ def test_no_committed_id_was_removed_or_given_another_hole():
                     f"{commit}: {hole_id} has another source; publish a new lineage "
                     "or version instead"
                 )
+        for course in past.get("courses", {}):
+            if course not in current.get("courses", {}):
+                problems.append(f"{commit}: the course {course} was unlisted")
     assert not problems, "\n".join(problems)

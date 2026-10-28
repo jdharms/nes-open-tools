@@ -72,8 +72,10 @@ A toolset for reverse engineering, editing and patching the NES Open Tournament 
   `art/`, `music/`, `qr/`; course and patch tools at the top level; `archive/` for retired
   one-off scripts (no entry points)
 - `docs/`, `data/`, `renders/` (render scripts and output)
-- `courses/` - course JSON, not committed: `golf-rehydrate` dumps the vanilla courses here
-  from the ROMs (see **Vanilla data** below)
+- `courses/` - course JSON: `golf-rehydrate` dumps the vanilla courses here from the ROMs,
+  uncommitted (see **Vanilla data** below); `courses/community/` holds the community's
+  committed working copies, which `golf-community` publishes to the randomizer catalog as
+  frozen copies beside the catalog index (`docs/community_holes.md`)
 - `tests/unit/`, `tests/integration/` - integration tests need `nes_open_us.nes` in the repo root
 - `tests/physics/` - the physics model's checks against the ROM; slow, so they only run
   with `--physics` (see `golf/physics/CLAUDE.md` when working with that code). DO NOT RUN

@@ -31,10 +31,13 @@ wheels/
 *.skill
 
 # Vanilla course data and the renders made from it: golf-rehydrate rebuilds them from
-# the ROMs. Only the directory markers are committed.
+# the ROMs. Only the directory markers are committed, and the community courses, which
+# are not Nintendo's.
 /courses/**
 !/courses/**/
 !/courses/**/.gitkeep
+!/courses/community/**
+/courses/community/*.tar.gz
 /rangefinder/
 
 # Caches built from a ROM (the difficulty solver's landing table)
