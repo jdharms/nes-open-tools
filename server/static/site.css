@@ -402,6 +402,12 @@ article.collapsible > details > summary > h2 {
   margin-bottom: 0;
 }
 
+/* A card that ends in a paragraph, such as the seed page's empty rounds, closes as tightly
+   as the collapsible cards beside it. */
+article.closing-paragraph > p:last-child {
+  margin-bottom: 0;
+}
+
 /* The download settings' over-max marker; download.js keeps data-over-max current as
    clubs are checked. */
 details.download-settings[data-over-max="false"] .download-over-max {
@@ -706,4 +712,16 @@ form.admin-window button {
 
 form.admin-window input {
   max-width: 6rem;
+}
+
+/* The guest notice in the seed page's download card: a tinted callout, since signing in is
+   what lets a round post. */
+p.download-guest {
+  padding: calc(var(--pico-spacing) * 0.75) var(--pico-spacing);
+  border-radius: var(--pico-border-radius);
+  background-color: color-mix(
+    in srgb,
+    var(--pico-primary-background) 10%,
+    var(--pico-card-sectioning-background-color)
+  );
 }

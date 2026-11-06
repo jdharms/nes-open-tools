@@ -50,17 +50,17 @@ text = "Vanilla: {rom} \"{course}\""
 
 [seed.download.heading]
 note = "h2 over the download form"
-text = "Download"
+text = "Save ROM"
 
 [seed.download.lead]
 note = "line at the top of the download form; choose a name, bag and new-save options; the ROM is patched in this browser from the ROM set up there"
 text = """
-Change customizable settings here and download the patched ROM.
+Change customizable settings here and save the patched ROM.
 The ROM is patched in this browser."""
 
 [seed.download.withdrawn]
 note = "seed was withdrawn by an administrator because its stored ROM should no longer be distributed; seed page, manifest and results remain available"
-text = "This seed has been withdrawn by an administrator. Typically this is because the seed's ROM includes a gamebreaking bug."
+text = "This seed has been withdrawn by an administrator. Typically this is because the seed's ROM includes a game-breaking bug."
 
 [seed.download.noscript]
 note = "shown only with JavaScript off; downloading needs it"
@@ -70,11 +70,16 @@ ROM patching happens completely in your browser, so this process requires JavaSc
 
 [seed.download.guest_notice]
 note = "signed out only, under the download lead; this download is a guest ROM whose scorecard can't be submitted; signing in makes a ROM that records rounds to the player's account; seed.download.guest_sign_in link follows"
-text = "You're currently <mark>not signed in</mark>, so this download would be a \"Guest ROM\".  If you sign in before downloading we'll track your stats for you and tie them to your account."
+text = """
+If you sign in before saving, the game will display a QR code after the final scorecard.
+You can scan this QR code with your phone to record your stats to this page and to your account.
+You're currently <mark>not signed in</mark>, so saving now would produce a \"Guest ROM\",
+which will not display a QR code for scanning.
+"""
 
 [seed.download.guest_sign_in]
 note = "plain: link after seed.download.guest_notice; signs in with Discord and comes back to this seed page"
-text = "Log in here"
+text = "Sign in here"
 
 [seed.download.summary]
 note = "summary line of the collapsed download settings, click to open them; what the ROM will be patched with: {name} player name, {clubs} bag size with the putter, {bgm} seed.download.bgm.* word, {swing} and {putt} seed.download.speed.* words, {spin} a seed.download.spin.* word; starts from the player's saved settings"
@@ -269,7 +274,7 @@ Can't save ROM, Club Bag selection contains clubs banned for this seed: {clubs}
 [seed.download.status.refused.clubs_over_max]
 note = "download refused, bag holds too many clubs; {count} clubs chosen with the putter, {max} this seed's limit"
 text = """
-Can't save ROM, too many clubs in the Club Bag.  The limit is {max}, you selected {count}.
+Can't save ROM, too many clubs in the Club Bag. The limit is {max}, you selected {count}.
 """
 
 [seed.download.status.refused.roms_missing]

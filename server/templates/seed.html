@@ -38,9 +38,9 @@
 
   {% set download = seed.download %}
   <section>
-    <h2>{{ t("seed.download.heading") }}</h2>
     {% if seed.withdrawn_at %}
-      <article>
+      <article class="closing-paragraph">
+        <h2>{{ t("seed.download.heading") }}</h2>
         <p><mark>{{ t("seed.download.withdrawn") }}</mark></p>
       </article>
     {% else %}
@@ -48,6 +48,7 @@
                data-state="checking"
                data-required-roms="{{ download.required_roms | map(attribute='id') | join(' ') }}"
                data-filename="{{ download.filename }}">
+        <h2>{{ t("seed.download.heading") }}</h2>
         <p>{{ t("seed.download.lead") }}</p>
         {% if not user and sign_in_enabled %}
           <p class="download-guest">
@@ -176,8 +177,10 @@
         </details>
       </article>
     {% else %}
-      <h2>{{ t("seed.rounds.heading") }}</h2>
-      <p>{{ t("seed.rounds.none") }}</p>
+      <article class="closing-paragraph">
+        <h2>{{ t("seed.rounds.heading") }}</h2>
+        <p>{{ t("seed.rounds.none") }}</p>
+      </article>
     {% endif %}
   </section>
 
