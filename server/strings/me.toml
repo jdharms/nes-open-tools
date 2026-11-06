@@ -69,7 +69,10 @@ text = "(Under review)"
 
 [me.rounds.none]
 note = "shown instead of the rounds table when the player has submitted no rounds; a round is submitted by scanning the QR code shown after the scorecard with a phone"
-text = "After you've completed a round and submitted the scorecard, this will be a table listing all your completed rounds."
+text = """
+After each completed round the game will display a QR code.  Scanning this code with your phone will
+submit your scorecard to the site, and your completed rounds will be listed here.
+"""
 
 [me.download_settings.heading]
 note = "h2 over the player's saved download settings"
