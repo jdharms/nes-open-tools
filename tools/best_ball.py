@@ -30,12 +30,10 @@ def main() -> int:
         return 1
     if len(scores.players) < 2:
         print(
-            "golf-best-ball: fewer than two players' own rounds to pair",
+            "golf-best-ball: fewer than two rounds to pair",
             file=sys.stderr,
         )
         return 1
-    if scores.skipped:
-        print(f"(skipped {scores.skipped} teammate round(s): not a player's own)\n")
 
     matching = Matching(scores.players)
     print("Enter two numbers to pair them (1, 2), 'undo', or 'done'.\n")

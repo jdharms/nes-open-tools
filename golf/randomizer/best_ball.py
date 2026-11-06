@@ -6,8 +6,8 @@ holds the pairs a person matches up (`Matching`), and renders each pair's card a
 leaderboard as plain text. It computes nothing the site stores; `golf-best-ball` is its
 interactive front end.
 
-Only each player's own rounds are read. A `teammate` row is a round played as player 2 on
-a player's ROM, by someone the site does not know, so it is skipped.
+A `teammate` row is a round played as player 2 on a player's ROM, by someone the site does
+not know, so it is read as a player named after the ROM's owner with `TEAMMATE` after it.
 """
 
 import csv
@@ -19,8 +19,8 @@ HOLES = 18
 #: the column of the first hole in the CSV, after round, player, username, kind,
 #: received_at and flagged
 FIRST_HOLE = 6
-#: how many characters of a name a card's row label shows
-LABEL = 12
+#: what follows the ROM owner's name to name a teammate's round
+TEAMMATE = " (2P)"
 
 
 class ScoresError(ValueError):
@@ -41,12 +41,10 @@ class Player:
 class Scores:
     pars: tuple[int, ...]
     players: tuple[Player, ...]
-    #: rows skipped because they are not a player's own round
-    skipped: int
 
 
 def read_scores(text: str) -> Scores:
-    """A scores CSV's pars and its players' own rounds, in file order."""
+    """A scores CSV's pars and its rounds as players, own and teammate, in file order."""
     rows = list(csv.reader(io.StringIO(text)))
     if len(rows) < 2 or rows[1][:1] != ["par"]:
         raise ScoresError("not a scores CSV: no par row after the header")
@@ -63,15 +61,14 @@ def read_scores(text: str) -> Scores:
             ) from None
 
     players = []
-    skipped = 0
     for row in rows[2:]:
         if not row:
             continue
-        if row[3] != "own":
-            skipped += 1
-            continue
-        players.append(Player(name=row[1] or row[2], strokes=holes(row)))
-    return Scores(pars=holes(rows[1]), players=tuple(players), skipped=skipped)
+        name = row[1] or row[2]
+        if row[3] == "teammate":
+            name += TEAMMATE
+        players.append(Player(name=name, strokes=holes(row)))
+    return Scores(pars=holes(rows[1]), players=tuple(players))
 
 
 @dataclass
@@ -149,11 +146,14 @@ def _cell(value: int | str, counted: bool = False) -> str:
     return f" {value:>2}{'*' if counted else ' '}"
 
 
-def _row(label: str, cells: list[str], totals: list[int] | list[str]) -> str:
-    """A card row: the label, the front nine, the back nine, then out, in and total."""
+def _row(
+    label: str, width: int, cells: list[str], totals: list[int] | list[str]
+) -> str:
+    """A card row: the label padded to `width`, the front nine, the back nine, then out,
+    in and total."""
     front, back = "".join(cells[:9]), "".join(cells[9:])
     out, back_nine, total = (f"{value:>3}" for value in totals)
-    return f"{label[:LABEL]:<{LABEL}}{front}| {back}| {out} {back_nine} {total}"
+    return f"{label:<{width}}{front}| {back}| {out} {back_nine} {total}"
 
 
 def _nines(holes: tuple[int, ...]) -> list[int]:
@@ -166,6 +166,8 @@ def card(pars: tuple[int, ...], first: Player, second: Player, title: str) -> st
     A `*` marks the score that counted on each hole; on a tie, the first player's.
     """
     best = best_ball(first, second)
+    # wide enough for every row's label, so a teammate's round reads in full
+    width = max(len(first.name), len(second.name), len("Best ball")) + 1
 
     def marked(player: Player, other: Player, counts_on_tie: bool) -> list[str]:
         return [
@@ -173,18 +175,20 @@ def card(pars: tuple[int, ...], first: Player, second: Player, title: str) -> st
             for mine, theirs in zip(player.strokes, other.strokes, strict=True)
         ]
 
-    header = _row("Hole", [_cell(n) for n in range(1, HOLES + 1)], ["Out", "In", "Tot"])
+    header = _row(
+        "Hole", width, [_cell(n) for n in range(1, HOLES + 1)], ["Out", "In", "Tot"]
+    )
     rule = "-" * len(header)
     lines = [
         title,
         "=" * len(header),
         header,
-        _row("Par", [_cell(par) for par in pars], _nines(pars)),
+        _row("Par", width, [_cell(par) for par in pars], _nines(pars)),
         rule,
-        _row(first.name, marked(first, second, True), _nines(first.strokes)),
-        _row(second.name, marked(second, first, False), _nines(second.strokes)),
+        _row(first.name, width, marked(first, second, True), _nines(first.strokes)),
+        _row(second.name, width, marked(second, first, False), _nines(second.strokes)),
         rule,
-        _row("Best ball", [_cell(value) for value in best], _nines(best))
+        _row("Best ball", width, [_cell(value) for value in best], _nines(best))
         + f"  {to_par(sum(best), sum(pars))}",
     ]
     return "\n".join(lines)

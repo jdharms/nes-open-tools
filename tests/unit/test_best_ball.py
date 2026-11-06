@@ -41,7 +41,7 @@ ALICE = Player("Alice", (4,) * 9 + (5,) * 9)
 BOB = Player("Bob", (5,) * 9 + (3,) * 9)
 
 
-def test_reading_takes_pars_and_own_rounds_and_skips_teammates():
+def test_reading_takes_pars_and_every_round_naming_teammates_by_the_rom_owner():
     scores = read_scores(
         csv_text(
             round_row("Alice", ALICE.strokes),
@@ -50,8 +50,7 @@ def test_reading_takes_pars_and_own_rounds_and_skips_teammates():
         )
     )
     assert scores.pars == PARS
-    assert scores.players == (ALICE, BOB)
-    assert scores.skipped == 1
+    assert scores.players == (ALICE, Player("Alice (2P)", (6,) * 18), BOB)
 
 
 @pytest.mark.parametrize(
@@ -113,7 +112,7 @@ def test_a_card_marks_the_counted_scores_and_totals_each_row():
     assert lines[0] == "Team 1: Alice + Bob"
     par, alice, bob, best = lines[3], lines[5], lines[6], lines[8]
     assert par.endswith("|  36  36  72")
-    assert alice.startswith("Alice         4*")
+    assert alice.startswith("Alice       4*")
     assert alice.endswith("|  36  45  81")
     assert bob.endswith("|  45  27  72")
     assert " 3*" in bob
@@ -129,6 +128,13 @@ def test_ten_stroke_holes_stay_apart_and_aligned():
     lines = card(PARS, tens, worse, "tens").splitlines()
     assert "  4* 10*" in lines[5]
     assert " 10  10 " in lines[6]
+    assert len({len(line) for line in lines[2:4] + lines[5:7]}) == 1
+
+
+def test_a_card_widens_its_labels_to_the_longest_name():
+    teammate = Player("Close2Spectacular (2P)", BOB.strokes)
+    lines = card(PARS, ALICE, teammate, "long").splitlines()
+    assert lines[6].startswith("Close2Spectacular (2P)   5 ")
     assert len({len(line) for line in lines[2:4] + lines[5:7]}) == 1
 
 
