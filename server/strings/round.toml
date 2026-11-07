@@ -39,7 +39,7 @@ text = "teammate | {received}"
 
 [round.seed]
 note = "label before the link to the seed page, which shows the seed's magic words"
-text = "Seed permalink:"
+text = "Seed page (to see other players' scores):"
 
 [round.holes.number]
 note = "round table column header; hole number 1-18"
