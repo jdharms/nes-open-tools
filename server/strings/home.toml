@@ -20,8 +20,9 @@ text = "Get the ROM."
 [home.step_rom.body]
 note = "card 1 of 4, body; set up ROMs, link /rom; files stay in the browser, only checked for being unmodified"
 text = """You'll need a copy of the NES Open Tournament Golf (US)
-ROM, and preferably a copy of the Mario Open Golf (Japan) ROM.  Currently only
-version 1.0 of Mario Open Golf is supported."""
+ROM, and preferably a copy of the Mario Open Golf (Japan) ROM. Currently only
+version 1.0 of Mario Open Golf is supported. Verify your ROMs at <a href="/rom">ROM Setup</a>.
+Your ROM files never leave your machine."""
 
 [home.step_generate.header]
 note = "card 2 of 4, header; generate a seed"
@@ -30,7 +31,7 @@ text = "Generate a randomized game."
 [home.step_generate.body]
 note = "card 2 of 4, body; generate a seed, link /generate; share the seed page"
 text = """Head on over to
-<a href="/generate">Generate Game</a>.  This screen shows a variety of options.  When you're
+<a href="/generate">Generate Game</a>. This screen shows a variety of options. When you're
 satisfied, hit the Randomize! button and it'll take you to the "seed page"."""
 
 [home.step_play.header]
@@ -40,9 +41,9 @@ text = "Get playing!"
 [home.step_play.body]
 note = "card 3 of 4, body; save the ROM from the seed page; a shared seed link gives the same course; what to play it on"
 text = """From the seed page, you can save the patched ROM file.
-Sending the link to a friend will let them save the same course.  You'll need
+Sending the link to a friend will let them save the same course. You'll need
 something to run your game on.  An emulator (like <a href="https://www.mesen.ca/">Mesen</a>) is
-a good choice.  You can also play on original hardware using flash carts."""
+a good choice. You can also play on original hardware using flash carts."""
 
 [home.step_score.header]
 note = "card 4 of 4, header; post your score"
