@@ -4,6 +4,10 @@
     map <hole.json>              the playable ground, lettered by yards to the pins
     inspect <hole.json> <base>   an edited hole against its base; --set-distance
                                  writes the measured distance into the file
+    compare <hole.json> <base>   the base and the edited hole side by side, with a
+                                 line from the tee to the middle of the pins ticked
+                                 every 25 yards; -o for the PNG (default: beside
+                                 the hole file)
 
 Run from the repo root: uv run python .claude/skills/derive-par-3/scripts/forward_tee.py
 """
@@ -17,11 +21,14 @@ from collections import Counter
 from dataclasses import replace
 from pathlib import Path
 
+from PIL import Image, ImageDraw, ImageFont
+
 from golf.core.rom_reader import RomReader
 from golf.formats.hole_data import HoleData
 from golf.physics.state import Lie
 from golf.physics.terrain import HoleGround, TerrainTables
 from golf.randomizer.catalog import REPO_ROOT, Catalog, HoleStore
+from golf.rendering.rangefinder import HoleRenderer
 
 SCRATCH = REPO_ROOT / "courses" / "scratch"
 US_ROM_PATH = REPO_ROOT / "nes_open_us.nes"
@@ -207,6 +214,55 @@ def inspect(path: Path, base: str, set_distance: bool) -> None:
         print(f"wrote distance {mean}")
 
 
+#: the comparison's zoom, the gap between its two holes and its tick spacing
+SCALE, GAP, TICK_YARDS = 4, 32, 25
+
+
+def compare(path: Path, base: str, out: Path | None) -> None:
+    raw = json.loads(path.read_text())
+    original = json.loads(base_path(base).read_text())
+    renderer = HoleRenderer()
+
+    def render(hole: dict) -> Image.Image:
+        img = renderer.main(hole, 0).convert("RGB")
+        return img.resize((img.width * SCALE, img.height * SCALE), Image.NEAREST)
+
+    before, after = render(original), render(raw)
+    draw = ImageDraw.Draw(after)
+    try:
+        font = ImageFont.load_default(size=14)
+    except TypeError:  # Pillow before 10.1
+        font = ImageFont.load_default()
+
+    flags = pins(raw)
+    tee = (raw["tee"]["x"], raw["tee"]["y"])
+    for i, (x, y) in enumerate(flags, 1):
+        x, y = x * SCALE, y * SCALE
+        draw.ellipse([x - 3, y - 3, x + 3, y + 3], fill="red")
+        draw.text((x + 5, y - 8), str(i), fill="white", font=font)
+    middle = (sum(p[0] for p in flags) / 4, sum(p[1] for p in flags) / 4)
+    draw.line([*(v * SCALE for v in tee), *(v * SCALE for v in middle)], "white", 2)
+    length = math.hypot(middle[0] - tee[0], middle[1] - tee[1])
+    ux, uy = (middle[0] - tee[0]) / length, (middle[1] - tee[1]) / length
+    for yd in range(TICK_YARDS, round(yards(tee, middle)), TICK_YARDS):
+        x = (tee[0] + ux * yd / 2) * SCALE  # yards() is 2 yards a pixel
+        y = (tee[1] + uy * yd / 2) * SCALE
+        draw.line([x + uy * 8, y - ux * 8, x - uy * 8, y + ux * 8], "white", 2)
+        draw.text((x - uy * 14 - 8, y + ux * 14 - 8), str(yd), fill="yellow", font=font)
+
+    sheet = Image.new(
+        "RGB",
+        (before.width + GAP + after.width, max(before.height, after.height)),
+        "white",
+    )
+    sheet.paste(before, (0, 0))
+    sheet.paste(after, (before.width + GAP, 0))
+    out = out or path.with_suffix(".png")
+    sheet.save(out)
+    each = [round(yards(tee, p)) for p in flags]
+    print(f"wrote {out}: {base} left, the edit right; pins 1-4 at {each} yards")
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     sub = parser.add_subparsers(dest="command", required=True)
@@ -218,6 +274,10 @@ def main() -> None:
     check.add_argument("hole", type=Path)
     check.add_argument("base")
     check.add_argument("--set-distance", action="store_true")
+    side = sub.add_parser("compare")
+    side.add_argument("hole", type=Path)
+    side.add_argument("base")
+    side.add_argument("-o", "--output", type=Path)
     args = parser.parse_args()
 
     if args.command == "start":
@@ -230,6 +290,8 @@ def main() -> None:
         draw_map(target)
     elif args.command == "map":
         draw_map(args.hole)
+    elif args.command == "compare":
+        compare(args.hole, args.base, args.output)
     else:
         inspect(args.hole, args.base, args.set_distance)
 

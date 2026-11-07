@@ -23,6 +23,7 @@ H=".claude/skills/derive-par-3/scripts/forward_tee.py"
 uv run python $H start nes_uk/18                  # copy into courses/scratch/, then map
 uv run python $H map courses/scratch/nes_uk_18_forward3.json
 uv run python $H inspect courses/scratch/nes_uk_18_forward3.json nes_uk/18 --set-distance
+uv run python $H compare courses/scratch/nes_uk_18_forward3.json nes_uk/18
 ```
 
 ## The steps
@@ -33,7 +34,9 @@ uv run python $H inspect courses/scratch/nes_uk_18_forward3.json nes_uk/18 --set
    four pins, `a` 110-150, `b` 150-200, `c` 200-250, `1` under 110, and the hazards
    (`~` water, `s` sand, `#` forest or out of bounds, `T` tree trunk, `:` deep rough,
    `G` green). Summarize the spots in each band by tile row and column (pixel / 8), and
-   say whether each crosses a hazard to the green.
+   say whether each crosses a hazard to the green. Always end with the exact command to
+   open the copy, with the real file name filled in, ready to paste:
+   `uv run golf-editor courses/scratch/<base>_forward3.json`.
 2. **jdharms edits** in `uv run golf-editor <file>`:
    - a tee box stamped with the stamp tool (K, `teebox/`), forest carved first if needed;
    - the tee moved onto it with the position tool (R, arrow keys);
@@ -47,6 +50,14 @@ uv run python $H inspect courses/scratch/nes_uk_18_forward3.json nes_uk/18 --set
    not a tee box, a carve or a crop, and a tee box unlike vanilla's. `--set-distance`
    writes the mean into the file: the base's metadata distance means nothing for the
    new hole, and vanilla's own are off by a few yards.
+
+   Then `compare <file> <base>`, and Read the PNG it writes beside the hole file
+   (`courses/scratch/<base>_forward3.png`): the base at left, the edit at right, 4x,
+   the pins as numbered red dots, and a line from the tee to the middle of the pins
+   ticked every 25 yards (2 yards to a pixel). Look at it to judge the tee box and the
+   fairway around it, then give jdharms the path and walk the line: where the fairway
+   ends and each hazard starts and stops in yards, and which pins bring a hazard
+   most into play. The same image serves as the before/after for community sign-off.
 4. **Dry run.** Show jdharms the report:
    ```bash
    uv run golf-derive new <base> <file> community/<base_with_underscores>_forward3 \
