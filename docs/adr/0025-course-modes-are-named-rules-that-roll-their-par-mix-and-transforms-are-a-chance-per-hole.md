@@ -1,6 +1,6 @@
 +++
-status = "proposed"
-date = 2026-10-14
+status = "accepted"
+date = 2026-11-07
 area = "randomizer"
 permanent = false
 revisit_when = "players want a course shape the five modes and a request cannot give them, a mode's par mix needs odds a player sets per seed, or new holes make a mode's courses repetitive"
@@ -174,13 +174,16 @@ holes, and 1 in 180 transforms none.
   The words for each chance are in the strings catalog.
 - **A separate page** takes a request file a player uploads, for mystery seeds
   (ADR 0016). It is the only way to send a request the form cannot express.
-- **A par 3 course** from the form includes derived holes, the forward tees of longer
-  holes, since the par 3 course is the mode short of holes.
+- **A par 3 or executive course** from the form includes derived holes, the forward tees
+  of longer holes, since those are the modes short of par 3s. Standard and natural par
+  courses leave them out (ADR 0028).
 - **The upload** is at most 16 KB and parsed strictly; a request that rolls settings no
   course can be made from is refused with what was rolled, and not rolled again.
-- **Combinations that cannot be generated** are refused by generation, not by the form,
-  such as a par 3 course from the NES Open holes alone. The holes that can fill a mode
-  will grow with derived and community holes, and form logic would have to follow them.
+- **Combinations that cannot be generated** are refused by generation, with one
+  exception: the form refuses a par 3 or executive course from the NES Open holes alone,
+  whose 12 par 3s cannot fill either (`MODES_NOT_FROM_US_ALONE` in `server/forms.py`).
+  That check is temporary. The holes that can fill a mode will grow with derived and
+  community holes, and it goes once NES Open's pool can fill both modes.
 
 ## Rejected alternatives
 
@@ -195,7 +198,9 @@ holes, and 1 in 180 transforms none.
 - **Request aliases for presets** (`{"preset": "natural_par"}`). A preset carries its
   expert cap, so a player would at once want to override part of one. Named rules are
   the unit a player combines.
-- **Per-mode checks of sources in the form.** See **The site**.
+- **Per-mode checks of sources in the form, kept for good.** Form logic would have to
+  follow the holes that can fill each mode as the pool grows. The one check the form
+  makes is a stopgap for NES Open's par 3s (**The site**).
 - **The spike's whole vocabulary in requests.** A request could describe any course its
   rules can say, from a ladder of yardages to a palindrome of pars, but only engineers
   would write one, and its rules took most of the solver's machinery. Players asked for

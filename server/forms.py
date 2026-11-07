@@ -75,6 +75,10 @@ DRAW_RULE_CHOICES: dict[str, int | None] = {
 #: modes NES Open's holes alone can't fill, with its 12 par 3s; temporary, until the
 #: pool grows
 MODES_NOT_FROM_US_ALONE = frozenset({"par_3", "executive"})
+#: modes whose courses are mostly par 3s, which draw on derived holes as well. Full
+#: courses leave them out: a derived par 3 shares its base's family, and so would take
+#: half its base's place on the course's par 4s and par 5s (ADR 0028)
+SHORT_MODES = frozenset({"par_3", "executive"})
 
 #: FormError reasons, each shown by its own strings key in generate.html
 NO_SOURCES = "no_sources"
@@ -278,7 +282,7 @@ def request_from_state(state: FormState) -> dict:
             else [club.label for club in sorted(required)],
         },
     }
-    if not vanilla and state.mode == "par_3":
+    if not vanilla and state.mode in SHORT_MODES:
         # par 3s beyond the vanilla ones are the forward tees of longer holes
         request["include"] = ["derived"]
     return request

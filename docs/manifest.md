@@ -164,7 +164,8 @@ artifact of an existing seed is rewritten by a schema update.
 Generation draws a `prng_seed` of 16 hex characters when the settings have none, and
 records it. The site's form offers neither the PRNG seed, the mercy point, included kinds
 nor excluded tags, so a seed from it has a drawn seed, the default mercy point, no
-excluded tags, and vanilla holes only, or vanilla and derived ones for a par 3 course;
+excluded tags, and vanilla holes only, or vanilla and derived ones for a par 3 or
+executive course (ADR 0028);
 the CLI sets all four, and a request file every one but the mercy point. The form's transform chances are 0, 25, 50, 75
 and 100; a request may give any whole percent.
 

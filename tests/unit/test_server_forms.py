@@ -182,9 +182,19 @@ def test_a_vanilla_course_takes_its_own_rom_and_no_cap():
     assert settings.sources == {US_ROM} and settings.experts_per_nine is None
 
 
-def test_a_par_3_course_draws_on_derived_holes_too():
-    assert request_from_state(state(mode="par_3"))["include"] == ["derived"]
-    assert "include" not in request_from_state(state())
+@pytest.mark.parametrize("mode", ["par_3", "executive"])
+def test_a_short_course_draws_on_derived_holes_too(mode):
+    assert request_from_state(state(mode=mode))["include"] == ["derived"]
+
+
+@pytest.mark.parametrize("mode", ["standard", "natural_par"])
+def test_a_full_course_draws_on_vanilla_holes_only(mode):
+    assert "include" not in request_from_state(state(mode=mode))
+
+
+def test_a_vanilla_course_draws_on_its_own_holes_only():
+    request = request_from_state(state(mode="vanilla_course", course="nes_us"))
+    assert "include" not in request
 
 
 def test_the_form_sends_a_request_with_nothing_weighted():

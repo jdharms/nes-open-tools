@@ -174,7 +174,12 @@ golf-randomize generate --include derived
 golf-randomize generate --include derived --exclude-tags short
 ```
 
-The site's form does not offer `include`, so no seed made on the site has one.
+The site's form does not offer `include`. It includes derived holes in the courses that
+are mostly par 3s, a par 3 or executive course, and leaves them out of standard, natural
+par and vanilla courses (ADR 0028). A derived par 3 in its base's family takes half the
+family's place in a draw (below), so in a full course it would cut its base's share of the
+par 4s and par 5s by about a quarter. A request file or the CLI can include them in any
+course.
 
 A derived hole is published into its base's family, so unless the seed allows family
 repeats a course holds a hole or a hole derived from it, not both, and a family with a par 5 and its par 3 can fill either kind of slot.
