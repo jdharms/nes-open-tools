@@ -35,6 +35,8 @@ A toolset for reverse engineering, editing and patching the NES Open Tournament 
   - `nes-open-golf-rom-peek` - **use whenever inspecting a ROM**: reading bytes,
     disassembling, tracing callers, looking for reclaimable space.
   - `nes-open-golf-label-conventions` - naming rules for the `.mlb` label file.
+  - `derive-par-3` - making a par 3 from a vanilla hole's forward tee with jdharms:
+    mapping tee spots by yardage, checking the edit, and publishing with `golf-derive`.
 
 ## Repository Layout
 
@@ -229,7 +231,10 @@ A test that needs real holes asks for the `vanilla_courses` fixture (NES Open) o
 but `golf-rehydrate` has not been run, so tests never read vanilla data from the repository
 and never pass silently on a machine that could run them. They also mark the test
 `vanilla_data`. A test that only needs *a* hole should use `tests/synthetic_holes.py` so it runs on a fresh
-clone.
+clone. A test that pins how many holes the checked-in catalog holds counts them with
+`tests/catalog_counts.py`, since every derived hole published adds to what a ROM's checks
+walk, and a golden that generates from the live catalog and curation pins its holes, since
+publishing a hole can rename a family and move a seeded draw (ADR 0023).
 
 ## Claude Code Preferences
 

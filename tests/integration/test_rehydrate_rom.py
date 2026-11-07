@@ -16,6 +16,7 @@ from golf.randomizer.rehydrate import (
     rehydrate,
 )
 from golf.rendering.rangefinder import METADATA
+from tests.catalog_counts import holes_from
 
 ROOT = Path(__file__).resolve().parents[2]
 US_PATH = ROOT / "nes_open_us.nes"
@@ -33,10 +34,11 @@ def us_only(tmp_path_factory) -> tuple[Path, Path]:
     holes, rangefinder = root / "courses", root / "rangefinder"
     (holes / "us").mkdir(parents=True)
     (holes / "us" / ".gitkeep").touch()
-    report = rehydrate(Catalog.load(), holes, {US_ROM: US_PATH}, rangefinder)
+    catalog = Catalog.load()
+    report = rehydrate(catalog, holes, {US_ROM: US_PATH}, rangefinder)
     assert report.dumped == (US_ROM,)
     assert report.skipped == (JP_ROM,)
-    assert report.holes == 54
+    assert report.holes == holes_from(catalog, US_ROM)
     return holes, rangefinder
 
 
@@ -46,7 +48,8 @@ def test_installs_every_nes_open_hole_and_keeps_the_markers(us_only):
         assert len(list((holes / course).glob("hole_*.json"))) == 18
     assert (holes / "us" / ".gitkeep").exists()
     assert not list(holes.glob(".rehydrate-*"))
-    assert check_rehydrated(Catalog.load(), holes, [US_ROM]) == 54
+    catalog = Catalog.load()
+    assert check_rehydrated(catalog, holes, [US_ROM]) == holes_from(catalog, US_ROM)
 
 
 def test_renders_the_rangefinder_from_what_it_installed(us_only):
@@ -113,7 +116,9 @@ def test_the_cli_rehydrates_both_roms_and_checks_the_result(tmp_path):
     assert run("--check").returncode == 1
     installed = run()
     assert installed.returncode == 0, installed.stderr
-    assert "installed 144 holes" in installed.stdout
+    catalog = Catalog.load()
+    every = holes_from(catalog, US_ROM) + holes_from(catalog, JP_ROM)
+    assert f"installed {every} holes" in installed.stdout
     assert (rangefinder / METADATA).exists()
     assert run("--check").returncode == 0
 

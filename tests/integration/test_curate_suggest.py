@@ -4,7 +4,7 @@ Needs both vanilla ROMs rehydrated: the twins are cross-release, so the Mario Op
 half of every pair.
 """
 
-from golf.randomizer.catalog import Catalog, HoleStore
+from golf.randomizer.catalog import VANILLA, Catalog, HoleStore
 from golf.randomizer.curation import CurationSnapshot
 from golf.randomizer.twins import candidates, signatures, suggested_label
 
@@ -18,7 +18,13 @@ def test_every_catalog_hole_has_a_signature(vanilla_courses, vanilla_jp_courses)
 def test_the_shared_greens_pair_the_vanilla_holes_up(
     vanilla_courses, vanilla_jp_courses
 ):
-    holes = signatures(Catalog.load(), HoleStore(vanilla_courses))
+    catalog = Catalog.load()
+    # a derived hole shares its base's green; the twins counted here are vanilla pairs
+    holes = [
+        one
+        for one in signatures(catalog, HoleStore(vanilla_courses))
+        if catalog[one.lineage].kind == VANILLA
+    ]
     found = candidates(holes, CurationSnapshot(), include_familied=True)
 
     greens = [one for one in found if one.greens_match]

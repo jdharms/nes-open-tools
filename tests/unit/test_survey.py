@@ -11,6 +11,8 @@ from golf.randomizer.request import resolve
 from golf.randomizer.survey import TooRareError, report, survey, uniform
 
 PAR_3 = {"include": ["derived"], "constraints": [{"rule": "par_3"}]}
+#: vanilla holes only, which all have a difficulty row, so every course has a prediction
+VANILLA_PAR_3 = {"constraints": [{"rule": "par_3"}]}
 UNCAPPED = {"constraints": [{"rule": "standard"}]}
 
 
@@ -30,7 +32,7 @@ def problem(request: dict, catalog, curation) -> Problem:
 
 
 def test_a_survey_counts_what_the_rules_give(catalog, curation):
-    par_3 = problem(PAR_3, catalog, curation)
+    par_3 = problem(VANILLA_PAR_3, catalog, curation)
     result = survey(par_3, 25)
     assert (result.draws, result.failures) == (25, 0)
     assert result.course_pars == {54: 25}

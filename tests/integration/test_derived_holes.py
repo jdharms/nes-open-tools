@@ -56,12 +56,12 @@ def forward_tee(vanilla_courses, path) -> None:
 
 @pytest.fixture
 def scratch(tmp_path):
-    """A copy of the catalog index and curation file, to publish into."""
-    index = tmp_path / "catalog" / "holes.json"
-    index.parent.mkdir()
-    shutil.copy(DEFAULT_INDEX, index)
-    curation = tmp_path / "catalog" / "curation.json"
-    shutil.copy(DEFAULT_CURATION, curation)
+    """A copy of the catalog directory, the index with the deltas beside it and the
+    curation file, to publish into."""
+    root = tmp_path / "catalog"
+    shutil.copytree(DEFAULT_INDEX.parent, root)
+    index, curation = root / DEFAULT_INDEX.name, root / DEFAULT_CURATION.name
+    assert index.exists() and curation.exists()
     return index, curation
 
 
@@ -94,7 +94,7 @@ def test_a_forward_tee_is_published_drawn_and_built(vanilla_courses, scratch, tm
     assert dry.returncode == 0, dry.stderr
     assert "would write" in dry.stdout
     assert Catalog.load(index) == before
-    assert not (index.parent / "derived").exists()
+    assert not (index.parent / "derived" / "jdharms").exists()
 
     published = run(index, curation, *new)
     assert published.returncode == 0, published.stderr

@@ -101,6 +101,33 @@ def curation() -> CurationSnapshot:
     return CurationSnapshot.load()
 
 
+#: the courses the golden hashes below were recorded with. Generation draws from the
+#: live catalog and curation, which move whenever a hole is published or curated
+#: (ADR 0023), so the golden manifests hold their holes fixed and the hashes move with
+#: the build alone.
+JP_HOLES = (
+    "jp_australia/11", "jp_hawaii/04", "nes_uk/08", "nes_japan/02", "nes_uk/16",
+    "jp_hawaii/02", "jp_uk/10", "jp_australia/03", "jp_hawaii/15", "jp_hawaii/10",
+    "jp_uk/13", "jp_australia/17", "jp_uk/03", "jp_france/06", "nes_japan/04",
+    "jp_france/18", "jp_australia/10", "nes_uk/18",
+)  # fmt: skip
+NES_HOLES = (
+    "nes_uk/05", "nes_us/10", "nes_us/08", "nes_us/13", "nes_us/04", "nes_us/17",
+    "nes_us/11", "nes_japan/18", "nes_japan/09", "nes_japan/03", "nes_uk/04",
+    "nes_japan/17", "nes_japan/13", "nes_us/03", "nes_japan/08", "nes_uk/07",
+    "nes_uk/10", "nes_us/02",
+)  # fmt: skip
+
+
+def pinned(manifest, holes: tuple[str, ...], catalog: Catalog):
+    """`manifest` with these holes on its slots, each slot's wind and transforms kept."""
+    slots = tuple(
+        replace(slot, id=catalog[hole].id, par=catalog[hole].par)
+        for slot, hole in zip(manifest.course.holes, holes, strict=True)
+    )
+    return replace(manifest, course=replace(manifest.course, holes=slots))
+
+
 @pytest.fixture(scope="module")
 def jp_manifest(catalog, curation, vanilla_jp_courses):
     """Drawn with no expert cap, like `nes_manifest`, so the golden hashes below move
@@ -110,7 +137,7 @@ def jp_manifest(catalog, curation, vanilla_jp_courses):
         music="jp_france",
         constraints=standard_rules(None),
     )
-    return generate(catalog, curation, settings)
+    return pinned(generate(catalog, curation, settings), JP_HOLES, catalog)
 
 
 @pytest.fixture(scope="module")
@@ -122,7 +149,7 @@ def nes_manifest(catalog, curation):
         mercy_point=None,
         constraints=standard_rules(None),
     )
-    return generate(catalog, curation, settings)
+    return pinned(generate(catalog, curation, settings), NES_HOLES, catalog)
 
 
 @pytest.fixture(scope="module")

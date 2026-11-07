@@ -11,6 +11,9 @@ from pathlib import Path
 
 import pytest
 
+from golf.randomizer.catalog import Catalog
+from tests.catalog_counts import lineages
+
 ROOT = Path(__file__).resolve().parents[2]
 
 
@@ -38,7 +41,8 @@ def test_list_covers_every_catalog_lineage(curation):
     completed = run("--curation", curation, "list")
     assert completed.returncode == 0, completed.stderr
     assert "nes_uk/01        par 4  418y  nes_uk_01" in completed.stdout
-    assert completed.stdout.rstrip().endswith("144 holes")
+    count = lineages(Catalog.load())
+    assert completed.stdout.rstrip().endswith(f"{count} holes")
 
 
 def test_list_filters_to_the_unfamilied(curation):

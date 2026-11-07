@@ -4,9 +4,14 @@ import json
 
 import pytest
 
-from golf.randomizer.catalog import Catalog
-from golf.randomizer.rehydrate import RehydrateError, check_site_data
+from golf.randomizer.catalog import US_ROM, Catalog
+from golf.randomizer.rehydrate import (
+    MAX_PROBLEMS_SHOWN,
+    RehydrateError,
+    check_site_data,
+)
 from golf.rendering.rangefinder import METADATA, RENDER_VERSION
+from tests.catalog_counts import holes_from
 from tests.synthetic_holes import write_courses
 
 
@@ -41,7 +46,11 @@ def test_refuses_without_a_us_rom(site):
 def test_refuses_holes_the_catalog_expects_but_the_store_lacks(site):
     roms, holes, rangefinder = site
     catalog = Catalog.load()
-    with pytest.raises(RehydrateError, match=r"(?s)54 of 54 holes.*and 44 more"):
+    expected = holes_from(catalog, US_ROM)
+    shown = (
+        rf"(?s){expected} of {expected} holes.*and {expected - MAX_PROBLEMS_SHOWN} more"
+    )
+    with pytest.raises(RehydrateError, match=shown):
         check_site_data(catalog, roms, holes, rangefinder)
 
 
