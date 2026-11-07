@@ -3,11 +3,11 @@
 
 [generate.page_title]
 note = "plain: browser tab title, generate page"
-text = "Randomizer - NES Open Tournament Golf Randomizer"
+text = "Roll Seed - NES Open Tournament Golf Randomizer"
 
 [generate.heading]
 note = "generate page h1"
-text = "Randomizer"
+text = "Roll Seed"
 
 [generate.tagline]
 note = "line under the h1; choose settings, get a seed page to share"
@@ -177,7 +177,7 @@ text = "mystery"
 
 [generate.submit]
 note = "form submit button; generates the seed and goes to its page"
-text = "Randomize"
+text = "Roll"
 
 # Notices over the form when a submission is refused. One shows at a time.
 
