@@ -2,7 +2,7 @@
 # Format: see common.toml, and server/CLAUDE.md "Player-facing text".
 
 [not_found.page_title]
-note = "Not Found - NES Open Randomizer"
+note = "plain: browser tab title, page not found"
 text = "Not Found - NES Open Randomizer"
 
 [not_found.heading]

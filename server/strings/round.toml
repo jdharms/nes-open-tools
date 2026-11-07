@@ -4,7 +4,7 @@
 
 [round.page_title]
 note = "plain: browser tab title, a recorded round's page; {words} the seed's three magic words"
-text = "Completed Round - NES Open Randomizer"
+text = "Completed Round: {words} - NES Open Randomizer"
 
 # The round page's link preview card, which a chat such as Discord draws under a pasted
 # link. It never receives the score: the card shows to players who have yet to play the seed.

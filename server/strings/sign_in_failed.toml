@@ -3,7 +3,7 @@
 
 [sign_in_failed.page_title]
 note = "plain: browser tab title"
-text = "Sign In Failed -- NES Open Randomizer"
+text = "Sign In Failed - NES Open Randomizer"
 
 [sign_in_failed.heading]
 note = "sign-in did not work"

@@ -108,7 +108,7 @@ def test_markdown_page_is_served_with_its_title_and_body(fake_builder, tmp_path)
     with app_client(builder=fake_builder, pages=pages) as test_client:
         response = test_client.get("/pages/review-page")
     assert response.status_code == 200
-    assert "<title>Review &amp; Notes — NES Open Randomizer</title>" in response.text
+    assert "<title>Review &amp; Notes - NES Open Randomizer</title>" in response.text
     assert "<h1>Review &amp; Notes</h1>" in response.text
     assert "<p>A <strong>rendered</strong> paragraph.</p>" in response.text
     assert 'name="robots"' not in response.text
@@ -157,7 +157,7 @@ def test_collection_page_shows_its_entries_as_linked_cards(fake_builder, tmp_pat
         response = test_client.get("/pages/updates")
     assert 'href="/pages/updates"' in home.text
     assert response.status_code == 200
-    assert "<title>Updates — NES Open Randomizer</title>" in response.text
+    assert "<title>Updates - NES Open Randomizer</title>" in response.text
     assert "<h1>Updates</h1>" in response.text
     assert '<article class="content-page">' not in response.text
     assert response.text.index("<p>Intro.</p>") < response.text.index('id="newer"')

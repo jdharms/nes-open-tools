@@ -3,7 +3,7 @@
 
 [mystery.page_title]
 note = "plain: browser tab title, mystery seed page"
-text = "Mystery Seed - NES Open Tournament Golf Randomizer"
+text = "Mystery Seed - NES Open Randomizer"
 
 [mystery.heading]
 note = "mystery seed page h1"

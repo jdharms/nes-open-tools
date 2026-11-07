@@ -5,7 +5,7 @@
 
 [round_voided.page_title]
 note = "plain: browser tab title, the permalink of a round that was voided"
-text = "Voided Round"
+text = "Voided Round - NES Open Randomizer"
 
 [round_voided.heading]
 note = "h1, this round is no longer recorded"

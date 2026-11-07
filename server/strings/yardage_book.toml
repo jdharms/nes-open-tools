@@ -4,7 +4,7 @@
 
 [yardage_book.title]
 note = "plain: browser tab title, a seed's yardage book; {words} the seed's three magic words"
-text = "Yardage Book | {words}"
+text = "Yardage Book | {words} - NES Open Randomizer"
 
 [yardage_book.card.title]
 note = "plain: title of a yardage book's link preview card (the box Discord and other chats draw under a pasted link); {words} the seed's three magic words"

@@ -2,7 +2,7 @@
 
 [rangefinder.title]
 note = "plain: browser tab title for the rangefinder"
-text = "Rangefinder - NES Open Golf"
+text = "Rangefinder - NES Open Randomizer"
 
 [rangefinder.heading]
 note = "page heading naming the course distance measuring tool"

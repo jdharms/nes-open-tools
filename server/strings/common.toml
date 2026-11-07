@@ -11,7 +11,7 @@
 # -- Every page -----------------------------------------------------------------------
 
 [site.title]
-note = "plain: browser tab title; default for pages without their own"
+note = "plain: browser tab title; default for pages without their own; the short site name, which every page's tab title ends with after \" - \""
 text = "NES Open Randomizer"
 
 [site.card_name]
@@ -23,7 +23,7 @@ note = "plain: the body of a link preview card for a page without one of its own
 text = "Play a new 18 holes every time you step onto the course."
 
 [nav.brand]
-note = "site name; left end of the nav bar, every page; also the link to the home page"
+note = "the full site name, as in the home h1 (tab titles use the short site.title); left end of the nav bar, every page; also the link to the home page"
 text = "NES Open Tournament Golf Randomizer"
 
 [nav.rom]

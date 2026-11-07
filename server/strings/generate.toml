@@ -3,7 +3,7 @@
 
 [generate.page_title]
 note = "plain: browser tab title, generate page"
-text = "Roll Seed - NES Open Tournament Golf Randomizer"
+text = "Roll Seed - NES Open Randomizer"
 
 [generate.heading]
 note = "generate page h1"
