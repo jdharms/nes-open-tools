@@ -5,7 +5,6 @@ Candidates:
 * nes_us/08
 * nes_us/09
 * nes_us/11 -- three bunkers around green, but nothing terribly novel
-* nes_us/14 -- from likely approach angle bunkers both in front of and behind green present a distance control challenge. NOTE: jp australia/08 is probably the better hole to use.
 * nes_us/18 -- water nearly right up to front of green presents a forced carry
 
 * nes_uk/01 -- forcing the drive to be above the trees would be interesting (need to test though!)
@@ -23,6 +22,8 @@ Candidates:
 * nes_japan/10 -- a "maybe" imo
 * nes_japan/12 -- a large but well-protected green.
 * nes_japan/17 -- probably left fairway
+
+* jp_australia/08 -- from likely approach angle bunkers both in front of and behind green present a distance control challenge.
 
 * jp_france/10
 * jp_france/13 -- spooky carry over oob

@@ -51,8 +51,8 @@ uv run python $H compare courses/scratch/nes_uk_18_forward3.json nes_uk/18
    writes the mean into the file: the base's metadata distance means nothing for the
    new hole, and vanilla's own are off by a few yards.
 
-   Then `compare <file> <base>`, and Read the PNG it writes beside the hole file
-   (`courses/scratch/<base>_forward3.png`): the base at left, the edit at right, 4x,
+   Then `compare <file> <base>`, and Read the PNG it writes in a folder per vanilla course
+   (`courses/scratch/nes_us/nes_us_02_forward3.png`): the base at left, the edit at right, 4x,
    the pins as numbered red dots, and a line from the tee to the middle of the pins
    ticked every 25 yards (2 yards to a pixel). Look at it to judge the tee box and the
    fairway around it, then give jdharms the path and walk the line: where the fairway

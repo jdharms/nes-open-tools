@@ -107,10 +107,9 @@ def draw_map(path: Path) -> None:
         "open ground by yards to the middle of the pins: "
         "1 <110, a 110-150, b 150-200, c 200-250, . beyond"
     )
-    print(
-        "      x  "
-        + "".join(str(x // 40) if x % 40 == 0 else " " for x in range(0, 176, 4))
-    )
+    # Two characters to a tile column: label each column at its first character.
+    print("col tens "[:9] + "".join(f"{c // 10 or ' '} " for c in range(22)))
+    print("col      " + "".join(f"{c % 10} " for c in range(22)))
     top = max(0, hole.green_y - 24) // 8 * 8
     for y in range(top, hole.terrain_height * 8, 4):
         row = ""
@@ -257,7 +256,9 @@ def compare(path: Path, base: str, out: Path | None) -> None:
     )
     sheet.paste(before, (0, 0))
     sheet.paste(after, (before.width + GAP, 0))
-    out = out or path.with_suffix(".png")
+    # Comparisons collect in a folder per vanilla course beside the hole file.
+    out = out or path.parent / base.split("/")[0] / path.with_suffix(".png").name
+    out.parent.mkdir(parents=True, exist_ok=True)
     sheet.save(out)
     each = [round(yards(tee, p)) for p in flags]
     print(f"wrote {out}: {base} left, the edit right; pins 1-4 at {each} yards")
