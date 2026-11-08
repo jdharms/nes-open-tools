@@ -4,6 +4,7 @@ docs/randomizer_devplan.md, "Routes"."""
 import asyncio
 import logging
 import secrets
+import threading
 import time
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager, suppress
@@ -18,6 +19,7 @@ from starlette.exceptions import HTTPException as StarletteHTTPException
 from starlette.middleware.sessions import SessionMiddleware
 from starlette.routing import Mount
 
+from golf.randomizer import transform_cache
 from golf.randomizer.catalog import REPO_ROOT
 from golf.rendering.hole_renders import HoleRenders
 
@@ -62,6 +64,24 @@ SESSION_COOKIE = "golf_session"
 SESSION_MAX_AGE = 30 * 24 * 60 * 60
 
 log = logging.getLogger(__name__)
+
+
+def prewarm_transforms(builder: SeedBuilder, stop: threading.Event) -> None:
+    """Fill the transform caches in the background (`SeedBuilder.prewarm`), logging how
+    long it took. An error ends the fill but not the site, whose builds fill on a miss."""
+    started = time.perf_counter()
+    try:
+        filled = builder.prewarm(stop)
+    except Exception:
+        log.exception("prewarming the transform caches failed")
+        return
+    mirrors, groups = transform_cache.sizes()
+    log.info(
+        "prewarmed the transform caches for %d holes in %.1f s",
+        filled,
+        time.perf_counter() - started,
+        extra={"mirrors": mirrors, "hazard_groups": groups, "stopped": stop.is_set()},
+    )
 
 
 def route_template(request: Request) -> str:
@@ -131,6 +151,19 @@ def create_app(
             except BuilderUnavailableError as problem:
                 log.error("cannot build seeds until this is fixed: %s", problem)
             app.state.builder = seed_builder
+            stop_prewarm = threading.Event()
+            prewarmer = (
+                threading.Thread(
+                    target=prewarm_transforms,
+                    args=(seed_builder, stop_prewarm),
+                    name="prewarm-transforms",
+                    daemon=True,
+                )
+                if config.prewarm_transforms
+                else None
+            )
+            if prewarmer is not None:
+                prewarmer.start()
             sink = timings if timings is not None else TimingSink(db)
             app.state.timings = sink
             flusher = (
@@ -141,6 +174,10 @@ def create_app(
             try:
                 yield
             finally:
+                # The fill stops between holes, so a restart waits for one at most.
+                stop_prewarm.set()
+                if prewarmer is not None:
+                    await run_in_threadpool(prewarmer.join)
                 # A deploy restart loses nothing that has buffered since the last flush.
                 if flusher is not None:
                     flusher.cancel()

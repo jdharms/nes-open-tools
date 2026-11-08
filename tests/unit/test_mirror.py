@@ -8,14 +8,8 @@ from golf.algorithms.mirror import MirrorError, mirror_hole, mirror_tiles
 from golf.formats.hole_data import HoleData
 from golf.physics import Flag
 from golf.physics.terrain import FIRST_GREEN_TILE, GREEN_SIZE
-from tests.synthetic_holes import synthetic_hole
+from tests.synthetic_holes import mirrorable_hole, synthetic_hole
 from tests.vanilla_holes import VANILLA_IDS
-
-
-def mappable_hole() -> HoleData:
-    hole = synthetic_hole()
-    hole.terrain[0][0] = 0xA0  # synthetic_hole marks it with the hole number
-    return hole
 
 
 @pytest.mark.parametrize("kind", ["terrain", "greens"])
@@ -29,7 +23,7 @@ def test_forest_trees_are_refilled_not_mapped():
 
 
 def test_mirror_flips_greens_attributes_and_positions():
-    hole = mappable_hole()
+    hole = mirrorable_hole()
     hole.attributes[0] = list(range(11))
     hole.greens[3][0] = 0x31  # slopes right; $33 is the same slope to the left
     mirrored = mirror_hole(hole)
@@ -48,14 +42,14 @@ def test_mirror_flips_greens_attributes_and_positions():
 
 
 def test_mirror_leaves_the_original_alone():
-    hole = mappable_hole()
+    hole = mirrorable_hole()
     before = hole.to_dict()
     mirror_hole(hole)
     assert hole.to_dict() == before
 
 
 def test_mirror_refills_forests():
-    mirrored = mirror_hole(mappable_hole())
+    mirrored = mirror_hole(mirrorable_hole())
     assert all(
         tile in ALL_FOREST_TILES | {INNER_BORDER}
         for row in mirrored.terrain

@@ -45,7 +45,10 @@ in this package.
 - `server/builder.py`'s `SeedBuilder` is the only thing a route calls to generate, build or
   finish. It holds the catalog and curation the seed page also reads. The lifespan calls
   its `warm`, which reads the server's ROM and builds what every seed shares (the
-  signpost banner), so the first seed after a restart is as quick as the rest; a missing ROM is logged and the site starts anyway, refusing builds. `finish`
+  signpost banner), so the first seed after a restart is as quick as the rest; a missing ROM is logged and the site starts anyway, refusing builds. With
+  `Config.prewarm_transforms`, the lifespan also runs its `prewarm` in a thread, filling the
+  hole transform caches (`golf/randomizer/transform_cache.py`) a hole at a time while
+  giving way to builds, and stops it at shutdown. `finish`
   takes credentials for a signed-in download and none for a guest. Builds run in the threadpool (`run_in_threadpool`), never on the event
   loop.
 - Route helpers with no web types live beside the app: `server/forms.py` (the generate

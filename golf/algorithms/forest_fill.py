@@ -833,9 +833,10 @@ class ForestFiller:
         self,
         region: ForestFillRegion,
         terrain: list[list[int]],
-    ) -> int:
-        """Try all orientations, pick best by: fewest failures, fewest INNER_BORDERs, most fills."""
-        best_orientation = 0xA0
+    ) -> dict[tuple[int, int], int]:
+        """Try all orientations and return the best one's fill: fewest failures, then
+        fewest INNER_BORDERs, then most fill tiles; the first orientation wins a tie."""
+        best_result: dict[tuple[int, int], int] = {}
         best_failures = float("inf")
         best_inner_count = float("inf")
         best_fill_count = -1
@@ -859,9 +860,9 @@ class ForestFiller:
                 best_failures = failures
                 best_inner_count = inner_count
                 best_fill_count = fill_count
-                best_orientation = orientation
+                best_result = result
 
-        return best_orientation
+        return best_result
 
     def fill_region(
         self,
@@ -881,8 +882,7 @@ class ForestFiller:
             Mapping from (row, col) to tile ID
         """
         if orientation is None:
-            orientation = self._select_best_orientation(region, terrain)
-
+            return self._select_best_orientation(region, terrain)
         result, _, _ = self._fill_with_orientation(region, orientation, terrain)
         return result
 

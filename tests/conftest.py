@@ -14,6 +14,7 @@ import pytest
 
 from golf.core.decompressor import GreensDecompressor, TerrainDecompressor
 from golf.formats.hole_data import HoleData
+from golf.randomizer import transform_cache
 from golf.randomizer.catalog import (
     DEFAULT_COURSES,
     JP_ROM,
@@ -37,6 +38,15 @@ VANILLA_DATA_FIXTURES = frozenset(
 
 
 PHYSICS_TESTS = ROOT / "tests" / "physics"
+
+
+@pytest.fixture(autouse=True)
+def _empty_transform_cache():
+    """Every test starts with nothing kept, so none sees what another computed, or what
+    code it patched computed before (`golf/randomizer/transform_cache.py`)."""
+    transform_cache.clear()
+    yield
+    transform_cache.clear()
 
 
 @pytest.fixture(scope="session")

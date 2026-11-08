@@ -41,6 +41,13 @@ def synthetic_hole(number: int = 1) -> HoleData:
     return hole
 
 
+def mirrorable_hole() -> HoleData:
+    """`synthetic_hole` with its marker tile, which has no mirror partner, made forest."""
+    hole = synthetic_hole()
+    hole.terrain[0][0] = 0xA0
+    return hole
+
+
 def built_holes(
     manifest: Manifest | StoredManifest, catalog: Catalog
 ) -> tuple[HoleData, ...]:

@@ -17,8 +17,10 @@ from functools import partial
 
 from golf.algorithms import hazards
 from golf.algorithms.forest_fill import ForestFillError
-from golf.algorithms.mirror import MirrorError, mirror_hole
+from golf.algorithms.mirror import MirrorError
 from golf.formats.hole_data import HoleData
+
+from . import transform_cache
 
 MAX_SEED = 0xFFFF_FFFF
 
@@ -43,15 +45,18 @@ def _unseeded(operation: Callable[[HoleData], HoleData]):
 def _hazards(draw: hazards.Draw):
     def apply(hole: HoleData, seed: int | None) -> HoleData:
         assert seed is not None
-        return hazards.redraw_hazards(hole, seed, draw)
+        return hazards.redraw_hazards(hole, seed, draw, transform_cache.groups(hole))
 
     return apply
 
 
 #: every transform a manifest may name. A hazard style is its own transform rather than
-#: an argument to one, so each style's versions move independently
+#: an argument to one, so each style's versions move independently. What they compute
+#: from the hole alone comes from `transform_cache`
 TRANSFORMS: dict[str, Transform] = {
-    "mirror@1": Transform("flip the hole left to right", _unseeded(mirror_hole)),
+    "mirror@1": Transform(
+        "flip the hole left to right", _unseeded(transform_cache.mirrored)
+    ),
     "hazards@1": Transform(
         "make each bunker or water hazard water with p = 0.35, otherwise sand",
         _hazards(hazards.uniform),

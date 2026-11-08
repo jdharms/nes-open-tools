@@ -56,6 +56,9 @@ class Config:
     log_level: str = DEFAULT_LEVEL
     #: the mystery seed page, `/mystery`, and the generate page's link to it
     mystery_seeds: bool = False
+    #: fill the transform caches for every catalog hole in the background at startup,
+    #: giving way to builds (`SeedBuilder.prewarm`); off, each hole fills on first use
+    prewarm_transforms: bool = False
 
     @classmethod
     def from_env(cls, environ: Mapping[str, str] = os.environ) -> "Config":
@@ -82,6 +85,8 @@ class Config:
             dev_login=(get("dev_login") or "").strip().lower() in TRUE_WORDS,
             log_level=get("log_level") or defaults.log_level,
             mystery_seeds=(get("mystery_seeds") or "").strip().lower() in TRUE_WORDS,
+            prewarm_transforms=(get("prewarm_transforms") or "").strip().lower()
+            in TRUE_WORDS,
         )
 
     @property

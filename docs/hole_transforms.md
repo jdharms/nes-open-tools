@@ -23,6 +23,8 @@ any of them to hole JSON for inspection and for the editor.
 - `golf/randomizer/transforms.py` names them: the `TRANSFORMS` registry, parsing and
   `apply_transforms`. A manifest validates its transform names when it loads, so an
   unknown name or a bad seed fails then, not at build time.
+- `golf/randomizer/transform_cache.py` keeps what the registry's transforms compute from
+  a hole alone (see **Caching** below).
 
 ## Names and versions
 
@@ -104,6 +106,35 @@ reproduce; choosing a canonical order is generation's job.
   the green or in front of the tee. Par, handicap and the difficulty ratings ignore the
   change.
 
+## Caching
+
+Refilling a mirrored hole's forests and finding a hole's features are nearly all of a
+seed's build time, and neither depends on a seed. `golf/randomizer/transform_cache.py`
+computes each once per hole and keeps it for the life of the process; the registry's
+transforms read through it, so the site, `golf-randomize` and `golf-transform` all do.
+
+- **What it keeps:** a hole's mirror, and its `hazard_groups`, which are `feature_groups`
+  cut to what `redraw_hazards` reads: each group's kinds, pixel count and supertiles. The
+  full groups keep every pixel, about 1.3 MB a hole, so they are not kept. A hole, its
+  mirror and both of their hazard groups come to about 42 KB, about 6 MB for the 144-hole
+  catalog.
+- **Keys** hash every field of the hole, not its `content_hash`: the fill sees terrain
+  rows past `terrain_height`, and the mirror copies all of the metadata.
+- **A mirrored hole is copied out**, since callers may change the hole they get.
+- **Output:** a hit is byte for byte what a miss computes. The golden digests pin what a
+  miss computes; `tests/unit/test_transform_cache.py` checks every catalog hole's hits
+  against the uncached operations. Tests empty the cache before each test
+  (`tests/conftest.py`), so a test that patches a transform's code sees its own output.
+- **Prewarming:** with `GOLF_PREWARM_TRANSFORMS` on, the site fills the cache for every
+  live catalog hole in a thread at startup (`SeedBuilder.prewarm`). It holds the build
+  semaphore one hole at a time and gives way while a build waits, so a build that arrives
+  mid-fill waits for at most the hole in progress. Off, each hole fills when a seed first
+  draws it.
+
+On the development machine an all-mirrored seed built in about 960 ms before the cache,
+and builds in about 880 ms when every hole misses and 65 ms from a full cache; a seed
+with no transforms takes about 55 ms either way. A full prewarm takes about 20 s there.
+
 ## Adding a transform, a style or a version
 
 Each hazard style is its own transform rather than an argument to one, so each style's
@@ -117,6 +148,9 @@ what the styles share; a style is a `Draw` function in `golf/algorithms/hazards.
   that name it still load.
 - **Any change to shared code** (the forest fill, feature detection, the mirror table)
   that moves a digest: check the new output is what was meant, and update the digests.
+  A running site keeps what its cache computed until it restarts.
+- **A transform that computes something from the hole alone**, with no seed, reads it
+  through `transform_cache` the way `mirror@1` and the hazard styles do.
 
 ## Inspecting
 

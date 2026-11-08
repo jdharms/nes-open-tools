@@ -6,6 +6,8 @@ from pathlib import Path
 
 import pytest
 
+from golf.algorithms import hazards
+from golf.algorithms.mirror import mirror_hole
 from golf.core import ips
 from golf.core.patches import PatchStack, StackError
 from golf.core.patches.course import CoursePatch
@@ -33,7 +35,6 @@ from golf.randomizer.manifest import (
     StoredManifest,
     standard_rules,
 )
-from golf.randomizer.transforms import apply_transforms
 from tests.legacy_manifest import as_schema
 from tests.new_save import new_save
 
@@ -245,9 +246,14 @@ def test_a_seed_with_transforms_builds_its_transformed_holes(
     manifest = replace(nes_manifest, course=replace(nes_manifest.course, holes=slots))
     steps = unfinished_steps(manifest, catalog, store, vanilla)
     course = next(step for step in steps if isinstance(step, CoursePatch))
-    for slot, hole in zip(slots, course.holes, strict=True):
-        expected = apply_transforms(store.load(catalog[slot.id]), slot.transforms)
+    # expected from the operations themselves, not `apply_transforms`, which would read
+    # back what the build just put in the transform cache
+    draws = {"hazards@1": hazards.uniform, "hazards-weighted@1": hazards.weighted}
+    for i, (slot, hole) in enumerate(zip(slots, course.holes, strict=True)):
+        flipped = mirror_hole(store.load(catalog[slot.id]))
+        expected = hazards.redraw_hazards(flipped, i, draws[styles[i % 2]])
         assert hole.to_dict() == expected.to_dict()
+    # every hole of this build is a cache hit, from the steps above
     build = build_unfinished(manifest, catalog, store, vanilla)
     assert build.ips != build_unfinished(nes_manifest, catalog, store, vanilla).ips
     assert [hole.to_dict() for hole in build.holes] == [

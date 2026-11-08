@@ -282,7 +282,8 @@ base; the QR URL prefix is assembled into the port and fixed before the first pu
 ships), the Discord client id and secret `GOLF_DISCORD_CLIENT_ID` and
 `GOLF_DISCORD_CLIENT_SECRET`, the session secret `GOLF_SESSION_SECRET`, the admin users
 `GOLF_ADMIN_USERS`, the host users `GOLF_HOST_USERS`, the development login bypass `GOLF_DEV_LOGIN`, the log level
-`GOLF_LOG_LEVEL`, and `GOLF_MYSTERY_SEEDS`, which turns on the mystery seed page.
+`GOLF_LOG_LEVEL`, `GOLF_MYSTERY_SEEDS`, which turns on the mystery seed page, and
+`GOLF_PREWARM_TRANSFORMS`, which fills the hole transform caches at startup.
 
 ## Development plan
 

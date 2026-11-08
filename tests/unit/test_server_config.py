@@ -19,6 +19,7 @@ def test_an_empty_environment_gives_the_defaults():
     assert config.discord_client_id is None
     assert config.dev_login is False
     assert config.mystery_seeds is False
+    assert config.prewarm_transforms is False
 
 
 def test_every_variable_overrides_its_field():
@@ -35,6 +36,7 @@ def test_every_variable_overrides_its_field():
             "GOLF_ADMIN_USERS": "1234, 5678",
             "GOLF_DEV_LOGIN": "1",
             "GOLF_MYSTERY_SEEDS": "on",
+            "GOLF_PREWARM_TRANSFORMS": "yes",
         }
     )
     assert config == Config(
@@ -49,6 +51,7 @@ def test_every_variable_overrides_its_field():
         admin_users=frozenset({"1234", "5678"}),
         dev_login=True,
         mystery_seeds=True,
+        prewarm_transforms=True,
     )
 
 

@@ -1,6 +1,7 @@
 """The app factory: startup, the pages and files every route shares, the error pages and how strings render."""
 
 import re
+import threading
 
 import pytest
 from fastapi.testclient import TestClient
@@ -38,6 +39,60 @@ class BrokenFinish(FakeBuilder):
 
     def finish(self, manifest, unfinished_ips, options, credentials=None):
         raise RuntimeError("bug")
+
+
+class RecordingPrewarm(FakeBuilder):
+    """Records the prewarm the lifespan starts, and runs until the app tells it to stop."""
+
+    def __init__(self, *args):
+        super().__init__(*args)
+        self.started = threading.Event()
+        self.stopped = False
+
+    def prewarm(self, stop, entries=None, pause=0.0):
+        self.started.set()
+        stop.wait(5)
+        self.stopped = stop.is_set()
+        return 0
+
+
+def test_startup_prewarms_the_transform_caches_when_configured(
+    catalog, curation, tmp_path
+):
+    seeds = RecordingPrewarm(catalog, curation, HoleStore(), tmp_path / "unused.nes")
+    config = Config(database=":memory:", prewarm_transforms=True)
+    with TestClient(create_app(config, builder=seeds)) as test_client:
+        assert seeds.started.wait(5)
+        # the site serves while the caches fill
+        assert test_client.get("/").status_code == 200
+    # shutting down stops the fill and waits for it
+    assert seeds.stopped is True
+
+
+def test_startup_leaves_the_caches_to_fill_on_use_by_default(
+    catalog, curation, tmp_path
+):
+    seeds = RecordingPrewarm(catalog, curation, HoleStore(), tmp_path / "unused.nes")
+    with TestClient(create_app(Config(database=":memory:"), builder=seeds)):
+        pass
+    assert not seeds.started.is_set()
+
+
+def test_a_failed_prewarm_is_logged_and_the_site_keeps_serving(
+    catalog, curation, tmp_path, caplog
+):
+    class BrokenPrewarm(FakeBuilder):
+        def prewarm(self, stop, entries=None, pause=0.0):
+            raise RuntimeError("bug")
+
+    seeds = BrokenPrewarm(catalog, curation, HoleStore(), tmp_path / "unused.nes")
+    config = Config(database=":memory:", prewarm_transforms=True)
+    with (
+        caplog.at_level("ERROR", logger="server.app"),
+        TestClient(create_app(config, builder=seeds)) as test_client,
+    ):
+        assert test_client.get("/").status_code == 200
+    assert "prewarming the transform caches failed" in caplog.text
 
 
 def test_startup_migrates_the_database(client):
