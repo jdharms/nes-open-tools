@@ -6,29 +6,32 @@ are nearly all of a seed's build time, so both are computed once per hole and ke
 the life of the process. The catalog bounds what they hold: about 42 KB for a hole, its
 mirror and the hazard groups of both. See `docs/hole_transforms.md`.
 
+Each is a `Memo`, made with `memo`, which registers it so `clear` and `sizes` reach
+every one; a transform's registry entry (`golf/randomizer/transforms.py`) calls the memo
+in place of the operation. A new transform with seedless work to keep adds one line here.
+
 - **Keys** hash the whole hole, not its `content_hash`, which covers only what reaches
   the ROM. Mirroring reads more than that: rows past `terrain_height`, which the fill
   sees, and the metadata it copies.
-- **A mirrored hole is copied out**, since callers may change the hole they get. Hazard
-  groups are immutable and shared.
+- **A memo that returns a hole copies it out** (`copy_out`), since callers may change
+  the hole they get. One that returns an immutable value, as the hazard groups are,
+  shares it.
 - **Threads**: each entry is computed in full before it is stored, and storing is one
   dict assignment, so a reader sees an entry whole or not at all. Two threads that miss
   the same hole at once both compute it and store equal values.
 
-`clear` empties both, which tests do between tests (`tests/conftest.py`).
+`clear` empties every memo, which tests do between tests (`tests/conftest.py`).
 """
 
 import copy
 import hashlib
 import json
+from collections.abc import Callable
 
 from golf.algorithms.forest_fill import ForestFillError
-from golf.algorithms.hazards import HazardGroup, hazard_groups
+from golf.algorithms.hazards import hazard_groups
 from golf.algorithms.mirror import MirrorError, mirror_hole
 from golf.formats.hole_data import HoleData
-
-_mirrors: dict[str, HoleData] = {}
-_hazard_groups: dict[str, tuple[HazardGroup, ...]] = {}
 
 
 def hole_key(hole: HoleData) -> str:
@@ -47,27 +50,52 @@ def hole_key(hole: HoleData) -> str:
     return hashlib.sha256(text.encode()).hexdigest()
 
 
-def mirrored(hole: HoleData) -> HoleData:
-    """`mirror_hole(hole)`, as a new hole the caller may change.
+class Memo[T]:
+    """`compute(hole)`, computed once per `hole_key` and kept.
 
-    Raises what `mirror_hole` raises, and keeps nothing for a hole it refuses.
+    Raises what `compute` raises, and keeps nothing for a hole it refuses.
     """
-    key = hole_key(hole)
-    kept = _mirrors.get(key)
-    if kept is None:
-        kept = mirror_hole(hole)
-        _mirrors[key] = kept
-    return copy.deepcopy(kept)
+
+    def __init__(self, name: str, compute: Callable[[HoleData], T], copy_out: bool):
+        self.name = name
+        self.compute = compute
+        self.copy_out = copy_out
+        self._kept: dict[str, T] = {}
+
+    def __call__(self, hole: HoleData) -> T:
+        key = hole_key(hole)
+        kept = self._kept.get(key)
+        if kept is None:
+            kept = self.compute(hole)
+            self._kept[key] = kept
+        return copy.deepcopy(kept) if self.copy_out else kept
+
+    def __len__(self) -> int:
+        return len(self._kept)
+
+    def clear(self) -> None:
+        self._kept.clear()
 
 
-def groups(hole: HoleData) -> tuple[HazardGroup, ...]:
-    """`hazard_groups(hole)`."""
-    key = hole_key(hole)
-    kept = _hazard_groups.get(key)
-    if kept is None:
-        kept = hazard_groups(hole)
-        _hazard_groups[key] = kept
-    return kept
+#: every memo `memo` made, which `clear` and `sizes` walk
+MEMOS: list[Memo] = []
+
+
+def memo[T](
+    name: str, compute: Callable[[HoleData], T], *, copy_out: bool = False
+) -> Memo[T]:
+    """A registered `Memo`. Pass `copy_out` when `compute` returns something mutable."""
+    if any(other.name == name for other in MEMOS):
+        raise ValueError(f"a transform cache named {name!r} already exists")
+    made = Memo(name, compute, copy_out)
+    MEMOS.append(made)
+    return made
+
+
+#: `mirror_hole(hole)`, as a new hole the caller may change
+mirrored = memo("mirrors", mirror_hole, copy_out=True)
+#: `hazard_groups(hole)`, which is immutable
+groups = memo("hazard_groups", hazard_groups)
 
 
 def warm(hole: HoleData) -> None:
@@ -82,11 +110,11 @@ def warm(hole: HoleData) -> None:
     groups(flipped)
 
 
-def sizes() -> tuple[int, int]:
-    """(mirrored holes, hazard group entries) held."""
-    return len(_mirrors), len(_hazard_groups)
+def sizes() -> dict[str, int]:
+    """How many entries each memo holds, by name."""
+    return {kept.name: len(kept) for kept in MEMOS}
 
 
 def clear() -> None:
-    _mirrors.clear()
-    _hazard_groups.clear()
+    for kept in MEMOS:
+        kept.clear()

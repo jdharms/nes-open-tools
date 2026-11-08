@@ -17,7 +17,7 @@ from functools import partial
 
 from golf.algorithms import hazards
 from golf.algorithms.forest_fill import ForestFillError
-from golf.algorithms.mirror import MirrorError
+from golf.algorithms.mirror import MirrorError, mirror_hole
 from golf.formats.hole_data import HoleData
 
 from . import transform_cache
@@ -35,6 +35,9 @@ class Transform:
     summary: str
     #: (hole, seed) -> a new hole; the seed is None for a transform that takes none
     apply: Callable[[HoleData, int | None], HoleData]
+    #: `apply` computed without `transform_cache`, which the cache's tests check every
+    #: hit against; a transform that reads no cache passes `apply` again
+    uncached: Callable[[HoleData, int | None], HoleData]
     seeded: bool = False
 
 
@@ -42,12 +45,17 @@ def _unseeded(operation: Callable[[HoleData], HoleData]):
     return lambda hole, seed: operation(hole)
 
 
-def _hazards(draw: hazards.Draw):
+def _hazards(draw: hazards.Draw, cached: bool):
     def apply(hole: HoleData, seed: int | None) -> HoleData:
         assert seed is not None
-        return hazards.redraw_hazards(hole, seed, draw, transform_cache.groups(hole))
+        groups = transform_cache.groups(hole) if cached else None
+        return hazards.redraw_hazards(hole, seed, draw, groups)
 
     return apply
+
+
+def _hazard_style(summary: str, draw: hazards.Draw) -> Transform:
+    return Transform(summary, _hazards(draw, True), _hazards(draw, False), seeded=True)
 
 
 #: every transform a manifest may name. A hazard style is its own transform rather than
@@ -55,17 +63,17 @@ def _hazards(draw: hazards.Draw):
 #: from the hole alone comes from `transform_cache`
 TRANSFORMS: dict[str, Transform] = {
     "mirror@1": Transform(
-        "flip the hole left to right", _unseeded(transform_cache.mirrored)
+        "flip the hole left to right",
+        _unseeded(transform_cache.mirrored),
+        _unseeded(mirror_hole),
     ),
-    "hazards@1": Transform(
+    "hazards@1": _hazard_style(
         "make each bunker or water hazard water with p = 0.35, otherwise sand",
-        _hazards(hazards.uniform),
-        seeded=True,
+        hazards.uniform,
     ),
-    "hazards-weighted@1": Transform(
+    "hazards-weighted@1": _hazard_style(
         "flip each bunker or water hazard to the other kind, less likely the larger it is",
-        _hazards(hazards.weighted),
-        seeded=True,
+        hazards.weighted,
     ),
 }
 

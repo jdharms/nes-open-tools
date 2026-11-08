@@ -113,7 +113,8 @@ seed's build time, and neither depends on a seed. `golf/randomizer/transform_cac
 computes each once per hole and keeps it for the life of the process; the registry's
 transforms read through it, so the site, `golf-randomize` and `golf-transform` all do.
 
-- **What it keeps:** a hole's mirror, and its `hazard_groups`, which are `feature_groups`
+- **What it keeps:** one `Memo` per kind of result, made with `memo`: a hole's mirror,
+  and its `hazard_groups`, which are `feature_groups`
   cut to what `redraw_hazards` reads: each group's kinds, pixel count and supertiles. The
   full groups keep every pixel, about 1.3 MB a hole, so they are not kept. A hole, its
   mirror and both of their hazard groups come to about 42 KB, about 6 MB for the 144-hole
@@ -142,15 +143,29 @@ versions move independently and players can be offered several. `redraw_hazards`
 what the styles share; a style is a `Draw` function in `golf/algorithms/hazards.py`.
 
 - **A new style:** write its `Draw` beside `uniform` and `weighted`, register it in
-  `TRANSFORMS` as `name@1`, and add its golden digests.
+  `TRANSFORMS` as `name@1` with `_hazard_style`, which gives it the cached and uncached
+  redraws, and add its golden digests.
 - **A new version of a transform:** register `name@2` beside `name@1` and add digests
   for it. `name@1` can be removed once generation no longer draws it; stored manifests
   that name it still load.
 - **Any change to shared code** (the forest fill, feature detection, the mirror table)
   that moves a digest: check the new output is what was meant, and update the digests.
   A running site keeps what its cache computed until it restarts.
-- **A transform that computes something from the hole alone**, with no seed, reads it
-  through `transform_cache` the way `mirror@1` and the hazard styles do.
+- **Every `Transform` names its `uncached` operation** beside `apply`. A transform that
+  reads no cache passes the same function twice.
+- **A transform with work that needs no seed** keeps it in the cache:
+  - Add a memo to `golf/randomizer/transform_cache.py`, one line:
+    `name = memo("name", operation)`, with `copy_out=True` when `operation` returns a
+    hole or anything else mutable. `clear` and `sizes` reach it through the registry.
+  - A seedless transform's `apply` calls the memo, and its `uncached` the operation.
+  - A seeded one splits its operation, as the hazard styles do: the seedless part goes in
+    the memo, and the seeded part takes its result (`redraw_hazards`' `groups`).
+  - If prewarming should fill the memo, call it from `warm`.
+  - `tests/unit/test_transform_cache.py` walks `TRANSFORMS` and the memos, so it checks
+    the new transform and memo with no test of its own: every catalog hole through the
+    cache matches the uncached operation, alone and after `mirror@1`, the uncached
+    operation fills no cache, and a memo that shares its value returns something
+    hashable.
 
 ## Inspecting
 

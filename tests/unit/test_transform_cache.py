@@ -1,28 +1,44 @@
 """The transform cache (golf/randomizer/transform_cache.py).
 
-A hit is the hole a miss computes, and both are what the uncached operations compute; a
-caller cannot change what the cache keeps; and the key tells apart holes that
-`content_hash` does not. The golden digests in `tests/unit/test_transforms.py` pin what a
-miss computes; these pin that the cache gives it back unchanged.
+Every transform in the registry gives, through the cache, what its uncached operation
+makes, and every memo what it computes, so a new transform or memo is checked here without
+a new test; a caller cannot change what the cache keeps; and the key tells apart holes
+that `content_hash` does not. The golden digests in `tests/unit/test_transforms.py` pin
+what the operations compute; these pin that the cache gives it back unchanged.
 """
 
 import copy
 
 import pytest
 
-from golf.algorithms import hazards
 from golf.algorithms.features import feature_groups
-from golf.algorithms.hazards import hazard_groups, redraw_hazards
+from golf.algorithms.hazards import hazard_groups
 from golf.algorithms.mirror import MirrorError, mirror_hole
+from golf.formats.hole_data import HoleData
 from golf.randomizer import transform_cache
 from golf.randomizer.catalog import DEFAULT_COURSES, Catalog, HoleStore, content_hash
-from golf.randomizer.transforms import apply_transforms
+from golf.randomizer.transforms import TRANSFORMS, apply_transforms
 from tests.synthetic_holes import mirrorable_hole, synthetic_hole
 
 #: every hole a seed can draw, vanilla and derived
 LIVE = {str(entry.id): entry for entry in Catalog.load() if entry.live}
 
-STYLES = {"hazards@1": hazards.uniform, "hazards-weighted@1": hazards.weighted}
+#: every transform in the registry as a manifest names it, a seeded one under two seeds
+TEXTS = [
+    text
+    for name, transform in TRANSFORMS.items()
+    for text in ([f"{name}:{seed}" for seed in (0, 7)] if transform.seeded else [name])
+]
+
+
+def uncached(text: str, hole: HoleData) -> HoleData:
+    """`text` applied to `hole` by its registry entry's uncached operation."""
+    name, _, seed = text.partition(":")
+    return TRANSFORMS[name].uncached(hole, int(seed) if seed else None)
+
+
+def comparable(value):
+    return value.to_dict() if isinstance(value, HoleData) else value
 
 
 @pytest.fixture
@@ -33,26 +49,53 @@ def catalog_hole(request, vanilla_courses, vanilla_jp_courses):
 
 
 @pytest.mark.parametrize("catalog_hole", sorted(LIVE), indirect=True)
-def test_every_catalog_hole_comes_back_as_the_uncached_operations_make_it(
-    catalog_hole,
-):
+def test_every_transform_gives_what_its_uncached_operation_makes(catalog_hole):
+    """Alone and after `mirror@1`, as generation draws them, once filling the cache and
+    once reading it back. Earlier texts fill what later ones read, so a later text's
+    first pass may already be a hit."""
     hole_id, hole = catalog_hole
-    flipped = mirror_hole(hole)
-    for _ in ("miss", "hit"):
-        assert transform_cache.mirrored(hole).to_dict() == flipped.to_dict(), hole_id
-        for target in (hole, flipped):
-            assert transform_cache.groups(target) == hazard_groups(target), hole_id
-    # through the registry, as a build applies them, with the cache now holding all three
-    for name, draw in STYLES.items():
-        for seed in (0, 7):
-            alone = redraw_hazards(hole, seed, draw).to_dict()
-            after_mirror = redraw_hazards(flipped, seed, draw).to_dict()
-            for _ in range(2):
-                assert apply_transforms(hole, [f"{name}:{seed}"]).to_dict() == alone
-                assert (
-                    apply_transforms(hole, ["mirror@1", f"{name}:{seed}"]).to_dict()
-                    == after_mirror
-                ), hole_id
+    flipped = uncached("mirror@1", hole)
+    for text in TEXTS:
+        alone = uncached(text, hole).to_dict()
+        after_mirror = uncached(text, flipped).to_dict()
+        for _ in ("first", "again"):
+            assert apply_transforms(hole, [text]).to_dict() == alone, (hole_id, text)
+            assert (
+                apply_transforms(hole, ["mirror@1", text]).to_dict() == after_mirror
+            ), (hole_id, text)
+
+
+@pytest.mark.parametrize("catalog_hole", sorted(LIVE), indirect=True)
+def test_every_memo_gives_what_it_computes(catalog_hole):
+    hole_id, hole = catalog_hole
+    for kept in transform_cache.MEMOS:
+        try:
+            expected = comparable(kept.compute(hole))
+        except ValueError:  # a hole the operation refuses, as `mirror_hole` may
+            continue
+        for _ in ("miss", "hit"):
+            assert comparable(kept(hole)) == expected, (hole_id, kept.name)
+
+
+def test_no_uncached_operation_fills_a_cache():
+    for text in TEXTS:
+        uncached(text, mirrorable_hole())
+        assert not any(transform_cache.sizes().values()), text
+
+
+def test_a_memo_shares_only_what_cannot_be_changed_in_place():
+    for kept in transform_cache.MEMOS:
+        value = kept(mirrorable_hole())
+        if not kept.copy_out:
+            assert not isinstance(value, HoleData), kept.name
+            hash(value)  # hashable all the way down: tuples, frozensets, frozen classes
+
+
+def test_two_memos_cannot_share_a_name():
+    before = list(transform_cache.MEMOS)
+    with pytest.raises(ValueError, match="mirrors"):
+        transform_cache.memo("mirrors", mirror_hole)
+    assert before == transform_cache.MEMOS
 
 
 @pytest.mark.parametrize("catalog_hole", sorted(LIVE), indirect=True)
@@ -135,25 +178,29 @@ def test_a_hole_that_will_not_mirror_keeps_nothing_and_raises_each_time():
     for _ in ("first", "again"):
         with pytest.raises(MirrorError):
             transform_cache.mirrored(synthetic_hole())
-    assert transform_cache.sizes() == (0, 0)
+    assert not any(transform_cache.sizes().values())
 
 
 def test_warm_keeps_a_hole_its_mirror_and_the_groups_of_both():
     hole = mirrorable_hole()
     transform_cache.warm(hole)
-    assert transform_cache.sizes() == (1, 2)
+    assert transform_cache.sizes()["mirrors"] == 1
+    assert transform_cache.sizes()["hazard_groups"] == 2
     flipped = transform_cache.mirrored(hole)
-    assert transform_cache.sizes() == (1, 2)
+    assert transform_cache.sizes()["mirrors"] == 1
+    assert transform_cache.sizes()["hazard_groups"] == 2
     transform_cache.groups(flipped)
-    assert transform_cache.sizes() == (1, 2)
+    assert transform_cache.sizes()["mirrors"] == 1
+    assert transform_cache.sizes()["hazard_groups"] == 2
 
 
 def test_warm_keeps_only_the_groups_of_a_hole_that_will_not_mirror():
     transform_cache.warm(synthetic_hole())
-    assert transform_cache.sizes() == (0, 1)
+    assert transform_cache.sizes()["mirrors"] == 0
+    assert transform_cache.sizes()["hazard_groups"] == 1
 
 
 def test_clear_empties_both():
     transform_cache.warm(mirrorable_hole())
     transform_cache.clear()
-    assert transform_cache.sizes() == (0, 0)
+    assert not any(transform_cache.sizes().values())

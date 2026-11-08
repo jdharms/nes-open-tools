@@ -94,7 +94,8 @@ def test_prewarm_fills_the_caches_for_each_entry(catalog, curation, tmp_path):
     entries = [entry for entry in catalog if entry.live][:2]
     assert seeds.prewarm(threading.Event(), entries, pause=0) == 2
     # both entries load the same hole, so it holds one hole, one mirror, both their groups
-    assert transform_cache.sizes() == (1, 2)
+    assert transform_cache.sizes()["mirrors"] == 1
+    assert transform_cache.sizes()["hazard_groups"] == 2
 
 
 def test_prewarm_skips_withdrawn_holes_by_default(catalog, curation, tmp_path):
@@ -109,7 +110,7 @@ def test_prewarm_stops_when_told(catalog, curation, tmp_path):
     stop.set()
     seeds = prewarmer(catalog, curation, tmp_path)
     assert seeds.prewarm(stop, list(catalog), pause=0) == 0
-    assert transform_cache.sizes() == (0, 0)
+    assert not any(transform_cache.sizes().values())
 
 
 def test_prewarm_never_runs_beside_a_build(catalog, curation, tmp_path):
@@ -119,11 +120,12 @@ def test_prewarm_never_runs_beside_a_build(catalog, curation, tmp_path):
     thread = in_thread(seeds.prewarm, threading.Event(), entries, 0)
     thread.join(0.3)
     assert thread.is_alive()
-    assert transform_cache.sizes() == (0, 0)
+    assert not any(transform_cache.sizes().values())
     seeds._builds.release()
     thread.join(5)
     assert not thread.is_alive()
-    assert transform_cache.sizes() == (1, 2)
+    assert transform_cache.sizes()["mirrors"] == 1
+    assert transform_cache.sizes()["hazard_groups"] == 2
 
 
 def test_prewarm_gives_way_while_a_build_waits(catalog, curation, tmp_path):
@@ -133,11 +135,12 @@ def test_prewarm_gives_way_while_a_build_waits(catalog, curation, tmp_path):
     thread = in_thread(seeds.prewarm, threading.Event(), entries, 0.01)
     thread.join(0.3)
     assert thread.is_alive()
-    assert transform_cache.sizes() == (0, 0)
+    assert not any(transform_cache.sizes().values())
     seeds._waiting = 0
     thread.join(5)
     assert not thread.is_alive()
-    assert transform_cache.sizes() == (1, 2)
+    assert transform_cache.sizes()["mirrors"] == 1
+    assert transform_cache.sizes()["hazard_groups"] == 2
 
 
 def test_a_build_counts_itself_waiting_until_it_has_the_semaphore(

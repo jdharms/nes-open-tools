@@ -75,12 +75,11 @@ def prewarm_transforms(builder: SeedBuilder, stop: threading.Event) -> None:
     except Exception:
         log.exception("prewarming the transform caches failed")
         return
-    mirrors, groups = transform_cache.sizes()
     log.info(
         "prewarmed the transform caches for %d holes in %.1f s",
         filled,
         time.perf_counter() - started,
-        extra={"mirrors": mirrors, "hazard_groups": groups, "stopped": stop.is_set()},
+        extra={"cached": transform_cache.sizes(), "stopped": stop.is_set()},
     )
 
 
