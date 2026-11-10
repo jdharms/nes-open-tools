@@ -162,6 +162,9 @@ ignore = [
 [tool.pyright]
 venvPath = "."
 venv = ".venv"
+# pyright ignores .gitignore, unlike ruff; skip the gitignored scratch space. Setting
+# exclude replaces pyright's defaults, so they are restated first.
+exclude = ["**/node_modules", "**/__pycache__", "**/.*", "scratch"]
 
 [tool.codespell]
 # American spelling only: no typo dictionary. golf-check passes it the tracked files.
