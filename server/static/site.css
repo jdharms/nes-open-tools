@@ -40,8 +40,18 @@ header nav ul:not(:first-of-type) {
   margin-left: calc(var(--pico-nav-element-spacing-horizontal) * -1);
 }
 
-/* The Pages dropdown is the last of the links, near the right edge on a phone, so its
-   menu opens leftward from the summary's right edge instead of running off the screen. */
+/* The Pages dropdown can be the last thing on its row, at the screen's right edge, when
+   the signed-in state wraps below the links, so its menu hangs from the summary's right
+   edge rather than running off the screen. Pico makes the dropdown inline, and an inline
+   box holding a block has no agreed edges: Firefox puts both at the summary's left, so
+   the menu would end where the summary begins. As an inline block it has the summary's
+   edges in every browser. Pico's negative vertical margin, which an inline box ignores,
+   would then pull the row up, so it goes. */
+header nav details.dropdown {
+  display: inline-block;
+  margin-block: 0;
+}
+
 header nav details.dropdown > summary + ul {
   right: 0;
   left: auto;
