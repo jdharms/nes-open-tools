@@ -72,7 +72,8 @@ A toolset for reverse engineering, editing and patching the NES Open Tournament 
   script, described in `docs/deployment.md`
 - `tools/` - CLI entry points: `data/` (regenerates checked-in `data/` files), `research/`,
   `art/`, `music/`, `qr/`; course and patch tools at the top level; `archive/` for retired
-  one-off scripts (no entry points)
+  one-off scripts and `spikes/` for experimental, unmaintained ones (neither has entry
+  points)
 - `docs/`, `data/`, `renders/` (render scripts and output)
 - `courses/` - course JSON: `golf-rehydrate` dumps the vanilla courses here from the ROMs,
   uncommitted (see **Vanilla data** below); `courses/community/` holds the community's
@@ -180,7 +181,7 @@ The indexes and pointers above only stay useful if changes keep them current:
 - `test_docs_index.py` - every doc is in `docs/README.md`, and its links resolve
 - `test_referenced_paths.py` - backticked paths in the CLAUDE.md files, `README.md`,
   `docs/README.md` and the skills exist
-- `test_tools_layering.py` - nothing imports from `tools/`, and `tools/archive/` has no entry points
+- `test_tools_layering.py` - nothing imports from `tools/`, and `tools/archive/` and `tools/spikes/` have no entry points
 - `test_import_order.py` - every module in `golf/`, `server/`, `editor/` and `tools/`
   imports cleanly in a fresh interpreter
 - `test_pypy_ready.py` - the difficulty solver's imports use no 3.12-only syntax and

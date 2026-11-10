@@ -33,11 +33,14 @@ def test_nothing_imports_from_tools():
     )
 
 
-def test_archived_tools_have_no_entry_points():
+def test_archived_and_spike_tools_have_no_entry_points():
     scripts = tomllib.loads((ROOT / "pyproject.toml").read_text())["project"]["scripts"]
-    archived = [
-        name for name, target in scripts.items() if target.startswith("tools.archive")
+    unsupported = [
+        name
+        for name, target in scripts.items()
+        if target.startswith(("tools.archive", "tools.spikes"))
     ]
-    assert not archived, (
-        f"tools/archive/ scripts should not have entry points: {archived}"
+    assert not unsupported, (
+        "tools/archive/ and tools/spikes/ scripts should not have entry points: "
+        f"{unsupported}"
     )

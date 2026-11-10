@@ -64,7 +64,7 @@ full reference for its options.
 - **server/** - the randomizer website; see `server/CLAUDE.md`
 - **tools/** - command-line entry points, grouped into `data/` (regenerates `data/`
   files), `research/`, `art/`, `music/` and `qr/`; course and patch tools sit at the top
-  level; `archive/` holds retired one-off scripts
+  level; `archive/` holds retired one-off scripts and `spikes/` experimental ones
 - **docs/** - design and reverse-engineering notes; start at `docs/README.md` and `docs/documentation.md`.
 - **data/** - checked-in tables, tilesets, sprites and exports the tools and editor load
 - **courses/** - course JSON: the vanilla courses `golf-rehydrate` dumps (not committed;
