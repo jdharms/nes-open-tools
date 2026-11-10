@@ -47,29 +47,32 @@ header nav details.dropdown > summary + ul {
   left: auto;
 }
 
-/* A nav label with a short form shows only its full one (`nav-full`) until the screen is
-   too narrow for the whole row of links, and then only its short one (`nav-short`). The
-   short one is hidden from screen readers and the full one only visually, so they always
-   hear the full label. */
-header nav .nav-short {
+/* Phones get the short site name and a Menu button in one row, which opens every link
+   and the sign-in state as a panel under the header (`.nav-menu`); wider screens get the
+   full name and the row of links, and never the menu. The short name is hidden from
+   screen readers and the full one only visually, so they always hear the full name. */
+header nav .nav-short,
+header nav ul.nav-menu {
   display: none;
 }
 
-/* Phones: tighter spacing between the nav links keeps them on one line. */
 @media (max-width: 575px) {
-  header nav {
-    --pico-nav-element-spacing-horizontal: 0.25rem;
+  body > header {
+    position: relative;
+    padding-block: calc(var(--pico-block-spacing-vertical) * 0.25);
   }
-}
 
-/* Below this width the full labels no longer fit in Inter, which is about as wide as
-   iOS's system font; Android's Roboto and Windows' Segoe UI run about 20px narrower.
-   The short labels then free room, and the links spread across the full width
-   of the screen to use it. */
-@media (max-width: 393px) {
-  header nav ul:not(:first-of-type, .account) {
-    flex-grow: 1;
-    justify-content: space-between;
+  header nav {
+    flex-wrap: nowrap;
+  }
+
+  header nav > ul.nav-links,
+  header nav > ul.account {
+    display: none;
+  }
+
+  header nav ul.nav-menu {
+    display: flex;
   }
 
   header nav .nav-short {
@@ -84,6 +87,83 @@ header nav .nav-short {
     clip-path: inset(50%);
     white-space: nowrap;
   }
+}
+
+/* The Menu button: a <details> summary drawn as an outline button, without Pico's
+   chevron. */
+header nav ul.nav-menu details {
+  margin: 0;
+}
+
+header nav ul.nav-menu summary {
+  list-style: none;
+  padding: calc(var(--pico-nav-link-spacing-vertical) * 0.5)
+    var(--pico-nav-link-spacing-horizontal);
+  border: var(--pico-border-width) solid var(--pico-secondary-border);
+  border-radius: var(--pico-border-radius);
+  color: var(--pico-secondary);
+}
+
+/* Pico spaces an open summary from its contents; the panel is placed on its own. */
+header nav ul.nav-menu details[open] > summary {
+  margin-bottom: 0;
+}
+
+header nav ul.nav-menu summary::-webkit-details-marker {
+  display: none;
+}
+
+header nav ul.nav-menu summary::after {
+  content: none;
+}
+
+/* The panel spans the header's width under it, over the page, with the links stacked
+   one per row for a thumb. Its lists undo Pico's inline nav layout. */
+header nav .nav-menu-panel {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  right: 0;
+  z-index: 10;
+  padding: 0 var(--pico-spacing) calc(var(--pico-spacing) * 0.75);
+  background-color: var(--pico-background-color);
+  border-bottom: var(--pico-border-width) solid var(--pico-muted-border-color);
+  box-shadow: var(--pico-card-box-shadow);
+}
+
+header nav .nav-menu-panel ul {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  margin: 0;
+  padding: 0;
+}
+
+header nav .nav-menu-panel li {
+  padding: 0;
+}
+
+header nav .nav-menu-panel a {
+  display: block;
+  margin: 0;
+  padding: calc(var(--pico-spacing) * 0.5) 0;
+  white-space: normal;
+}
+
+/* The document pages sit under their label, as they sit under Pages on a wider screen. */
+header nav .nav-menu-label {
+  display: block;
+  margin-top: calc(var(--pico-spacing) * 0.5);
+  color: var(--pico-muted-color);
+}
+
+/* The sign-in state closes the panel: the player's name and Sign Out in one row. */
+header nav .nav-menu-panel ul.account {
+  flex-direction: row;
+  justify-content: space-between;
+  align-items: center;
+  margin-top: calc(var(--pico-spacing) * 0.5);
+  border-top: var(--pico-border-width) solid var(--pico-muted-border-color);
 }
 
 /* Sign-in state at the end of the nav. The sign-out button is a form so it can POST, sized

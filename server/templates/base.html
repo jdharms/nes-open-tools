@@ -33,66 +33,91 @@
   </head>
 
   <body>
+    {# The nav's links and the sign-in state, shared by the row of links on a wider screen
+       and the Menu panel on a phone #}
+    {% macro nav_link(href, label, active) %}
+      <li>
+        <a href="{{ href }}"{{ current(active) }}>{{ label }}</a>
+      </li>
+    {% endmacro %}
+    {% macro nav_links() %}
+      {{ nav_link("/rom", t("nav.rom"), page=="rom") }}
+      {{ nav_link("/generate", t("nav.generate"), page=="generate") }}
+      {{ nav_link("/rangefinder", t("nav.rangefinder"), page=="rangefinder") }}
+    {% endmacro %}
+    {% macro nav_content_links() %}
+      {% for item in content_pages %}
+        {{ nav_link("/pages/" ~ item.slug, item.nav_title, page=="content" and content_page.slug==item.slug) }}
+      {% endfor %}
+    {% endmacro %}
+    {% macro nav_account() %}
+      {% if user %}
+        <li>
+          <a href="/me"
+             {{ current(page=="me") }}>{{ t("nav.signed_in_as", name=user.display_name) }}</a>
+        </li>
+        <li>
+          <form method="post" action="/auth/logout">
+            <input type="hidden" name="next" value="{{ return_path }}">
+            <button type="submit"
+                    class="secondary outline">{{ t("nav.sign_out") }}</button>
+          </form>
+        </li>
+      {% elif sign_in_enabled %}
+        <li><a href="/auth/login?next={{ return_path | urlencode }}">{{ t("nav.sign_in") }}</a></li>
+      {% endif %}
+    {% endmacro %}
     <header class="container">
       <nav>
         <ul>
           <li>
-            <a href="/"
-               class="brand"
-               {{ current(page=="home") }}><strong>{{ t("nav.brand") }}</strong></a>
+            {# on a phone the short site name shows instead, beside the Menu button; screen
+               readers always hear the full one #}
+            <a href="/" class="brand" {{ current(page=="home") }}><strong><span class="nav-full">{{ t("nav.brand") }}</span><span class="nav-short" aria-hidden="true">{{ t("site.title") }}</span></strong></a>
           </li>
         </ul>
-        <ul>
-          <li>
-            {# the short label shows instead on a phone too narrow for the full row of links;
-               screen readers always hear the full one #}
-            <a href="/rom"{{ current(page=="rom") }}>
-              <span class="nav-full">{{ t("nav.rom") }}</span><span class="nav-short" aria-hidden="true">{{ t("nav.rom_short") }}</span>
-            </a>
-          </li>
-          <li>
-            <a href="/generate"
-               {{ current(page=="generate") }}>{{ t("nav.generate") }}</a>
-          </li>
-          <li>
-            <a href="/rangefinder"
-               {{ current(page=="rangefinder") }}>{{ t("nav.rangefinder") }}</a>
-          </li>
+        <ul class="nav-links">
+          {{ nav_links() }}
           {% if content_pages %}
             <li>
               <details class="dropdown">
                 <summary{{ current(page=="content") }}>{{ t("nav.pages") }}</summary>
                 <ul>
-                  {% for item in content_pages %}
-                    <li>
-                      <a href="/pages/{{ item.slug }}"
-                         {{ current(page=="content" and content_page.slug==item.slug) }}>{{ item.nav_title }}</a>
-                    </li>
-                  {% endfor %}
+                  {{ nav_content_links() }}
                 </ul>
               </details>
             </li>
           {% endif %}
         </ul>
-        {% if user %}
+        {% if user or sign_in_enabled %}
           <ul class="account">
-            <li>
-              <a href="/me"
-                 {{ current(page=="me") }}>{{ t("nav.signed_in_as", name=user.display_name) }}</a>
-            </li>
-            <li>
-              <form method="post" action="/auth/logout">
-                <input type="hidden" name="next" value="{{ return_path }}">
-                <button type="submit"
-                        class="secondary outline">{{ t("nav.sign_out") }}</button>
-              </form>
-            </li>
-          </ul>
-        {% elif sign_in_enabled %}
-          <ul class="account">
-            <li><a href="/auth/login?next={{ return_path | urlencode }}">{{ t("nav.sign_in") }}</a></li>
+            {{ nav_account() }}
           </ul>
         {% endif %}
+        {# phones only: everything above but the site name, in one panel #}
+        <ul class="nav-menu">
+          <li>
+            <details>
+              <summary>{{ t("nav.menu") }}</summary>
+              <div class="nav-menu-panel">
+                <ul>
+                  {{ nav_links() }}
+                </ul>
+                {% if content_pages %}
+                  <small class="nav-menu-label">{{ t("nav.pages") }}</small>
+                  <ul>
+                    {{ nav_content_links() }}
+                  </ul>
+                {% endif %}
+                {% if user or sign_in_enabled %}
+                  <ul class="account">
+                    {{ nav_account() }}
+                  </ul>
+                {% endif %}
+              </div>
+            </details>
+          </li>
+        </ul>
       </nav>
     </header>
     <main class="container">

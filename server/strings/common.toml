@@ -11,7 +11,7 @@
 # -- Every page -----------------------------------------------------------------------
 
 [site.title]
-note = "plain: browser tab title; default for pages without their own; the short site name, which every page's tab title ends with after \" - \""
+note = "plain: browser tab title; default for pages without their own; the short site name, which every page's tab title ends with after \" - \"; also the left end of the nav bar on a phone, beside nav.menu, where nav.brand is too long (screen readers hear nav.brand)"
 text = "NES Open Randomizer"
 
 [site.card_name]
@@ -23,16 +23,12 @@ note = "plain: the body of a link preview card for a page without one of its own
 text = "Play a new 18 holes every time you step onto the course. Compare your scores with others!"
 
 [nav.brand]
-note = "the full site name, as in the home h1 (tab titles use the short site.title); left end of the nav bar, every page; also the link to the home page"
+note = "the full site name, as in the home h1 (tab titles use the short site.title); left end of the nav bar, every page (site.title instead on a phone); also the link to the home page"
 text = "NES Open Tournament Golf Randomizer"
 
 [nav.rom]
 note = "nav link to ROM setup"
 text = "ROM Setup"
-
-[nav.rom_short]
-note = "nav.rom shortened, shown instead of it on a phone too narrow for the full row of nav links; as few characters as will still read as ROM setup; screen readers hear nav.rom"
-text = "Setup"
 
 [nav.generate]
 note = "nav link to the seed settings form"
@@ -43,8 +39,12 @@ note = "nav link to the course distance measuring tool"
 text = "Rangefinder"
 
 [nav.pages]
-note = "label for the dropdown of document-like pages"
+note = "label for the dropdown of document-like pages; on a phone, the small label over those pages in the nav.menu panel"
 text = "Pages"
+
+[nav.menu]
+note = "phones only: the button at the right end of the nav bar that opens the panel of nav links, document pages and sign-in state; one short word"
+text = "Menu"
 
 [nav.sign_in]
 note = "nav link to sign in with Discord; right end of the nav bar when signed out"

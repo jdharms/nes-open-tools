@@ -480,8 +480,3 @@ says so, a ROM playtested. Items 1 to 6 build the library; 7 onward build the si
       save keeps the bag it was created with. SRAM magic derived from the player's
       choices, and keys that change when the choices do, would make an entry's bag the
       bag played rather than the bag of the latest download.
-    - **Phone header.** The site has been laid out for desktop, where seeds are downloaded,
-      but the scan page (`/s/`) opens on the phone that scanned the QR code. At phone width
-      the header wraps into the site name, the nav links and the sign-in row, taking the
-      top 220px or so before the round shows. A compact header on narrow screens, or a
-      pared-down header on the scan page alone, would put the result on screen first.

@@ -14,6 +14,7 @@ from server.builder import SeedBuilder
 from server.config import Config
 from server.db import Database, DatabaseError
 from server.migrations import MIGRATIONS
+from server.pages import PageCatalog
 from tests.app_state import app_state
 from tests.stored_seeds import store_seed, unfill
 from tests.unit.server_app.helpers import (
@@ -21,6 +22,7 @@ from tests.unit.server_app.helpers import (
     FakeBuilder,
     app_client,
     catalog_with_text,
+    dev_client,
     generate_seed,
     post_download,
     post_generate,
@@ -126,6 +128,54 @@ def test_the_site_name_is_the_link_home(client):
     assert re.search(r'<a href="/"\s+class="brand"\s+aria-current="page">', home)
     rom = client.get("/rom").text
     assert re.search(r'<a href="/"\s+class="brand"\s*>', rom)
+
+
+def test_the_site_name_has_a_short_form_hidden_from_screen_readers(client):
+    brand = client.get("/").text.split('class="brand"', 1)[1].split("</a>", 1)[0]
+    assert '<span class="nav-full">' in brand
+    assert '<span class="nav-short" aria-hidden="true">' in brand
+
+
+def phone_menu(page: str) -> str:
+    """The Menu panel a phone shows in place of the row of links."""
+    return page[page.index('<ul class="nav-menu">') : page.index("</nav>")]
+
+
+def test_the_phone_menu_holds_the_links_and_document_pages(fake_builder, tmp_path):
+    pages_dir = tmp_path / "pages"
+    pages_dir.mkdir()
+    (pages_dir / "rules.md").write_text('+++\ntitle = "Rules"\n+++\n\nBody.\n')
+    with app_client(
+        builder=fake_builder, pages=PageCatalog.load(pages_dir), strings=UNWRITTEN
+    ) as test_client:
+        menu = phone_menu(test_client.get("/pages/rules").text)
+    for href in ("/rom", "/generate", "/rangefinder", "/pages/rules"):
+        assert f'href="{href}"' in menu
+    assert '<small class="nav-menu-label">' in menu
+    assert re.search(r'href="/pages/rules"\s+aria-current="page"', menu)
+
+
+def test_the_phone_menu_leaves_out_the_pages_label_without_pages(
+    fake_builder, tmp_path
+):
+    pages_dir = tmp_path / "pages"
+    pages_dir.mkdir()
+    with app_client(
+        builder=fake_builder, pages=PageCatalog.load(pages_dir)
+    ) as test_client:
+        assert "nav-menu-label" not in phone_menu(test_client.get("/").text)
+
+
+def test_the_phone_menu_ends_with_the_sign_in_state(fake_builder):
+    with dev_client(fake_builder) as test_client:
+        signed_out = phone_menu(test_client.get("/rom").text)
+        test_client.get("/auth/login", params={"as": "alice"})
+        signed_in = phone_menu(test_client.get("/rom").text)
+    assert 'href="/auth/login?next=/rom"' in signed_out.replace("%2F", "/")
+    assert 'href="/me"' not in signed_out
+    assert 'href="/me"' in signed_in
+    assert 'action="/auth/logout"' in signed_in
+    assert "/auth/login" not in signed_in
 
 
 def test_player_facing_pages_show_the_affiliation_footer(client):

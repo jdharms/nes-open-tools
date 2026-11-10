@@ -263,6 +263,12 @@ in this package.
   cards is not an `<article>`, so the cards never nest in one. `golf-site-new-page --entry
   <page> <title>` creates an entry dated today. The date renders through the
   `calendar_date` filter (`server/views.py`), which `localtime.js` formats in UTC.
+- `base.html`'s header has two forms, switched by `site.css` at 575px: the full site
+  name, the row of links and the sign-in state on a wider screen, and on a phone the short
+  site name (`site.title`) and a Menu button opening a `<details>` panel with the same
+  links, the document pages under their label and the sign-in state, so a scanned round
+  shows near the top of the phone's screen. Both draw their links from the macros at the
+  top of `base.html`; a new nav link goes in those, never in one form.
 - `base.html` lists enabled, listed Markdown pages in its document-page dropdown. The
   dropdown is absent when there are none. A Markdown page supplies its own `title` and
   body; its template supplies the top-level heading, so its body starts below h1, and an
