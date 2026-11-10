@@ -116,6 +116,7 @@ Byte-level layout of the course data banks: the `nes-open-golf-rom-layout` skill
 | Cup view, ball drop | 9 | `$8000` `LoadGreenViewTileset`, `$8050` `BallDropAnimationEntry`, `$81C4` `UpdateBallAtCup` | |
 | Behind-the-golfer scene | 9, 13, 15 | bank 9 `$8829` `BuildPerspectiveScene`; bank 13 `$BB6D` `UpdateBallInScene`; `$E9C8` `CollideBallWithScene` | `perspective_scene.md` |
 | HUD, distance readouts | 13 | `$A170` `ShowDistanceToPin`, `$A246` `UpdateShotDistanceReadout`; `CourseCodeFirstLetterTable` (`$9C47`) | `hud_course_abbrev.md` |
+| Swing view bottom HUD (club, hi/lo, meter, REST yardage) | 13 | `$A499` (from `ShotSetupSequence` `$8840`): `NametableDescriptorDA4D5` the top border and labels (PPU `$2300`), `NametableDescriptorTemplateDA519` copied to `$0410` for the value row (`$2340`), club name poked at `$0417`/`$0418` from `ClubNameFirstTileTableAlt`; hi/lo label `$A57D`. Tiles from bank 4 `$A8A4` (loaded at bank 5 `$BDBD`): 0-9 `$00`, a partial alphabet `$0A`-`$1B` with no F, J, K, N, Q, V, X, Y or Z, blank `$3B` | `swing_speed_hud.md` |
 | Ball lie popup | 13 | `$A5DE` `ShowBallLiePopup` | |
 | Peach (caddie) panel | 13 | `$BE0B` `DrawPeachPanel`; what the putt is for from `$BEE2`, lines at `$BE84`-`$BED9` | `putting_view.md` |
 | In-game (Select) menu | 13 | `$96B1` `RunInGameMenu`, `$9723` `ConfirmInGameMenuSelection`, `$98B7` `ResumePlayAfterMenu`; Select/Start splice `$89B0`/`$89E5` | `green_shortcut.md` |

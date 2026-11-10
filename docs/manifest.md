@@ -110,7 +110,8 @@ strictly, and a stored seed's is read tolerantly (**Reading stored manifests**, 
 | 2 | 6 | 2 | The unfinished stack adds `wind_fix`, which makes the wind push the ball the way its arrow points on all 16 directions (`docs/wind.md`, **The crosswind bug**). Schema 2 is the last without a draw rule: its seeds were drawn uniformly. |
 | 3 | 6 | 2 | `settings` gains `draw_rule`, `wind_speed_profile` and `wind_direction_profile`, and each hole gains `wind_direction` and `wind_speed`, which the unfinished stack's `wind_anchors` patch writes into the ROM (ADR 0017). Schema 3 is the last without `include`: its pools held vanilla holes only. |
 | 4 | 6 | 2 | `settings` gains `include`, the kinds of hole added to the pool beside the vanilla ones (ADR 0023). The unfinished buildchain is unchanged. Schema 4 is the last without `constraints` and the last with `draw_rule`: its courses were standard ones of the settings' par. |
-| 5 | 6 | 2 | `settings` gains `constraints`, the course's mode and expert cap, and loses `par` and `draw_rule`; it gains `mirror_chance` and `hazard_chance`, and the manifest gains `request` (ADR 0016, ADR 0025). The unfinished buildchain is unchanged. This is the current schema and unfinished buildchain. |
+| 5 | 6 | 2 | `settings` gains `constraints`, the course's mode and expert cap, and loses `par` and `draw_rule`; it gains `mirror_chance` and `hazard_chance`, and the manifest gains `request` (ADR 0016, ADR 0025). The unfinished buildchain is unchanged. |
+| 5 | 7 | 2 | The unfinished stack adds `swing_speed_hud`, which shows the swing speed (S/M/F) beside the club on the swing view HUD (`docs/swing_speed_hud.md`). This is the current schema and unfinished buildchain. |
 
 Every stored seed of these schemas is read as described below, and finishes through the
 ABI its row names. None is rebuilt.

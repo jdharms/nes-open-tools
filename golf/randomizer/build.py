@@ -3,7 +3,8 @@ The two-stage build: a manifest into an unfinished ROM, and an unfinished ROM in
 
 - **Unfinished**, once per seed: the base patches, the course with each slot's hole
   transforms applied, seeded wind, each hole's wind anchors, the wind fix, the course theme,
-  mercy tap-in, the green detail view and scorecard shortcuts, the round stats the QR code
+  mercy tap-in, the green detail view and scorecard shortcuts, the swing speed on the
+  swing view HUD, the round stats the QR code
   sends (fairways hit and penalty strokes), the scorecard QR image with
   its credential placeholders at the fill, the signpost banner, the magic words on the
   menus and scorecard, and the new-save options routine with its table at the vanilla
@@ -38,6 +39,7 @@ from golf.core.patches import (
     QR_DISABLE_PATCH,
     ROUND_STATS_PATCH,
     SCORECARD_QR_PATCH,
+    SWING_SPEED_HUD_PATCH,
     WIND_FIX_PATCH,
     WRAM_EXPANSION_PATCH,
     CompositePatch,
@@ -88,7 +90,7 @@ SIGNPOST_ART = (
 MAX_SEED_ID = (1 << (8 * payload.SEED_ID_LEN)) - 1
 MAX_PLAYER_ID = (1 << (8 * payload.PLAYER_ID_LEN)) - 1
 #: the unfinished-ROM recipe this release implements
-BUILD_VERSION = 6
+BUILD_VERSION = 7
 #: the interface current unfinished ROMs expose to the per-download finisher
 FINISH_ABI_VERSION = 2
 
@@ -263,6 +265,7 @@ def unfinished_steps(
         )
     steps += [
         green_shortcut_patch(),
+        SWING_SPEED_HUD_PATCH,
         ROUND_STATS_PATCH,
         SCORECARD_QR_PATCH,
         signpost_step(vanilla),

@@ -57,6 +57,7 @@ UNFINISHED_ORDER = [
     "music_import",
     "mercy_tap_in",
     "green_shortcut",
+    "swing_speed_hud",
     "round_stats",
     "scorecard_qr",
     "signpost_random_banner",
@@ -199,18 +200,18 @@ def test_the_unfinished_build_is_deterministic(
     assert build_unfinished(jp_manifest, catalog, store, vanilla).ips == unfinished.ips
 
 
-def test_build_version_six_golden_unfinished_ips_hashes(
+def test_build_version_seven_golden_unfinished_ips_hashes(
     unfinished, jp_manifest, nes_manifest, catalog, store, vanilla
 ):
-    assert BUILD_VERSION == 6
+    assert BUILD_VERSION == 7
     assert any(str(slot.id) == "jp_france/18" for slot in jp_manifest.course.holes)
     nes = build_unfinished(nes_manifest, catalog, store, vanilla)
     assert {
         "jp_france_18": hashlib.sha256(unfinished.ips).hexdigest(),
         "nes_only": hashlib.sha256(nes.ips).hexdigest(),
     } == {
-        "jp_france_18": "4bb0a92d80c28a5fc501dc685b02da79ef6408ab6ee348ab2509025d0a87cf23",
-        "nes_only": "0191e20fb5595358f28bcf63ee5f38e83358ab848c7f832115745d7e15461ad1",
+        "jp_france_18": "cedaa3aac2bf56703fa226f0116ad2e0bc6143df922ac818f3a9bd4e5d9328dd",
+        "nes_only": "4b2e1cb4ba9552dd4f7258967ac4d5fada2e3ef0155088fe2ac7de78e09cbb92",
     }
 
 

@@ -79,6 +79,7 @@ from .sram_defaults import (
     magic_bytes,
     sram_defaults_patch,
 )
+from .swing_speed_hud import SWING_SPEED_HUD_PATCH
 from .tournament_days import tournament_days_patch
 from .wind_anchors import wind_anchors_patch
 from .wind_fix import WIND_FIX_PATCH
@@ -522,6 +523,12 @@ PATCH_SPECS: dict[str, PatchSpec[Any, Any]] = {
             "Make crosswinds push the way their arrow points (docs/wind.md)",
             NoParams,
             _fixed(WIND_FIX_PATCH),
+        ),
+        PatchSpec(
+            "swing_speed_hud",
+            "Show the swing speed (S/M/F) beside the club on the swing view HUD (docs/swing_speed_hud.md)",
+            NoParams,
+            _fixed(SWING_SPEED_HUD_PATCH),
         ),
         PatchSpec(
             "practice_swing",

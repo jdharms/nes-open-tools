@@ -66,6 +66,7 @@ One line per document. Command-line tools are indexed in the top-level `README.m
 | [wind_profiles.md](wind_profiles.md) | A seed's wind speed and direction profiles: the bands, the intensity ramps and the cones |
 | [practice_swing.md](practice_swing.md) | Practice swings that cost no stroke |
 | [green_shortcut.md](green_shortcut.md) | B then Select opens the green detail view, B then Start the scorecard |
+| [swing_speed_hud.md](swing_speed_hud.md) | The swing speed (S/M/F) beside the club on the swing view HUD, and the F tile it needs |
 | [putting_practice.md](putting_practice.md) | Starting every hole as a putt (design note, not shipped) |
 | [green_slope_physics.md](green_slope_physics.md) | Experimental: green slopes as constant acceleration rather than speed-scaled |
 | [mario_open_free_play.md](mario_open_free_play.md) | Mario Open (JP): course unlocks, the score limit that ends a round, and the patch removing both |

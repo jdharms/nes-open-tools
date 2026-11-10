@@ -102,6 +102,7 @@ from .signpost_color import (
 from .signpost_random_banner import random_banner_patches
 from .sram_defaults import Club, sram_defaults_patch, sram_defaults_patches
 from .stack import PatchStack, StackBuild, StackError
+from .swing_speed_hud import SWING_SPEED_HUD_PATCH
 from .tournament_days import (
     DEFAULT_DAYS,
     tournament_days_patch,
@@ -128,6 +129,7 @@ __all__ = [
     "ScorecardQrPatch",
     "ROUND_STATS_PATCH",
     "WIND_FIX_PATCH",
+    "SWING_SPEED_HUD_PATCH",
     "wind_anchors_patch",
     "SCORECARD_QR_PATCH",
     "QR_DISABLE_PATCH",
