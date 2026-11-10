@@ -7,6 +7,12 @@
 
   <p>{{ t("home.about") }}</p>
 
+  {% if latest_update %}
+    <p class="latest-update">
+      <a href="/pages/{{ latest_update_page }}#{{ latest_update.slug }}">{{ t("home.latest_update", summary=latest_update.summary, version=latest_update.title, date=latest_update.date | calendar_date) }}</a>
+    </p>
+  {% endif %}
+
   <ol class="grid steps" role="list">
     <li>
       <article>

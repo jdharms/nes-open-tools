@@ -47,11 +47,12 @@ def page_source(title: str) -> str:
 
 
 def entry_source(title: str, day: date) -> str:
-    """A new collection entry dated ``day``, with its optional value written explicitly."""
+    """A new collection entry dated ``day``, with its optional values written explicitly."""
     return (
         "+++\n"
         f"title = {toml_string(title)}\n"
         f"date = {day.isoformat()}\n"
+        'summary = ""\n'
         f"enabled = {str(DEFAULT_ENABLED).lower()}\n"
         "+++\n\n"
     )

@@ -185,3 +185,44 @@ def test_rom_setup_lists_every_vanilla_rom_with_its_hash(client):
     assert response.text.index('src="/static/romstore.js?v=') < response.text.index(
         'src="/static/rom.js?v='
     )
+
+
+def updates_catalog(tmp_path, newest_summary: str | None) -> PageCatalog:
+    collection = tmp_path / "updates"
+    collection.mkdir()
+    (collection / "_index.md").write_text('+++\ntitle = "Updates"\n+++\n')
+    summary = "" if newest_summary is None else f"\nsummary = {newest_summary!r}"
+    for name, metadata in [
+        ("v1-0-0", 'title = "v1.0.0"\ndate = 2026-01-02\nsummary = "First"'),
+        ("v2-0-0", f'title = "v2.0.0"\ndate = 2026-10-01{summary}'),
+    ]:
+        (collection / f"{name}.md").write_text(f"+++\n{metadata}\n+++\n\nBody.\n")
+    return PageCatalog.load(tmp_path)
+
+
+def test_home_links_the_newest_update_with_its_summary(fake_builder, tmp_path):
+    pages = updates_catalog(tmp_path, "Course modes & more")
+    with app_client(builder=fake_builder, pages=pages) as test_client:
+        home = test_client.get("/").text
+    line = home.split('<p class="latest-update">', 1)[1].split("</p>", 1)[0]
+    assert 'href="/pages/updates#v2-0-0"' in line
+    assert "Course modes &amp; more" in line
+    assert 'href="/pages/updates#v1-0-0"' not in home
+
+
+def test_home_shows_no_update_line_when_the_newest_has_no_summary(
+    fake_builder, tmp_path
+):
+    pages = updates_catalog(tmp_path, None)
+    with app_client(builder=fake_builder, pages=pages) as test_client:
+        home = test_client.get("/").text
+    assert "latest-update" not in home
+    assert "#v1-0-0" not in home
+
+
+def test_home_shows_no_update_line_without_an_updates_page(fake_builder, tmp_path):
+    (tmp_path / "rules.md").write_text('+++\ntitle = "Rules"\n+++\n')
+    with app_client(
+        builder=fake_builder, pages=PageCatalog.load(tmp_path)
+    ) as test_client:
+        assert "latest-update" not in test_client.get("/").text

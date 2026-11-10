@@ -18,7 +18,7 @@ HERE = Path(__file__).resolve().parent
 PAGES_DIR = HERE / "content" / "pages"
 FRONTMATTER_DELIMITER = "+++"
 FIELDS = frozenset({"title", "nav_title", "order", "enabled", "listed"})
-ENTRY_FIELDS = frozenset({"title", "date", "enabled"})
+ENTRY_FIELDS = frozenset({"title", "date", "summary", "enabled"})
 INDEX_NAME = "_index.md"
 SLUG = re.compile(r"[a-z0-9]+(?:-[a-z0-9]+)*")
 DEFAULT_ORDER = 100
@@ -38,6 +38,8 @@ class PageEntry:
     title: str
     date: date
     body_html: Markup
+    #: one plain line saying what the entry is about, or None (ADR 0031)
+    summary: str | None = None
 
 
 @dataclass(frozen=True)
@@ -53,6 +55,11 @@ class ContentPage:
     collection: bool = False
     #: a collection's enabled entries, newest first
     entries: tuple[PageEntry, ...] = ()
+
+    @property
+    def newest(self) -> PageEntry | None:
+        """A collection's newest enabled entry; None for a page or an empty collection."""
+        return self.entries[0] if self.entries else None
 
 
 @dataclass(frozen=True)
@@ -140,6 +147,14 @@ def _string_field(
     return value.strip()
 
 
+def _optional_string_field(name: str, metadata: dict, field: str) -> str | None:
+    """A string field that may be absent or empty, either of which is None."""
+    value = metadata.get(field, "")
+    if not isinstance(value, str):
+        raise PageError(f"{name}: {field} must be a string")
+    return value.strip() or None
+
+
 def _bool_field(name: str, metadata: dict, field: str, default: bool) -> bool:
     value = metadata.get(field, default)
     if type(value) is not bool:
@@ -216,5 +231,6 @@ def _load_entry(name: str, path: Path) -> tuple[PageEntry, bool]:
     when = metadata.get("date")
     if type(when) is not date:
         raise PageError(f"{name}: date must be a TOML date such as 2026-10-01")
+    summary = _optional_string_field(name, metadata, "summary")
     enabled = _bool_field(name, metadata, "enabled", DEFAULT_ENABLED)
-    return PageEntry(path.stem, title, when, _render(body)), enabled
+    return PageEntry(path.stem, title, when, _render(body), summary), enabled

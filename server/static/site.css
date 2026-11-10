@@ -283,6 +283,23 @@ article.rom:not([data-state="stored"]) > footer {
   display: none;
 }
 
+/* Home page: the newest update, a quiet chip linking to its card on the Updates page
+   (ADR 0031), muted until hovered so it doesn't compete with the heading. */
+main p.latest-update a {
+  display: inline-block;
+  padding: 0.15rem 0.75rem;
+  font-size: 0.875em;
+  border: var(--pico-border-width) solid var(--pico-muted-border-color);
+  border-radius: 999px;
+  color: var(--pico-muted-color);
+  text-decoration: none;
+}
+
+main p.latest-update a:is(:hover, :focus-visible) {
+  color: var(--pico-primary);
+  border-color: var(--pico-primary);
+}
+
 /* Home page steps: numbered cards in Pico's grid, inside an ordered list. */
 
 .steps {

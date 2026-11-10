@@ -18,6 +18,8 @@ ROM_SCRIPT_STRINGS = "rom.status"
 RANGEFINDER_SCRIPT_STRINGS = "rangefinder.script"
 #: where the rangefinder's renders (`Config.rangefinder_dir`) are served
 RANGEFINDER_DATA_URL = "/rangefinder-data"
+#: the collection whose newest entry the home page names, when it has a summary (ADR 0031)
+LATEST_UPDATE_PAGE = "updates"
 
 
 def site_router(templates: Jinja2Templates, pages: PageCatalog) -> APIRouter:
@@ -25,7 +27,17 @@ def site_router(templates: Jinja2Templates, pages: PageCatalog) -> APIRouter:
 
     @router.get("/", response_class=HTMLResponse)
     def home(request: Request):
-        return templates.TemplateResponse(request, "home.html", {"page": "home"})
+        updates = pages.get(LATEST_UPDATE_PAGE)
+        latest = updates.newest if updates is not None else None
+        return templates.TemplateResponse(
+            request,
+            "home.html",
+            {
+                "page": "home",
+                "latest_update_page": LATEST_UPDATE_PAGE,
+                "latest_update": latest if latest and latest.summary else None,
+            },
+        )
 
     def content_page(content: ContentPage):
         def show(request: Request):

@@ -253,10 +253,13 @@ in this package.
   name, and it refuses to overwrite a page. `golf-site --reload` watches the Markdown
   files.
 - A directory directly under `server/content/pages/` is instead a collection page, one
-  card per entry (ADR 0006). Its name follows the same slug rule. Its `_index.md` holds
+  card per entry (ADR 0006, ADR 0031). Its name follows the same slug rule. Its `_index.md` holds
   the page frontmatter and an optional intro shown above the cards; every other `.md` file
   is an entry with a required `title`, a required TOML local `date` (`date = 2026-10-01`,
-  not a datetime) and an optional `enabled`. An entry's file name is its card's anchor
+  not a datetime), an optional `summary` and an optional `enabled`. A summary is one line
+  of plain text, empty meaning none; the home page links the newest entry of `updates`
+  through `home.latest_update` when that entry has one (`LATEST_UPDATE_PAGE` in
+  `server/routes/site.py`). An entry's file name is its card's anchor
   id, and its title links there. Entries show newest date first, ties broken by file name
   descending; disabled entries are validated but never rendered. A collection holds no
   directories, and a page file cannot share a collection's name. The page around the

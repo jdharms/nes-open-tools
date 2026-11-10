@@ -104,6 +104,7 @@ def test_creates_a_valid_entry_dated_today(tmp_path):
     assert frontmatter(path) == {
         "title": "v3.0.0",
         "date": date.today(),
+        "summary": "",
         "enabled": True,
     }
     page = PageCatalog.load(tmp_path).get("updates")

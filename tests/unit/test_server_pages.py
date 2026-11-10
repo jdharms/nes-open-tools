@@ -152,6 +152,30 @@ def test_a_directory_is_a_collection_with_its_index_metadata(tmp_path):
     assert entry.body_html == "<p>Hi.</p>\n"
 
 
+def test_an_entry_summary_is_stripped_and_an_empty_one_is_none(tmp_path):
+    collection = write_collection(tmp_path)
+    write_page(
+        collection, "a.md", 'title = "A"\ndate = 2026-01-03\nsummary = " New modes "'
+    )
+    write_page(collection, "b.md", 'title = "B"\ndate = 2026-01-02\nsummary = ""')
+    write_page(collection, "c.md", 'title = "C"\ndate = 2026-01-01')
+    page = PageCatalog.load(tmp_path).pages[0]
+    assert [entry.summary for entry in page.entries] == ["New modes", None, None]
+
+
+def test_newest_is_a_collection_s_first_entry(tmp_path):
+    collection = write_collection(tmp_path)
+    write_page(collection, "old.md", 'title = "Old"\ndate = 2026-01-01')
+    write_page(collection, "new.md", 'title = "New"\ndate = 2026-02-01')
+    write_page(tmp_path, "plain.md", 'title = "Plain"')
+    catalog = PageCatalog.load(tmp_path)
+    updates = catalog.get("updates")
+    plain = catalog.get("plain")
+    assert updates is not None and plain is not None
+    assert updates.newest is not None and updates.newest.slug == "new"
+    assert plain.newest is None
+
+
 def test_a_page_file_is_not_a_collection(tmp_path):
     write_page(tmp_path, "plain.md", 'title = "Plain"')
     page = PageCatalog.load(tmp_path).pages[0]
@@ -246,6 +270,11 @@ def test_non_markdown_files_in_a_collection_are_ignored(tmp_path):
             "entry.md",
             'title = "Entry"\ndate = 2026-01-01\nenabled = 1',
             "enabled must be a boolean",
+        ),
+        (
+            "entry.md",
+            'title = "Entry"\ndate = 2026-01-01\nsummary = 1',
+            "summary must be a string",
         ),
         (
             "entry.md",

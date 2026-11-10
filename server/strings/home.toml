@@ -9,6 +9,10 @@ text = "NES Open Tournament Golf Randomizer"
 note = "line under the h1; what the site is"
 text = """Play a new 18 holes every time you step onto the course."""
 
+[home.latest_update]
+note = "a small chip between the about paragraph and the step cards, the whole of it a link to the newest release's card on the Updates page; shown only when that release has a summary; that the site has been updated and what it brought; receives summary (plain text, a few words from the release's frontmatter), version (e.g. v5.0.0) and date (the release date)"
+text = "{version} - {summary} ({date})"
+
 [home.about]
 note = "paragraph under the tagline; what this project is and what sets it apart: holes from both the US and Japanese games; no definition of a seed, the step cards show it by use"
 text = """

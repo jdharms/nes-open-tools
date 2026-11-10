@@ -1,11 +1,12 @@
 +++
-status = "accepted"
-date = 2026-09-24
+status = "superseded"
+date = 2026-11-10
 area = "site"
 permanent = false
 revisit_when = "A collection needs an order other than newest date first, or entries need structure beyond a title, a date and a Markdown body"
 drafted_by = "Claude"
 supersedes = []
+superseded_by = 31
 +++
 
 # A collection page is a directory with one card per file
