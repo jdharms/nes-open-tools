@@ -13,6 +13,7 @@ and the inputs the swing actually produced, so the model can replay the shot
 from the same inputs and be compared frame by frame.
 """
 
+from collections.abc import Callable
 from dataclasses import dataclass, field
 
 from golf.core.rom_reader import RomReader
@@ -23,7 +24,7 @@ from golf.physics.nes import (
     BUTTON_UP,
     NesMachine,
 )
-from golf.physics.perspective import PerspectiveScene
+from golf.physics.perspective import PerspectiveScene, Projection
 from golf.physics.rom_oracle import (
     ACCURACY_STOP,
     AIMING,
@@ -33,6 +34,7 @@ from golf.physics.rom_oracle import (
     CLUB,
     POWER_STOP,
     RNG_STATE,
+    SHOT_ORIGIN,
     SHOT_PHASE,
     SPIN_SETTING,
     SWING_HI_LO,
@@ -52,6 +54,8 @@ SHOT_SETUP_SEQUENCE = 0x877A
 SWING_SEQUENCE_ENTRY = 0xAA09
 BUILD_PERSPECTIVE_SCENE_CALL = 0x8829  # bank 13: the far call to bank 9 $8829
 AFTER_SCENE_BUILT = 0x882F  # bank 13: just after that far call returns
+# bank 13: after the far call to bank 9 $96EC, which adds the sky blocks
+AFTER_SCENE_SHOWN = 0x8849
 # bank 13: leaving the swing loop, before a holed ball's drop animation
 SHOT_COMPLETE = 0xACA1
 PLAY_SHOT = 0x82AD  # bank 13: the play loop's call of ShotSetupSequence, and after
@@ -134,7 +138,10 @@ class RomShotRecord:
     view_modes: list[int] = field(default_factory=list)
     """`ViewMode` at the same points."""
     scene: PerspectiveScene | None = None
-    """WRAM as the behind-the-golfer scene builder left it (none for a putt)."""
+    """
+    WRAM as the flight finds it: the behind-the-golfer scene with its sky
+    blocks in, taken just before the swing (none for a putt).
+    """
     flag: Flag | None = None
     after: Ball | None = None
     """
@@ -244,10 +251,12 @@ class RomGameShot:
             state["done"] = True
 
         def scene_built() -> None:
+            state["scene_aim"] = m[FINE_AIM_ANCHOR]
+
+        def scene_shown() -> None:
             record.scene = PerspectiveScene(
                 bytes(m[0x6000:0x8000]), fixed_bank, machine.banks[PHYSICS_BANK]
             )
-            state["scene_aim"] = m[FINE_AIM_ANCHOR]
 
         def loop_top() -> None:
             phase = m[SHOT_PHASE]
@@ -294,6 +303,7 @@ class RomGameShot:
         machine.add_breakpoint(SHOT_COMPLETE, shot_complete, PHYSICS_BANK)
         machine.add_breakpoint(SWING_LOOP_TOP, loop_top, PHYSICS_BANK)
         machine.add_breakpoint(AFTER_SCENE_BUILT, scene_built, PHYSICS_BANK)
+        machine.add_breakpoint(AFTER_SCENE_SHOWN, scene_shown, PHYSICS_BANK)
         machine.add_breakpoint(AFTER_PENALTIES, lie_dealt_with, PHYSICS_BANK)
         machine.add_breakpoint(HOLED_OUT, lie_dealt_with, PHYSICS_BANK)
         machine.call(
@@ -385,3 +395,109 @@ def green_view_sprites(
         for i in range(0, 256, 4)
         if page[i] < HIDDEN_Y
     ]
+
+
+SCENE_BANK = 9
+SCREEN_X = 0xC6  # BallScreenX
+SCREEN_Y = 0xC7  # BallScreenY, 16 bits
+BUILD_PERSPECTIVE_SCENE = 0x8829  # bank 9
+SHOW_PERSPECTIVE_SCENE = 0x96EC  # bank 9: the sky blocks, then the nametable
+#: Bank 9 addresses inside `BuildPerspectiveScene`, each just after one step.
+SCENE_STAGES = {
+    "probed": 0x888C,
+    "flag_nudged": 0x8898,
+    "blocks": 0x889B,
+    "ground": 0x889E,
+    "neighbors": 0x88A1,
+    "trees_found": 0x88F8,
+    "trees_drawn": 0x890D,
+}
+
+
+@dataclass
+class RomScene:
+    """One run of the game's scene builder."""
+
+    before: bytes
+    """WRAM ($6000-$7FFF) going in: the builder reads what the last scene left."""
+    built: bytes
+    """WRAM as `BuildPerspectiveScene` returns, where `RomGameShot` captures it."""
+    shown: bytes
+    """WRAM once the sky blocks are in (bank 9 $96EC), which is what a flight sees."""
+    rng_state: int
+    """`RngState` as the builder left it."""
+    stale: Projection
+    """$C6-$C8 going in: the screen position the last projection left."""
+    stages: dict[str, tuple[bytes, bytes]] = field(default_factory=dict)
+    """With `stages`: (WRAM, RAM $0000-$07FF) after each of `SCENE_STAGES`."""
+
+
+class RomSceneBuilder:
+    """
+    The game's `BuildPerspectiveScene` (bank 9 $8829) and the sky blocks that
+    follow it, called directly on a hole the game's `InitHole` loaded. The ball,
+    the shot's origin, the aim and the RNG are poked in as `ShotSetupSequence`
+    has them at its far call; nothing else the setup panels do reaches the maps
+    (`tests/physics/test_scene_builder_rom.py` compares it with `RomGameShot`).
+
+    The machine is kept between builds, so a second scene sees the WRAM the
+    first one left, as on a console.
+    """
+
+    def __init__(self, rom: RomReader, course: str, hole: int, rng_state: int = 0):
+        self.machine = NesMachine(rom)
+        m = self.machine.memory
+        m[PPU_CTRL_CACHE] = 0x80
+        m[GOLF_GAME_MODE] = 0
+        m[CURRENT_COURSE] = COURSES[course]
+        m[HOLE_NUMBER] = hole - 1
+        m[RNG_STATE], m[RNG_STATE + 1] = rng_state & 0xFF, rng_state >> 8
+        self.machine.call(INIT_HOLE)
+        self.flag = Flag(m[FLAG] | m[FLAG + 1] << 8, m[FLAG + 2] | m[FLAG + 3] << 8)
+
+    def build(
+        self,
+        x: int,
+        y: int,
+        aim: int,
+        rng_state: int = 0,
+        x_fraction: int = 0,
+        y_fraction: int = 0,
+        stages: bool = False,
+    ) -> RomScene:
+        machine = self.machine
+        m = machine.memory
+        m[BALL_X : BALL_X + 3] = bytes([0, x_fraction, x])
+        m[BALL_Y : BALL_Y + 4] = bytes([0, y_fraction, y & 0xFF, y >> 8])
+        # $877D-$878F: the shot's origin is the ball, fractions included.
+        m[SHOT_ORIGIN : SHOT_ORIGIN + 5] = bytes(
+            [x_fraction, x, y_fraction, y & 0xFF, y >> 8]
+        )
+        m[AIMING] = aim
+        m[RNG_STATE], m[RNG_STATE + 1] = rng_state & 0xFF, rng_state >> 8
+        before = bytes(m[0x6000:0x8000])
+        stale = Projection(0, m[SCREEN_X], m[SCREEN_Y] | m[SCREEN_Y + 1] << 8)
+        captured: dict[str, tuple[bytes, bytes]] = {}
+
+        def capture(name: str) -> Callable[[], None]:
+            def snapshot() -> None:
+                captured[name] = (bytes(m[0x6000:0x8000]), bytes(m[0:0x800]))
+
+            return snapshot
+
+        machine.breakpoints.clear()
+        machine._breakpoint_pcs.clear()
+        if stages:
+            for name, address in SCENE_STAGES.items():
+                machine.add_breakpoint(address, capture(name), SCENE_BANK)
+        machine.call(BUILD_PERSPECTIVE_SCENE, bank=SCENE_BANK)
+        built = bytes(m[0x6000:0x8000])
+        rng_after = m[RNG_STATE] | m[RNG_STATE + 1] << 8
+        machine.call(SHOW_PERSPECTIVE_SCENE, bank=SCENE_BANK)
+        return RomScene(
+            before, built, bytes(m[0x6000:0x8000]), rng_after, stale, captured
+        )
+
+    def call(self, address: int) -> None:
+        """One of the builder's routines alone (bank 9), on the machine as it stands."""
+        self.machine.call(address, bank=SCENE_BANK)

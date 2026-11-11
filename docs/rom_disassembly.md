@@ -121,8 +121,7 @@ Each is recorded where it lives, in the label's comment.
   covered: a full tournament or the earned ending, a hole-in-one or albatross, rank
   promotion, a new save file. Bank 11 `LB_80C7` and bank 14 `LE_8A44` follow a `JMP` with
   nothing branching to them, so need no breakpoint.
-- **`Maybe` data nothing reads**, for read breakpoints: `MaybeUnusedSceneFlagTable`
-  (bank 9 `$942B`), `MaybeUnusedData9B38B`, `MaybeUnusedDataC8293`,
+- **`Maybe` data nothing reads**, for read breakpoints: `MaybeUnusedData9B38B`, `MaybeUnusedDataC8293`,
   `MaybeUnusedDataAA296`, `MaybeUnusedDataDAC85`, `MaybeUnusedDataDB3A0`, and the table
   tails `MaybeUnusedPutterDistanceSpeed34`, `MaybeUnusedPutterDistAltSpeed34` and
   `MaybeBunkerExitClubThresholdTable` (only entry 1 read).

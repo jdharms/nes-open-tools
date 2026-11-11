@@ -164,6 +164,15 @@ class HoleGround:
             terrain = self._classified[key] = self._classify(x, y)
         return terrain
 
+    def tile(self, x: int, y: int) -> int:
+        """
+        `ProbeTerrainTile` ($A0) after a probe of the pixel: the terrain tile
+        there, under the green too, or 0 off the course.
+        """
+        if x >= 0xB0 or y >= self.bottom_y:
+            return 0
+        return self.hole.terrain[y >> 3][x >> 3]
+
     def _classify(self, x: int, y: int) -> Terrain:
         if x >= 0xB0 or y >= self.bottom_y:
             return Terrain(Lie.OUT_OF_BOUNDS)

@@ -575,8 +575,8 @@ Done:
   by one that plays `ShotInFlight(..., scene=...)` with the scene for the shot's start and
   aim. Checked against the game: 324 shots from twelve of the 2nd's forest spots through
   `RomGameShot`, where the model with the game's scene matched all 324 and the trees
-  changed 60. Only vanilla holes load this way, so Mario Open holes would need writing
-  into a ROM first (`golf-write`, untried) or the scene builder ported.
+  changed 60. Only vanilla holes load this way; `build_scene` (`golf/physics/scene.py`)
+  now builds the same scene from the hole alone.
 - **Wind on two holes.** Played on the drive only, with the approach valued at no wind,
   the U.K. 7th's best drive is a slow, low 1W with backspin up the fairway (4.24) in
   calm, headwinds and crosswinds, and a fast, high 1W due north only in a strong
@@ -605,7 +605,7 @@ Assumptions the results rest on:
   the window for their aim errors. A putt starts from the pixel the last one stopped on,
   as every state does.
 - **No trees in the behind-the-golfer view**: `outcomes()` has no scene to collide with
-  until the scene builder is ported (**Future work**). Overhead-view trees work. On eight U.K.
+  until the ported scene builder is hooked into shared flights (**Future work**). Overhead-view trees work. On eight U.K.
   holes this costs about 0.2 strokes, and the wrong drive on the 14th (**Trees in the
   behind-the-golfer view, measured**).
 - **The solver's approximations**: the 4-pixel cells (a cell's value is its first spot's),
@@ -678,13 +678,25 @@ None of this is scheduled (ADR 0012).
   total), and the `$40` wind distortion (`docs/shot_physics.md`). What they check now is
   the emulated machine: that nothing it leaves out (the PPU, sprite 0, IRQs) changes a
   shot.
-- **The scene builder** (bank 9 `$8829`), ported, so the solver sees behind-the-golfer
-  trees and chooses the right drive on holes like the U.K. 14th. It samples a 20 × 64
-  grid (`docs/shot_physics.md`, **Not modeled yet**) and builds the maps in `$9C1C`,
-  `$8EE4`, `$9CB8`, `$A30B`, `$8FE4`, `$99B2`, `$91C9` (282 instructions, and the RNG)
-  and `$9A79`, some of which only draw. The scenes `RomGameShot` captures are the oracle.
-  Shared flights assume no scene; with one, `Flight` would have to check the scene's
-  collisions for each start too.
+- **The scene in the solver.** The scene builder is ported (`golf/physics/scene.py`,
+  `docs/shot_physics.md` **The scene builder**) and `ShotInFlight` takes its scene, but
+  `outcomes()` plays shared flights, which have none, so the solver still sees no
+  behind-the-golfer trees and still picks the wrong drive on holes like the U.K. 14th.
+  What hooking it in would take, none of it built:
+  - A scene per start and aim. `build_scene` needs only the hole, the ball, the aim and
+    the flag; a build takes about 6 ms under CPython on the U.K. 14th tee (not timed under PyPy).
+  - `Flight` keeping the ball's projection for each frame of the behind-the-golfer
+    phase. The projection depends only on the ball relative to the shot's origin, so
+    starts on whole pixels share it; `collide` over those frames against a start's scene
+    then says whether that start hits a tree, and a start that does is played alone
+    with `simulate`, as starts with fractions already are.
+  - Choices for what a scene depends on that the solver does not know: the RNG state
+    (which leaf tile is drawn where canopies overlap; the tiles have different shapes),
+    and the last scene's leftovers in WRAM and in `$C6`-`$C8`, which reach a few ground
+    tiles and which trees are drawn 4 pixels lower. Zeros for the leftovers and one RNG
+    state would be the simplest; how much either moves a shot has not been measured.
+  - Mario Open holes over 48 rows need a ROM with `wram_expansion` for their terrain
+    tables, and the builder has only been checked on the vanilla ROM.
 - **Wind**, at least for holes where it changes the best play (**Wind on two holes**).
   A seed knows each hole's wind (`seed_holes`), so the randomizer could use it directly.
 - **A better screen.** It misses intents: on the US 16th the solve chose a drive worth

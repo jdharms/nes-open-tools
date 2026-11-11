@@ -410,6 +410,76 @@ value of `$CC` or more stops the ball dead: ground velocity and backspin zeroed,
 falling. Less than that sends it back at a quarter speed on both axes. After that, for as
 long as `$0599` stays set, the Y velocity is reversed and quartered again every frame.
 
+### The scene builder
+
+The scene those trees are in is built once, before the swing, by bank 9's
+`BuildPerspectiveScene` (`$8829`, far-called from `ShotSetupSequence`) and finished by
+`ShowPerspectiveScene` (`$96EC`) just after. [perspective_scene.md](perspective_scene.md)
+goes through the routines; in outline:
+
+1. **The flag**: the pin and the green's corners are projected. With the pin on screen
+   and near (`$0727`), green probes are drawn as rough; otherwise only those on the
+   four farthest rows are.
+2. **The probe grid**: 20 rows of 64 terrain probes ahead of the ball, turned by the aim.
+   Row `r` lies `$8ED0[r]` pixels ahead (99, 67, 49, ... 1, 0, -1) and its points
+   `$89D0[64r + i]` pixels to the side (about ±70 on the farthest row). Nothing farther
+   than 99 pixels ahead is on the ground of the scene.
+3. **The ground**: the grid's lies become the tile map's bottom ten rows.
+4. **The trees**: every tree tile in a box reaching 105 pixels ahead and 55 to either
+   side is projected with the same projection the ball uses; each screen column keeps
+   one tree, which is drawn as a trunk and a canopy sized by how low on the screen it
+   stands. The cells it covers get its depth. Only this step writes the depth map.
+5. **The sky**: six blocks of cloud tiles, wherever the tile map is still blank.
+
+A scene has these inputs:
+
+- the hole's terrain, green and scroll limit, through `ClassifyProbePosition`;
+- the ball's position, fractions included (they are the shot's origin, `$B8`-`$BC`);
+- the aim (`$B7`, copied to `$BD`);
+- the flag (`$A7`-`$AA`), fractions included;
+- `RngState`: a canopy tile drawn over a tree tile it has no class for is one of four
+  leaf tiles (`$D7`, `$E7`, `$E8`, `$FC`) picked with a draw each. The depth map never
+  depends on it. The draws move `RngState`, but `ShotSetupSequence` saves it before the
+  far call and puts it back if the player backs out of the swing;
+- **what the last scene left in WRAM.** The ground step reads the probe grid's neighbors
+  without checking for its edges: above its first row is the bottom of the tile map,
+  not yet redrawn, and below its last is the end of WRAM and then bank 9;
+- **what the last projection left in `$C6`-`$C8`.** With the flag out of view the
+  projection writes no screen position, and the builder reads one anyway; it decides
+  which trees are moved 4 pixels down the screen.
+
+`scene.py` ports steps 1 to 5 (`build_scene`), in one 64K image with the maps at the
+game's addresses, so the edge reads come out as they do in the game. It takes the last
+two inputs as arguments (`wram`, `stale`); left out, they are zeros, as on a machine
+that has drawn no scene. It leaves out what only draws: the palette fade between probe
+rows, the flagstick and the other sprites (`$99B2`, `$9A79`), the tiles queued for the
+PPU and the nametable upload. `ShotInFlight(..., scene=build_scene(...).scene)` then
+plays the shot with the trees.
+
+`test_scene_builder_rom.py` shows:
+
+- **Whole scenes**: 18 holes, 14 scenes each (the tee along six aims, then random spots,
+  aims, fractions and RNG states), built one after another on one machine so each sees
+  the last one's leftovers. Every byte from the tile map to the end of WRAM
+  (`$77E6`-`$7FFF`) and `RngState` agree, both as the builder returns and with the sky
+  blocks in. The U.K. 14th's tee has its own case.
+- **Routines alone**, on inputs no hole gives: the ground step over 200 random probe
+  grids, the tree drawing over 160 random sets of columns, and 9,000 random tree points.
+- **Shots**: 13 tee shots the game played, six of them into the trees by the U.K. 14th's
+  tee. The ported scene is the same bytes as the game's, and the model's flight with it
+  agrees with the game on every frame; without a scene those six fly on past.
+
+What it does not show:
+
+- **A block of four lies** (`$9DD0`) is not ported and raises `NotImplementedError`. The
+  step before leaves every block at most three, so no probe grid reaches it; the random
+  grids never did.
+- **ROMs other than vanilla NES Open.** The tables are read at their vanilla addresses in
+  bank 9. Nothing was run on a ROM with `wram_expansion`, or on Mario Open.
+- **`stale` between shots.** The tests feed the port the `$C6`-`$C8` the machine really
+  held. In a round they hold the last shot's final projection, which a caller without
+  the game has to work out or leave at zero.
+
 ### Hi/lo is read after the swing
 
 `UpdateSwingHiLoAndAim` runs on every frame of the swing, not just while aiming, and keeps
@@ -427,6 +497,7 @@ lands. So letting go of Up or Down just after the swing changes how the ball bit
 - `terrain.py` is `ClassifyProbePosition`, over a hole from course JSON (`HoleGround`).
 - `perspective.py` and `distance.py` cover the behind-the-golfer projection, its tree
   collision and the distance readout.
+- `scene.py` builds the scene that collision reads (**The scene builder**).
 - `cup.py` is the cup and the flagstick, which `ShotInFlight` runs when it is given the
   flag. Without one there is no cup.
 - `rules.py` is what happens after the shot: water, out of bounds and holing out.
@@ -463,17 +534,11 @@ Three references check it (`tests/physics/`, run with `--physics`):
   leaves in RAM, for `test_green_view_rom.py`.
 - `test_scene_rom.py` calls the projection, the distance and the scene collision directly,
   with thousands of random inputs, over scenes the game's builder made.
+- `test_scene_builder_rom.py` checks `scene.py` against `RomSceneBuilder` (`rom_game.py`),
+  which calls the game's builder on a hole the game loaded (**The scene builder**).
 
 ## Not modeled yet
 
-- **The scene builder** (bank 9 `$8829`, from `ShotSetupSequence`): it probes 64 × 20
-  points ahead along the aim and draws the scene into the maps. The model takes a
-  `PerspectiveScene` the ROM built; without one, the behind-the-golfer phase has no trees.
-  Row `r` of the probe grid lies `$8ED0[r]` pixels ahead (99, 67, 49, ... 1, 0, −1), and
-  its 64 points `$89D0[64r + i]` pixels to the side (about ±70 on the farthest row),
-  turned by the aim; nothing farther than 99 pixels ahead is in the scene. The builder
-  draws on the RNG (`$91C9`): between RNG states, one tile of the tile map near the
-  horizon differs (`$D7`, `$E7`, `$E8` or `$FC`), and the depth map does not.
 - **View `$FF`**, which the physics treats like the cup view (both test bits 6 and 7). It
   does not occur during a normal shot.
 - **The drive-distance statistic** accumulated in `$05C0/$05C1`.

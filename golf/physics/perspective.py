@@ -18,7 +18,8 @@ switches to overhead when it reaches 0.
 
 A tree is hit when the ball's screen pixel lands on a scene tile whose depth is
 1-3 past the ball's and whose shape covers that pixel (`LE9C8`). The scene maps
-come from the scene builder, which is not ported: see `PerspectiveScene`.
+come from the scene builder (`golf.physics.scene`), or from the game's own
+through `RomGameShot`: see `PerspectiveScene`.
 """
 
 from dataclasses import dataclass
@@ -93,19 +94,51 @@ def project(
     `LE87C`. `origin_x` is $B8/$B9 (16 bits: pixel and fraction), `origin_y`
     $BA-$BC (24 bits), `anchor` is $BD.
     """
+    depth, screen_x, screen_y = _project(ball, origin_x, origin_y, anchor, tables)
+    if not depth or screen_x is None or screen_y is None:
+        return OUT_OF_VIEW
+    return Projection(depth, screen_x, screen_y)
+
+
+def project_registers(
+    ball: Ball,
+    origin_x: int,
+    origin_y: int,
+    anchor: int,
+    tables: PhysicsTables,
+    stale: Projection,
+) -> Projection:
+    """
+    `LE87C` with $C6-$C8 as it really leaves them. Out of view it only zeroes
+    the depth: the screen position keeps what it held (`stale`), except that
+    screen x is already written, wrapped to a byte, when the ball is off the
+    side of the screen or too high. The scene builder reads both regardless.
+    """
+    depth, screen_x, screen_y = _project(ball, origin_x, origin_y, anchor, tables)
+    return Projection(
+        depth,
+        stale.screen_x if screen_x is None else screen_x,
+        stale.screen_y if screen_y is None else screen_y,
+    )
+
+
+def _project(
+    ball: Ball, origin_x: int, origin_y: int, anchor: int, tables: PhysicsTables
+) -> tuple[int, int | None, int | None]:
+    """(depth, screen x, screen y), with None for a register it did not write."""
     dy = (origin_y - (ball.y >> 8 & MASK24)) & MASK24
     if not _within_view(byte(dy, 1), byte(dy, 2)):
-        return OUT_OF_VIEW
+        return 0, None, None
     ball_x = ball.x >> 8
     dx = (ball_x - origin_x) & MASK16
     # The sign byte is the subtraction's borrow, not bit 15 of the result.
     if not _within_view(byte(dx, 1), 0xFF if ball_x < origin_x else 0):
-        return OUT_OF_VIEW
+        return 0, None, None
 
     u, v = rotate(dx, dy & MASK16, anchor, tables)
     depth = byte(v, 1) + DEPTH_OFFSET
     if (depth >> 8) + byte(v, 2) & MASK8:
-        return OUT_OF_VIEW
+        return 0, None, None
     depth &= MASK8
 
     scale = divide(depth << 8 | byte(v, 0), DEPTH_DIVISOR) >> 2
@@ -116,24 +149,24 @@ def project(
     # x4 by two shifts, but only the second shift's carry is tested: a set
     # bit 15 wraps silently.
     if across & 0x4000:
-        return OUT_OF_VIEW
+        return 0, None, None
     across = across << 2 & MASK16
     offset = divide(across, scale)
     if offset > 0x7F:
-        return OUT_OF_VIEW
+        return 0, None, None
     if left and offset:
         screen_x = SCREEN_CENTER_X - offset
         if screen_x < 0:
-            return OUT_OF_VIEW
+            return 0, screen_x & MASK8, None
     else:
         screen_x = SCREEN_CENTER_X + offset
         if screen_x > MASK8:
-            return OUT_OF_VIEW
+            return 0, screen_x & MASK8, None
 
     screen_y = _screen_y(ball, scale)
     if screen_y is None:
-        return OUT_OF_VIEW
-    return Projection(depth, screen_x, screen_y)
+        return 0, screen_x, None
+    return depth, screen_x, screen_y
 
 
 def _within_view(pixels: int, sign: int) -> bool:
@@ -178,8 +211,8 @@ WIDE_BALL_Y = 0x70
 
 class PerspectiveScene:
     """
-    The behind-the-golfer scene, as the builder left it in WRAM ($6000-$7FFF),
-    plus the two PRG banks mapped while `LE9C8` runs (13 and the fixed bank),
+    The behind-the-golfer scene, as the builder and the sky blocks after it
+    left it in WRAM ($6000-$7FFF), plus the two PRG banks mapped while `LE9C8` runs (13 and the fixed bank),
     which its quirks end up reading from.
 
     `TileMapRowOffsetTable` has 24 rows; for a ball drawn on screen row 24 or

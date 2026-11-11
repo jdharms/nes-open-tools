@@ -28,7 +28,8 @@ uv run pytest --physics tests/physics
   `RomAimAtFlag` runs `CalcAimTowardFlag`.
 - `nes.py` and `rom_game.py`: the whole game. `NesMachine` emulates MMC1 banking, the
   controller and vblank (running the game's NMI handler), and `RomGameShot` plays a shot
-  through the game's own `InitHole` and `ShotSetupSequence` by pressing buttons. Prefer
+  through the game's own `InitHole` and `ShotSetupSequence` by pressing buttons;
+  `RomSceneBuilder` calls the scene builder alone on a hole loaded the same way. Prefer
   this for anything that happens between frames of the physics; a routine-level oracle
   misses code that runs elsewhere in the frame. `green_view_sprites` runs the putting
   setup the same way and returns the sprites the putting view shows. With `ppu=True`
@@ -43,6 +44,19 @@ uv run pytest --physics tests/physics
 the meter's marker, and the aim every shot starts with (`docs/putting_view.md`). Its
 checks are `tests/physics/test_green_view_rom.py`, against the sprites the game itself
 leaves in RAM.
+
+## The scene builder
+
+`scene.py` ports `BuildPerspectiveScene` (bank 9 `$8829`) and the sky blocks that follow
+it: `build_scene` gives the `PerspectiveScene` a flight collides with, from the hole, the
+ball, the aim, the flag and the RNG state (`docs/shot_physics.md`, **The scene
+builder**; `docs/perspective_scene.md` for the routines). `SceneBuilder` keeps the maps
+at the game's addresses in a 64K image, because the game reads past the edges of its
+probe grid and the port has to read the same bytes; keep new steps in that image
+rather than in tidier structures. Its checks are `tests/physics/test_scene_builder_rom.py`:
+whole scenes against `RomSceneBuilder`, single routines on made-up inputs (the way to
+reach branches real holes do not), and shots replayed with the ported scene. Shared
+flights do not use it yet (`docs/hole_difficulty.md`, **Future work**).
 
 ## Shared flights
 
