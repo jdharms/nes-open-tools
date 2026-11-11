@@ -15,7 +15,7 @@ of patches to the vanilla game, one at a time.
 The game's menus have been significantly stripped down to remove
 unnecessary features, or those that the randomizer would otherwise break.
 
-The main menu shows the seeds three "Magic Words" where vanilla shows
+The main menu shows the seed's three "Magic Words" where vanilla shows
 "PLEASE SELECT COURSE".  This is a visual indicator to help you ensure
 you have the correct ROM file loaded.
 

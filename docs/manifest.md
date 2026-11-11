@@ -19,7 +19,7 @@ With the hole list trimmed to one of its 18 slots:
 {
   "schema": 5,
   "generator_version": 4,
-  "build_version": 6,
+  "build_version": 7,
   "finish_abi_version": 2,
   "catalog_version": 1,
   "curation_stamp": "f640f8d1…",
