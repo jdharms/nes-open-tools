@@ -48,6 +48,14 @@ text = "Green"
 note = "button removing every measurement waypoint"
 text = "Clear"
 
+[rangefinder.previous_hole]
+note = "plain: accessible label for the ‹ button that loads the previous hole"
+text = ""
+
+[rangefinder.next_hole]
+note = "plain: accessible label for the › button that loads the next hole"
+text = ""
+
 [rangefinder.copy_permalink]
 note = "button copying a link to the selected course and hole"
 text = "Copy Permalink"
