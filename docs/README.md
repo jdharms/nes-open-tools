@@ -74,6 +74,7 @@ One line per document. Command-line tools are indexed in the top-level `README.m
 | [scorecard_qr.md](scorecard_qr.md) | End-of-round QR code submission, and its 6502 port |
 | [scorecard_qr_mask_sweep.md](scorecard_qr_mask_sweep.md) | Results of the QR mask/capture-condition validation sweep |
 | [seasonal_terrain.md](seasonal_terrain.md) | Spike: recoloring terrain for seasons; palette sites, the ball's shared color slots, unknowns and a plan |
+| [bank13_relocation.md](bank13_relocation.md) | Proposal: moving the ball physics out of bank 13 to free about 3,200 bytes there; the boundary references, how a move would work, and the gaps |
 
 ## Guides
 
