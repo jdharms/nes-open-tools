@@ -105,6 +105,7 @@ Byte-level layout of the course data banks: the `nes-open-golf-rom-layout` skill
 | Topic | Bank | Start here | Doc |
 |---|---|---|---|
 | Hole and round flow | 13 | `$8490` `AdvanceHoleAndCheckRoundEnd`, `$868C` `IncrementStrokeCount` | |
+| Current hole's strokes (RAM) | 13 | `CurrentHoleStrokes` `$011F,X` (X = player): zeroed at `$8159`, `$86AA` adds one (capped at 50), match play writes `$8274` and `$8301`; `$8392` `LD_8392_CommitHoleScores` copies it to `$0134` | |
 | Shot setup panels | 13 | `$877A` `ShotSetupSequence`; `$88C9` swing speed, `$8ADF` club, `$8BBD` spin; `$8A47` `AutoSelectClub` | `topspin.md` |
 | Aiming | 13 | `$8C77` `UpdateSetupAim`, `$BD57` `UpdateSwingAim`; every shot starts aimed at the flag by `$B9A7` (`CalcAimTowardFlag`, called at `$8289`; `ArctangentThresholdTable` `$BAA9`) | `putting_view.md` |
 | Swing and meter | 13 | `$AA09` `SwingSequenceEntry`, `$A9A6` `ShotInitialization`, `$A8DD` `RenderSwingMeterMarkers` (marker x `$D6 + $5D`; green view metasprites `$A96B`-`$A979`) | `practice_swing.md`, `putting_view.md` |

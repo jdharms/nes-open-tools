@@ -11,6 +11,8 @@ One line per document. Command-line tools are indexed in the top-level `README.m
 | [randomizer_devplan.md](randomizer_devplan.md) | Randomizer site architecture, data model, routes and the ordered development plan |
 | [planning/download_settings.md](planning/download_settings.md) | Plan: saved download settings, the new SRAM option defaults and finish ABI 2 |
 | [planning/hosted_roms.md](planning/hosted_roms.md) | Plan: a host builds a seed's ROM for players who claim its slots from their phones |
+| [competitive/design.md](competitive/design.md) | Competitive play: the daily, handicaps from the hole model, formats, incentives and the backtest behind them |
+| [competitive/implementation_plan.md](competitive/implementation_plan.md) | Plan: competitive play as numbered tasks with prerequisites, milestones and a dependency graph |
 | [deployment.md](deployment.md) | Running the randomizer site on its server: setup, releases, rollback and database restores |
 | [test_suite_performance.md](test_suite_performance.md) | Test runtime measurements, slow-test coverage review and workload splitting |
 | [documentation.md](documentation.md) | Philosophy and practices followed for documentation for the development process |
