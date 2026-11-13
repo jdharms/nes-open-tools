@@ -20,6 +20,7 @@ wheels/
 *.nsf
 .env
 .env.*
+/*.db
 
 # Randomizer site database
 /golf_site.db
