@@ -86,6 +86,74 @@ of them changes what a daily is.
 - Its course rating, slope and stroke indexes are fixed when it is generated, and each
   player's index is the one posted before it opened.
 
+### The week
+
+> **Leaning, not a decision.** This section records the current thinking from a
+> brainstorm with jdharms on 2026-11-12. It is settled by task 1 of the implementation
+> plan, as a proposed ADR.
+
+**Problem.** A daily needs settings, and players differ in which modes they play. Fields
+will be small: about 10 players were active in the two weeks before 2026-11-12, and the
+whole site records about 4 rounds a day, so a daily is likely to draw 3 to 6. Every
+unusual mode splits that field further.
+
+**Leaning.** Each weekday has its own request (ADR 0016), and difficulty rises from Monday
+to Saturday, after the New York Times crossword. Friday and Sunday step outside the arc.
+
+| Day | Feel | Request |
+|-----|------|---------|
+| Monday | Easy | standard, expert cap 0, wind speed `gentle` or `vanilla` |
+| Tuesday | Easy to medium | natural par, expert cap 1, wind speed `vanilla` or `moderate` |
+| Wednesday | Medium | standard, expert cap 1, one storm: `storm_rolling_in`, `storm_passing`, `dying_wind` or `back_nine_pressure` |
+| Thursday | Hard | standard, expert cap 2, wind speed `strong` or `back_nine_pressure`, direction `prevailing` or `headwind_out` |
+| Friday | Casual Friday | par 3, expert cap 0 or 1, any wind, high mirror and hazard chances |
+| Saturday | Hardest | standard, expert cap 2 or none, wind speed `strong`, perhaps a 10-club bag |
+| Sunday | Sunday Classic | vanilla course, with a wind profile such as a storm and mirror and hazard chances. US ROM only |
+
+- **Mainstream days.** Standard is the mode players share: since course modes shipped, a
+  standard seed has drawn 3.3 rounds, 12 players in all, against 1.7 rounds and 5 players
+  for a par 3 seed, most of those from one player. Regulars who have never played a par 3
+  or executive course would sit out a day of one, so five of seven days are standard or
+  natural par.
+- **Saturday is hardest** because it is the busiest day (52 rounds to Tuesday's 21 on the
+  2026-11-12 data), with the most time for a long round. Friday's par 3 course is short,
+  for a Friday evening.
+- **Sunday is special.** The original course is familiar, so the twists are what a
+  player notices. It is the one day that needs only the US ROM, the entry point for a
+  player without Mario Open. Its holes have the most rounds behind them, so its course
+  rating should be the steadiest of the week. If it grows stale it can become one set of
+  a rotating Sunday theme: the classic remix, an executive course, a limited bag, a hard
+  storm course.
+- **Every other day uses both ROMs.** 91 of the 105 seeds on the site need the JP ROM,
+  and 13 of the 14 players who have posted a round have played one.
+
+The arc matters less to fairness than it looks: slope already scales the strokes a
+player receives. It is there for flavor and for gross scores. It has a cost to watch: a
+par 3 course's slope (about 0.65) is an extrapolation, so Friday is where a slope error is
+likeliest, and a player who plays only Fridays has an index built from par 3 courses
+alone. The backtest (task 9) should replay a weekly schedule.
+
+The levers the site's rounds show to move difficulty are the expert cap and wind
+strength: strong wind comes out about 2 strokes harder than a player's norm, and no
+expert cap about 1.5. Mirror and hazard chances and the ROMs used show nothing beyond
+noise, and every effect is confounded with players improving over time. The arc is tuned
+once seeds can be rated.
+
+How it runs:
+
+- **Requests are checked in**, one per weekday, with a table of dated overrides for
+  events, holidays or a day of newly published holes. A schedule change is in git
+  history. Weighted fields vary a weekday from one week to the next.
+- **The PRNG seed comes from the date and a server secret.** The date makes generation
+  idempotent, so a missed run regenerates the same seed. The secret stops anyone with
+  the CLI from generating a daily ahead of time and practicing it.
+- **Seeds are not gated on their rating.** Generating until a course rating falls in a
+  day's band would change the odds the request states. Each daily's course rating and
+  slope are stored and shown, and after a month or so they say whether Thursday plays
+  harder than Monday.
+- **The weekly schedule is published, not the settings.** Players can plan around "Friday
+  is par 3s". The wind and expert cap are known when the daily opens.
+
 ## Handicaps
 
 ### Rating holes and courses
@@ -303,7 +371,7 @@ later net result.
 | Question | Leaning |
 |----------|---------|
 | When a day starts and ends, and whether a daily stays open past the next one's start | A fixed UTC hour in the North American early morning; undecided on overlap |
-| A daily's settings: course mode, transforms, wind, club rules | One fixed recipe to start. It must need only the US ROM |
+| A daily's settings: course mode, transforms, wind, club rules | A request per weekday, as in The week: an arc from Monday to Saturday, Casual Friday's par 3s, and Sunday Classic as the one day that needs only the US ROM |
 | Whether players may change their bag on a daily | Undecided |
 | Calendar months or a rolling 30 days for records | Calendar months, per jdharms; to be tested |
 | The numbers: 8 rounds, 90%, 3 rounds provisional, the caps, the flag threshold | Set by backtest before launch, then left alone |

@@ -14,7 +14,7 @@ English to jdharms (`server/CLAUDE.md`, "Player-facing text").
 
 | # | Task | Needs |
 |---|------|-------|
-| 1 | Settle the daily's open questions in `design.md`: the day's start and end, whether dailies overlap, the generation recipe, bag rules. Record them as a proposed ADR | - |
+| 1 | Settle the daily's open questions in `design.md`: the day's start and end, whether dailies overlap, the weekly schedule of requests (`design.md`, The week), bag rules. Record them as a proposed ADR | - |
 | 2 | Record the standing decisions as proposed ADRs: competition lives on the site; the daily is the unit and there are no seasons; no handicap leaderboard; scores hidden until a player submits | - |
 | 3 | Record the handicap rules as a proposed ADR once task 9 has set the numbers: last 8 rounds, the allowance, the caps, the provisional period, which rounds count | 9 |
 
@@ -27,7 +27,7 @@ English to jdharms (`server/CLAUDE.md`, "Player-facing text").
 | 6 | Rate a seed from fitted hole ratings: course rating, slope and stroke indexes, with the baseline fallback for a hole nobody has played | 4 |
 | 7 | Compute a handicap index from a player's rounds: the last 8, the net double bogey cap, the low mark and its caps, the provisional state, and which rounds count: daily rounds, plus the rounds a current player's index is seeded from | 4 |
 | 8 | Compute a daily handicap and its strokes per hole from an index, a seed's ratings and the allowance, including a player better than scratch | 6, 7 |
-| 9 | A maintained backtest (`golf-ratings backtest`) that replays a site database through tasks 6 to 8 day by day, using only what was known each day. Use it to set the numbers, test the caps and the daily-rounds-only rule, and set the integrity threshold | 8 |
+| 9 | A maintained backtest (`golf-ratings backtest`) that replays a site database through tasks 6 to 8 day by day, using only what was known each day. Use it to set the numbers, test the caps, the daily-rounds-only rule and a weekly schedule of modes, and set the integrity threshold | 8 |
 
 ### Ratings on the site
 
@@ -41,7 +41,7 @@ English to jdharms (`server/CLAUDE.md`, "Player-facing text").
 
 | # | Task | Needs |
 |---|------|-------|
-| 13 | A `dailies` table (date, seed, opens, closes) and the job that generates the day's seed at rollover from the recipe. Idempotent, so a missed run catches up | 1 |
+| 13 | A `dailies` table (date, seed, opens, closes), the checked-in weekday requests and dated overrides, and the job that generates the day's seed at rollover from its request, with a PRNG seed from the date and a server secret. Idempotent, so a missed run catches up | 1 |
 | 14 | The daily on the site: today's daily on the home page, its own route, and an archive of past dailies | 13 |
 | 15 | Hide a daily's scores from a viewer who has not submitted a round on it: the seed page, other players' round pages, `/me` and link preview cards | 13 |
 | 16 | Announce a new daily to Discord by webhook, with no scores | 13 |
