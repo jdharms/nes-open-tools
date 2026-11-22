@@ -23,10 +23,12 @@ from .core.constants import (
     COLOR_BG,
     COLOR_STATUS,
     COLOR_TEXT,
+    GREENS_HEIGHT,
     GREENS_WIDTH,
     PICKER_WIDTH,
     STATUS_HEIGHT,
     TERRAIN_WIDTH,
+    TILE_SIZE,
     TOOL_PICKER_WIDTH,
     TOOLBAR_HEIGHT,
 )
@@ -70,6 +72,11 @@ from .ui.toolbar import Toolbar, ToolbarCallbacks
 PREFERRED_WINDOW_SIZE = (1280, 1200)
 #: room left on the desktop for the title bar and taskbar
 DESKTOP_MARGIN = (40, 100)
+#: the canvas's zoom levels, as screen pixels per NES pixel; 4 is the usual size,
+#: shown as 1x, so these are 0.5x, 0.75x, 1x, 2x, 3x and 4x
+ZOOM_SCALES = (2, 3, 4, 8, 12, 16)
+#: the zoom level a hole opens at
+USUAL_SCALE = 4
 
 
 def _initial_window_size() -> tuple[int, int]:
@@ -81,6 +88,20 @@ def _initial_window_size() -> tuple[int, int]:
         width = min(width, desktop_w - DESKTOP_MARGIN[0])
         height = min(height, desktop_h - DESKTOP_MARGIN[1])
     return width, height
+
+
+def _clamp_offset(offset: int, size: int, canvas_size: int) -> int:
+    """Clamp a scroll offset along one axis of a grid `size` pixels long, in a
+    canvas `canvas_size` long.
+
+    Up to half the grid can be pushed off either end of the canvas, and each of
+    its edges can always come in at least as far as the canvas's middle, which
+    goes further once the grid is bigger than the canvas.
+    """
+    middle = canvas_size // 2
+    low = min(size // 2 - canvas_size, -middle)
+    high = max(size // 2, size - middle)
+    return min(max(low, offset), high)
 
 
 class EditorApplication:
@@ -230,6 +251,9 @@ class EditorApplication:
             on_tool_change=self._on_tool_change,
             on_create_stamp=self._on_create_stamp,
             on_quit=self._confirm_discard,
+            on_scroll_canvas=self._scroll_canvas,
+            on_pan_canvas=self._pan_canvas,
+            on_zoom_canvas=self._zoom_canvas,
         )
 
         # Set forest_filler, tool_manager, highlight_state, stamp_library, and revert callback on tool_context (needed by tools)
@@ -598,6 +622,63 @@ class EditorApplication:
         """Get the canvas drawing area."""
         return canvas_rect(self.screen_width, self.screen_height)
 
+    def _scroll_canvas(self, columns: int, rows: int):
+        """Scroll the canvas by whole tiles, keeping the hole in view."""
+        tile = TILE_SIZE * self.state.canvas_scale
+        self._pan_canvas(columns * tile, rows * tile)
+
+    def _pan_canvas(self, dx: int, dy: int):
+        """Move the canvas by screen pixels, keeping the hole in view."""
+        self.state.canvas_offset_x += dx
+        self.state.canvas_offset_y += dy
+        self._clamp_canvas_offset()
+
+    def _zoom_canvas(self, steps: int, pos: tuple[int, int]):
+        """Zoom the canvas `steps` levels in (or out, if negative).
+
+        The spot under `pos` stays where it is, or the canvas's center if `pos`
+        is off the canvas.
+        """
+        old = self.state.canvas_scale
+        level = ZOOM_SCALES.index(old if old in ZOOM_SCALES else USUAL_SCALE)
+        new = ZOOM_SCALES[min(max(level + steps, 0), len(ZOOM_SCALES) - 1)]
+        if new != old:
+            canvas = self._get_canvas_rect()
+            if not canvas.collidepoint(pos):
+                pos = canvas.center
+            x, y = pos[0] - canvas.x, pos[1] - canvas.y
+            self.state.canvas_scale = new
+            self.state.canvas_offset_x = (
+                self.state.canvas_offset_x + x
+            ) * new // old - x
+            self.state.canvas_offset_y = (
+                self.state.canvas_offset_y + y
+            ) * new // old - y
+            self._clamp_canvas_offset()
+        self.state.tool_message = f"Zoom {new / USUAL_SCALE:g}x"
+
+    def _clamp_canvas_offset(self):
+        """Keep the hole's grid, the course's or the green's, at least half in view.
+
+        The green's grid is its own 24 by 24 tiles, and the course's its 22
+        columns and however many rows the hole has. See `_clamp_offset`.
+        """
+        if not self.hole_data.terrain:
+            self.state.canvas_offset_x = self.state.canvas_offset_y = 0
+            return
+        if self.state.mode == "greens":
+            columns, rows = GREENS_WIDTH, GREENS_HEIGHT
+        else:
+            columns, rows = TERRAIN_WIDTH, self.hole_data.get_terrain_height()
+        tile = TILE_SIZE * self.state.canvas_scale
+        canvas = self._get_canvas_rect()
+        self.state.canvas_offset_x = _clamp_offset(
+            self.state.canvas_offset_x, columns * tile, canvas.width
+        )
+        self.state.canvas_offset_y = _clamp_offset(
+            self.state.canvas_offset_y, rows * tile, canvas.height
+        )
+
     def _screen_to_tile(self, screen_pos: tuple[int, int]) -> tuple[int, int] | None:
         """Convert screen position to tile coordinates."""
         return self.event_handler.tool_context.view_state.screen_to_tile(screen_pos)
@@ -607,6 +688,12 @@ class EditorApplication:
         while self.running:
             events = pygame.event.get()
             self.running = self.event_handler.handle_events(events)
+            self.event_handler.repeat_held_scrolls(pygame.time.get_ticks())
+
+            # Rows removed, a shorter hole opened, switching to the green or a
+            # bigger window can each leave the canvas scrolled past the edge;
+            # bring it back
+            self._clamp_canvas_offset()
 
             # Update active tool (for time-based behavior like key repeat)
             active_tool = self.tool_manager.get_active_tool()
@@ -714,7 +801,16 @@ class EditorApplication:
 
             self.highlight_state.measure_tool_active = is_measure_active
 
-        # Render based on mode
+        # A tile the canvas is scrolled part way past would draw over the tile
+        # picker beside it; keep everything inside the canvas
+        self.screen.set_clip(canvas_rect)
+        try:
+            self._render_hole(view_state)
+        finally:
+            self.screen.set_clip(None)
+
+    def _render_hole(self, view_state: ViewState):
+        """Draw the hole, in the mode shown, onto the canvas."""
         if self.state.mode == "greens":
             render_ctx = RenderContext(
                 self.greens_tileset,
